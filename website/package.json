@@ -1,0 +1,24 @@
+{
+  "name": "vellar-sdk-docs",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Documentation site for vellar-sdk — deployed to sdk.vellar.xyz",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "next": "^15.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-markdown": "^10.0.0",
+    "remark-gfm": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "typescript": "^5.9.2"
+  }
+}

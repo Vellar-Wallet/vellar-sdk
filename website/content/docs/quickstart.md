@@ -1,0 +1,74 @@
+# Quickstart
+
+Get a working passkey wallet — create, reconnect, and send a payment — in a few
+minutes.
+
+## 1. Create the client
+
+```ts
+import { PasskeyKit, SACClient } from "passkey-kit";
+import { createVelaWallet } from "vellar-sdk";
+import { StrKey } from "@stellar/stellar-sdk";
+
+const rpcUrl = "https://soroban-testnet.stellar.org";
+const networkPassphrase = "Test SDF Network ; September 2015";
+
+const vela = createVelaWallet({
+  network: "testnet",
+  appName: "My App",
+  kit: new PasskeyKit({ rpcUrl, networkPassphrase, walletWasmHash }),
+  sac: new SACClient({ rpcUrl, networkPassphrase }),
+  backend: myBackend, // your server (see Installation)
+  isValidAddress: (a) =>
+    StrKey.isValidEd25519PublicKey(a) || StrKey.isValidContract(a),
+});
+```
+
+## 2. Create a wallet
+
+Prompts the passkey once, registers the credential, and deploys the smart
+account.
+
+```ts
+const session = await vela.create({ username: "alice" });
+console.log(session.accountId); // "C..." — the smart-account address
+```
+
+## 3. Reconnect a returning user
+
+```ts
+const session = await vela.connect();
+```
+
+If you persisted the session's `keyId`, reconnect can resume without a WebAuthn
+prompt — see [Wallet Methods](./wallet-methods.md).
+
+## 4. Send a payment
+
+Builds and **simulates** first, so errors (e.g. insufficient balance) surface
+*before* the passkey prompt. Then the passkey signs and the transaction is
+submitted (fee-sponsored).
+
+```ts
+const { hash } = await vela.pay({
+  to: "CDEST...",
+  amount: 5_0000000n,   // 5 XLM, in stroops (bigint)
+  token: {
+    contractId: nativeTokenId,
+    symbol: "XLM",
+    decimals: 7,
+  },
+});
+
+console.log("submitted:", hash);
+```
+
+That's the full loop: **create → reconnect → pay**, all passkey-signed and
+non-custodial.
+
+## Next steps
+
+- [How It Works](./how-it-works.md) — passkeys, smart accounts, sponsorship
+- [Security](./security.md) — the guarantees the SDK enforces
+- [`createVelaWallet`](./api-reference.md) — the full config reference
+- [Wallet Methods](./wallet-methods.md) — every method on the wallet handle

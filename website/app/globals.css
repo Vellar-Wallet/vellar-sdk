@@ -1,0 +1,355 @@
+/* ============================================================
+   Vellar SDK docs — self-contained design tokens + docs UI.
+   (Mirrors the VELA brand palette; no dependency on the wallet app.)
+   ============================================================ */
+:root {
+  --neo-bg: #0a0f0d;
+  --neo-surface: #0e1512;
+  --line: rgba(255, 255, 255, 0.09);
+  --signal: #3ee6ad;
+  --ink: #eff5f2;
+  --muted: rgba(239, 245, 242, 0.74);
+  --muted2: rgba(239, 245, 242, 0.56);
+  --neo-inset: inset 4px 4px 10px rgba(0, 0, 0, 0.66),
+    inset -4px -4px 10px rgba(62, 230, 173, 0.06);
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+body {
+  background: var(--neo-bg);
+  color: var(--ink);
+  font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.mono {
+  font-family: "Space Mono", monospace;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.docs-root {
+  min-height: 100vh;
+}
+
+/* Topbar */
+.docs-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 64px;
+  padding: 0 24px;
+  background: color-mix(in srgb, var(--neo-bg) 88%, transparent);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line);
+}
+.docs-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.docs-wordmark {
+  font-family: "Clash Display", sans-serif;
+  font-weight: 600;
+  font-size: 20px;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+.docs-eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--signal);
+}
+.docs-topbar-spacer {
+  flex: 1;
+}
+.docs-toplink {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.docs-toplink:hover {
+  color: var(--ink);
+}
+.docs-launch {
+  font-size: 14px;
+  font-weight: 700;
+  color: #04120c;
+  background: var(--signal);
+  padding: 8px 16px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+/* Body: sidebar + content */
+.docs-body {
+  display: flex;
+  align-items: flex-start;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.docs-sidebar {
+  position: sticky;
+  top: 64px;
+  flex-shrink: 0;
+  width: 250px;
+  height: calc(100vh - 64px);
+  overflow-y: auto;
+  padding: 28px 16px;
+  border-right: 1px solid var(--line);
+}
+.docs-nav-group {
+  margin-bottom: 22px;
+}
+.docs-nav-label {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted2);
+  margin: 0 0 10px 12px;
+}
+.docs-nav-link {
+  display: block;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted);
+  transition: color 0.15s, background 0.15s;
+}
+.docs-nav-link:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--neo-surface) 60%, transparent);
+}
+.docs-nav-link.active {
+  color: var(--signal);
+  background: var(--neo-bg);
+  box-shadow: var(--neo-inset);
+  font-weight: 700;
+}
+
+/* Content */
+.docs-content {
+  flex: 1;
+  min-width: 0;
+  padding: 40px clamp(20px, 5vw, 64px) 96px;
+}
+.docs-article {
+  max-width: 760px;
+}
+.docs-title {
+  font-family: "Clash Display", sans-serif;
+  font-size: clamp(2rem, 4vw, 2.8rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 6px 0 28px;
+}
+
+/* Prose */
+.docs-prose {
+  font-size: 15.5px;
+  line-height: 1.72;
+}
+.docs-prose h2 {
+  font-family: "Clash Display", sans-serif;
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 44px 0 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.docs-prose h3 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 30px 0 10px;
+}
+.docs-prose h4 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 22px 0 8px;
+}
+.docs-prose p {
+  margin: 14px 0;
+  color: var(--muted);
+}
+.docs-prose strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+.docs-prose a {
+  color: var(--signal);
+  border-bottom: 1px solid color-mix(in srgb, var(--signal) 40%, transparent);
+}
+.docs-prose a:hover {
+  border-bottom-color: var(--signal);
+}
+.docs-prose ul,
+.docs-prose ol {
+  margin: 14px 0;
+  padding-left: 22px;
+  color: var(--muted);
+}
+.docs-prose li {
+  margin: 6px 0;
+}
+.docs-prose li::marker {
+  color: var(--muted2);
+}
+.docs-prose code {
+  font-family: "Space Mono", monospace;
+  font-size: 0.86em;
+  background: var(--neo-bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 1px 6px;
+  color: var(--signal);
+}
+.docs-prose pre {
+  background: var(--neo-bg);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px 20px;
+  overflow-x: auto;
+  margin: 18px 0;
+  box-shadow: var(--neo-inset);
+}
+.docs-prose pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.docs-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 20px 0;
+  font-size: 14px;
+  display: block;
+  overflow-x: auto;
+}
+.docs-prose th,
+.docs-prose td {
+  text-align: left;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  vertical-align: top;
+}
+.docs-prose th {
+  background: var(--neo-surface);
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.docs-prose td {
+  color: var(--muted);
+}
+.docs-prose blockquote {
+  margin: 18px 0;
+  padding: 12px 18px;
+  border-left: 3px solid var(--signal);
+  background: color-mix(in srgb, var(--signal) 7%, transparent);
+  border-radius: 0 12px 12px 0;
+}
+.docs-prose blockquote p {
+  margin: 6px 0;
+  color: var(--ink);
+}
+.docs-prose hr {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 36px 0;
+}
+
+/* Pager */
+.docs-pager {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 56px;
+}
+.docs-pager-link {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 20px;
+  border-radius: 16px;
+  min-width: 180px;
+  border: 1px solid var(--line);
+  background: var(--neo-surface);
+  transition: transform 0.12s, border-color 0.2s;
+}
+.docs-pager-link:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--signal) 40%, var(--line));
+}
+.docs-pager-next {
+  text-align: right;
+  align-items: flex-end;
+}
+.docs-pager-dir {
+  font-size: 12px;
+  color: var(--muted2);
+}
+.docs-pager-title {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+/* Mobile */
+.docs-menu-btn {
+  display: none;
+}
+@media (max-width: 860px) {
+  .docs-menu-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ink);
+    background: var(--neo-surface);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 60;
+    cursor: pointer;
+  }
+  .docs-sidebar {
+    position: fixed;
+    top: 64px;
+    left: 0;
+    z-index: 55;
+    height: calc(100vh - 64px);
+    width: 260px;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    background: var(--neo-surface);
+  }
+  .docs-sidebar.open {
+    transform: translateX(0);
+  }
+  .docs-content {
+    padding: 28px 20px 96px;
+  }
+  .docs-launch {
+    display: none;
+  }
+}
