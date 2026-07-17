@@ -53,8 +53,7 @@
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "prepublishOnly": "pnpm build"
+    "test": "vitest run"
   },
   "peerDependencies": {
     "@stellar/stellar-sdk": "^16.0.0"
