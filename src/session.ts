@@ -85,7 +85,7 @@ export function createSessionStore(storage: SessionStorageAdapter): SessionStore
 /** Storage-backed adapter for web (pass window.localStorage) or any Storage-like object. */
 export function createWebStorageAdapter(
   storage: Pick<Storage, "getItem" | "setItem" | "removeItem">,
-  key = "vela.session",
+  key = "vellar.session",
 ): SessionStorageAdapter {
   return {
     async load() {

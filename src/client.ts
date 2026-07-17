@@ -17,8 +17,8 @@ import type { WalletConnector } from "./connector";
 // PasskeyKit, the backend seam, or the connector interface directly:
 //
 //   const vela = createVellarWallet({ network, appName, backend, kit, sac });
-//   const session = await vela.connect();          // or vela.create({ username })
-//   await vela.pay({ to, amount, token });
+//   const session = await vellar.connect();          // or vellar.create({ username })
+//   await vellar.pay({ to, amount, token });
 //
 // The lower-level building blocks remain exported from the package for advanced
 // integrators who want to swap pieces; this facade is the paved road.

@@ -33,7 +33,7 @@ import { PasskeyKit, SACClient } from "passkey-kit";
 import { createVellarWallet } from "vellar-sdk";
 import { StrKey } from "@stellar/stellar-sdk";
 
-const vela = createVellarWallet({
+const vellar = createVellarWallet({
   network: "testnet",
   appName: "My App",
   kit: new PasskeyKit({ rpcUrl, networkPassphrase, walletWasmHash }),
@@ -43,14 +43,14 @@ const vela = createVellarWallet({
 });
 
 // Create a wallet (prompts the passkey once):
-const session = await vela.create({ username: "alice" });
+const session = await vellar.create({ username: "alice" });
 console.log(session.accountId); // C... smart-account address
 
 // …or reconnect an existing one:
-await vela.connect();
+await vellar.connect();
 
 // Send a payment — builds + simulates, then prompts the passkey to sign:
-const { hash } = await vela.pay({
+const { hash } = await vellar.pay({
   to: "CDEST...",
   amount: 5_0000000n, // 5 XLM, in stroops
   token: { contractId: nativeTokenId, symbol: "XLM", decimals: 7 },

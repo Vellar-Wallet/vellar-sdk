@@ -132,14 +132,14 @@ describe("createWebStorageAdapter", () => {
 
   it("returns null for malformed persisted JSON shape", async () => {
     const backing = fakeStorage();
-    backing.setItem("vela.session", JSON.stringify({ accountId: 42 }));
+    backing.setItem("vellar.session", JSON.stringify({ accountId: 42 }));
     const adapter = createWebStorageAdapter(backing);
     expect(await adapter.load()).toBeNull();
   });
 
   it("throws on unparseable JSON (restore() maps this to disconnected)", async () => {
     const backing = fakeStorage();
-    backing.setItem("vela.session", "{not json");
+    backing.setItem("vellar.session", "{not json");
     const adapter = createWebStorageAdapter(backing);
     await expect(adapter.load()).rejects.toThrow();
   });
