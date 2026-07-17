@@ -1,0 +1,74 @@
+{
+  "name": "vellar-sdk",
+  "version": "0.1.0",
+  "description": "Passkey smart-wallet SDK for Stellar — add passkey login, a Soroban smart account, fee-sponsored payments, and programmable policies to your app.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Vellar-Wallet/vellar-sdk.git"
+  },
+  "homepage": "https://github.com/Vellar-Wallet/vellar-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/Vellar-Wallet/vellar-sdk/issues"
+  },
+  "keywords": [
+    "stellar",
+    "soroban",
+    "smart-wallet",
+    "passkey",
+    "webauthn",
+    "wallet",
+    "sdk"
+  ],
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./balances": {
+      "source": "./src/balances.ts",
+      "types": "./dist/balances.d.ts",
+      "import": "./dist/balances.js",
+      "require": "./dist/balances.cjs"
+    },
+    "./rpc": {
+      "source": "./src/rpc.ts",
+      "types": "./dist/rpc.d.ts",
+      "import": "./dist/rpc.js",
+      "require": "./dist/rpc.cjs"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "prepublishOnly": "pnpm build"
+  },
+  "peerDependencies": {
+    "@stellar/stellar-sdk": "^16.0.0"
+  },
+  "dependencies": {
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@stellar/stellar-sdk": "^16.0.1",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
