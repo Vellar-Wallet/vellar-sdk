@@ -1,10 +1,10 @@
 # Wallet Methods
 
-`createVelaWallet(config)` returns a `VelaWallet` handle — one per connected
+`createVellarWallet(config)` returns a `VellarWallet` handle — one per connected
 user.
 
 ```ts
-interface VelaWallet {
+interface VellarWallet {
   readonly session: WalletSession | null;
   create(input?: { username?: string }): Promise<WalletSession>;
   connect(): Promise<WalletSession>;
@@ -37,7 +37,7 @@ Registers a passkey and creates the smart account. **Prompts WebAuthn.** Returns
 the new session.
 
 ```ts
-const session = await vela.create({ username: "alice" });
+const session = await vellar.create({ username: "alice" });
 ```
 
 - `username` (optional) — shown in the passkey prompt.
@@ -49,7 +49,7 @@ your host wired `keyId` resumption into the `kit` (persist `session.keyId` from 
 previous create/connect, then pass it when constructing the kit).
 
 ```ts
-const session = await vela.connect();
+const session = await vellar.connect();
 ```
 
 ## `pay(input)`
@@ -59,7 +59,7 @@ it (fee-sponsored). Simulation happens before the prompt, so failures surface
 without asking the user to sign. Returns the network transaction hash.
 
 ```ts
-const { hash } = await vela.pay({
+const { hash } = await vellar.pay({
   to: "CDEST...",
   amount: 5_0000000n,
   token: { contractId, symbol: "XLM", decimals: 7 },

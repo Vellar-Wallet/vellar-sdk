@@ -1,6 +1,6 @@
 # Advanced Usage
 
-`createVelaWallet` is the paved road. For custom flows, the package also exports
+`createVellarWallet` is the paved road. For custom flows, the package also exports
 the underlying building blocks it composes.
 
 ## Lower-level building blocks
@@ -23,7 +23,7 @@ import {
 - **`createSessionStore(adapter)`** — a session store with pluggable storage, for
   sharing session state across parts of your app.
 
-The `vela.connector` and `vela.payments` getters expose the exact instances the
+The `vellar.connector` and `vellar.payments` getters expose the exact instances the
 facade built, so you can mix the paved road with lower-level calls.
 
 ## Subpath exports
@@ -43,8 +43,8 @@ import { createRpcBalanceReader } from "vellar-sdk/rpc"; // pulls in @stellar/st
 ## Custom review UI (example)
 
 ```ts
-const prepared = await vela.payments.preparePayment({
-  from: vela.session!.accountId,
+const prepared = await vellar.payments.preparePayment({
+  from: vellar.session!.accountId,
   to,
   token,
   amount,

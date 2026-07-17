@@ -1,18 +1,18 @@
-# createVelaWallet
+# createVellarWallet
 
 The single public entry point. Composes the passkey engine, token client, and
 your backend into one wallet handle.
 
 ```ts
-import { createVelaWallet } from "vellar-sdk";
+import { createVellarWallet } from "vellar-sdk";
 
-const vela = createVelaWallet(config);
+const vellar = createVellarWallet(config);
 ```
 
 ## Config
 
 ```ts
-interface VelaWalletConfig {
+interface VellarWalletConfig {
   network: "testnet" | "mainnet";
   appName: string;
   kit: PasskeyKit;
@@ -62,4 +62,4 @@ submits to the network. See [Installation](./installation.md) and
 
 ## Returns
 
-A [`VelaWallet`](./wallet-methods.md) handle.
+A [`VellarWallet`](./wallet-methods.md) handle.

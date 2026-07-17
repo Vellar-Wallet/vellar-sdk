@@ -30,10 +30,10 @@ composes them into one wallet handle.
 
 ```ts
 import { PasskeyKit, SACClient } from "passkey-kit";
-import { createVelaWallet } from "vellar-sdk";
+import { createVellarWallet } from "vellar-sdk";
 import { StrKey } from "@stellar/stellar-sdk";
 
-const vela = createVelaWallet({
+const vela = createVellarWallet({
   network: "testnet",
   appName: "My App",
   kit: new PasskeyKit({ rpcUrl, networkPassphrase, walletWasmHash }),
@@ -62,9 +62,9 @@ balance) surface without asking the user to sign.
 
 ## API
 
-### `createVelaWallet(config): VelaWallet`
+### `createVellarWallet(config): VellarWallet`
 
-Returns a `VelaWallet`:
+Returns a `VellarWallet`:
 
 | Member | Description |
 | --- | --- |

@@ -113,7 +113,7 @@ export function createPasskeyKitConnector(options: PasskeyKitConnectorOptions): 
   return {
     async createWallet(input: CreateWalletInput): Promise<WalletSession> {
       assertNetwork(input.network);
-      const username = input.username?.trim() || "VELA user";
+      const username = input.username?.trim() || "Vellar user";
       const { keyIdBase64, contractId, signedTx } = await kit.createWallet(appName, username);
       // Backend submission must succeed before we report a wallet as created —
       // otherwise the user would hold a session for an undeployed account.

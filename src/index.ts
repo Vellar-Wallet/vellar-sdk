@@ -1,6 +1,6 @@
 // @vela/wallet-sdk — passkey smart-wallet SDK for Stellar.
 //
-// Public entry point: `createVelaWallet(config)` (see ./client). The lower-level
+// Public entry point: `createVellarWallet(config)` (see ./client). The lower-level
 // building blocks below remain exported for advanced integrators who want to
 // compose their own flows.
 //

@@ -1,4 +1,4 @@
-// Core domain types for the VELA wallet SDK. Self-contained — the SDK carries
+// Core domain types for the Vellar wallet SDK. Self-contained — the SDK carries
 // its own copy so it installs with no workspace/monorepo dependency.
 
 export type Network = "testnet" | "mainnet";

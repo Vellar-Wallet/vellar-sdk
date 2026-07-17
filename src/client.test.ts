@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createVelaWallet, WalletNotReadyError } from "./client";
+import { createVellarWallet, WalletNotReadyError } from "./client";
 import type { TokenInfo } from "./balances";
 
 // The facade composes the connector + payment client. We feed it fakes for the
@@ -38,11 +38,11 @@ function fakeSac() {
   };
 }
 
-function build(overrides: Partial<Parameters<typeof createVelaWallet>[0]> = {}) {
+function build(overrides: Partial<Parameters<typeof createVellarWallet>[0]> = {}) {
   const kit = fakeKit();
   const backend = fakeBackend();
   const sac = fakeSac();
-  const wallet = createVelaWallet({
+  const wallet = createVellarWallet({
     network: "testnet",
     appName: "Test App",
     kit: kit as never,
@@ -54,7 +54,7 @@ function build(overrides: Partial<Parameters<typeof createVelaWallet>[0]> = {}) 
   return { wallet, kit, backend, sac };
 }
 
-describe("createVelaWallet", () => {
+describe("createVellarWallet", () => {
   it("starts with no session", () => {
     const { wallet } = build();
     expect(wallet.session).toBeNull();

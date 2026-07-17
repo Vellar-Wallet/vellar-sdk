@@ -38,7 +38,7 @@ function connector(kit = fakeKit(), backend = fakeBackend()) {
     kit,
     backend,
     network: "testnet",
-    appName: "VELA",
+    appName: "Vellar",
     now: () => FIXED_NOW,
   });
 }
@@ -52,7 +52,7 @@ describe("createWallet", () => {
       network: "testnet",
     });
 
-    expect(kit.createWallet).toHaveBeenCalledWith("VELA", "dumto");
+    expect(kit.createWallet).toHaveBeenCalledWith("Vellar", "dumto");
     expect(backend.submitWalletCreation).toHaveBeenCalledWith({
       keyId: "key-123",
       contractId: "CCONTRACT",
@@ -74,9 +74,9 @@ describe("createWallet", () => {
   it("defaults a missing or blank username", async () => {
     const kit = fakeKit();
     await connector(kit).createWallet({ network: "testnet" });
-    expect(kit.createWallet).toHaveBeenCalledWith("VELA", "VELA user");
+    expect(kit.createWallet).toHaveBeenCalledWith("Vellar", "Vellar user");
     await connector(kit).createWallet({ username: "   ", network: "testnet" });
-    expect(kit.createWallet).toHaveBeenLastCalledWith("VELA", "VELA user");
+    expect(kit.createWallet).toHaveBeenLastCalledWith("Vellar", "Vellar user");
   });
 
   it("does not return a session when backend submission fails", async () => {

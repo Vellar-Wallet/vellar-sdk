@@ -10,13 +10,13 @@ import { createPaymentClient, type PaymentClient, type SacClientLike } from "./p
 import type { WalletConnector } from "./connector";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// VELA Wallet SDK — public client facade.
+// Vellar Wallet SDK — public client facade.
 //
 // This is the entry point third-party developers use. It composes the internal
 // connector + payment client behind ONE object so callers never touch
 // PasskeyKit, the backend seam, or the connector interface directly:
 //
-//   const vela = createVelaWallet({ network, appName, backend, kit, sac });
+//   const vela = createVellarWallet({ network, appName, backend, kit, sac });
 //   const session = await vela.connect();          // or vela.create({ username })
 //   await vela.pay({ to, amount, token });
 //
@@ -24,7 +24,7 @@ import type { WalletConnector } from "./connector";
 // integrators who want to swap pieces; this facade is the paved road.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export interface VelaWalletConfig {
+export interface VellarWalletConfig {
   /** Which Stellar network this client operates on. */
   network: Network;
   /** Display name shown in the platform passkey prompt (WebAuthn RP name). */
@@ -65,7 +65,7 @@ export interface PayInput {
  * things an app needs: bring a wallet into existence, restore it, send value,
  * and read the current session.
  */
-export interface VelaWallet {
+export interface VellarWallet {
   /** The current session, or null before create/connect. */
   readonly session: WalletSession | null;
   /** Register a passkey and create the smart account. Prompts WebAuthn. */
@@ -89,9 +89,9 @@ export interface VelaWallet {
 }
 
 /**
- * Create a VELA wallet client. This is the single public entry point.
+ * Create a Vellar wallet client. This is the single public entry point.
  */
-export function createVelaWallet(config: VelaWalletConfig): VelaWallet {
+export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
   const signedToXdr = config.signedToXdr ?? defaultSignedToXdr;
 
   const connector = createPasskeyKitConnector({

@@ -7,9 +7,9 @@ phrases, or the low-level submission plumbing.
 One install, one object:
 
 ```ts
-const vela = createVelaWallet({ network, appName, kit, sac, backend, isValidAddress });
-await vela.create({ username });        // passkey → smart account
-await vela.pay({ to, amount, token });  // simulate → passkey → sponsored submit
+const vellar = createVellarWallet({ network, appName, kit, sac, backend, isValidAddress });
+await vellar.create({ username });        // passkey → smart account
+await vellar.pay({ to, amount, token });  // simulate → passkey → sponsored submit
 ```
 
 ## What you get

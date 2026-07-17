@@ -7,13 +7,13 @@ minutes.
 
 ```ts
 import { PasskeyKit, SACClient } from "passkey-kit";
-import { createVelaWallet } from "vellar-sdk";
+import { createVellarWallet } from "vellar-sdk";
 import { StrKey } from "@stellar/stellar-sdk";
 
 const rpcUrl = "https://soroban-testnet.stellar.org";
 const networkPassphrase = "Test SDF Network ; September 2015";
 
-const vela = createVelaWallet({
+const vellar = createVellarWallet({
   network: "testnet",
   appName: "My App",
   kit: new PasskeyKit({ rpcUrl, networkPassphrase, walletWasmHash }),
@@ -30,14 +30,14 @@ Prompts the passkey once, registers the credential, and deploys the smart
 account.
 
 ```ts
-const session = await vela.create({ username: "alice" });
+const session = await vellar.create({ username: "alice" });
 console.log(session.accountId); // "C..." — the smart-account address
 ```
 
 ## 3. Reconnect a returning user
 
 ```ts
-const session = await vela.connect();
+const session = await vellar.connect();
 ```
 
 If you persisted the session's `keyId`, reconnect can resume without a WebAuthn
@@ -50,7 +50,7 @@ Builds and **simulates** first, so errors (e.g. insufficient balance) surface
 submitted (fee-sponsored).
 
 ```ts
-const { hash } = await vela.pay({
+const { hash } = await vellar.pay({
   to: "CDEST...",
   amount: 5_0000000n,   // 5 XLM, in stroops (bigint)
   token: {
@@ -70,5 +70,5 @@ non-custodial.
 
 - [How It Works](./how-it-works.md) — passkeys, smart accounts, sponsorship
 - [Security](./security.md) — the guarantees the SDK enforces
-- [`createVelaWallet`](./api-reference.md) — the full config reference
+- [`createVellarWallet`](./api-reference.md) — the full config reference
 - [Wallet Methods](./wallet-methods.md) — every method on the wallet handle
