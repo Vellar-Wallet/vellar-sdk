@@ -7,22 +7,35 @@ minutes.
 
 ```ts
 import { PasskeyKit, SACClient } from "passkey-kit";
-import { createVellarWallet } from "vellar-sdk";
+import {
+  createVellarWallet,
+  createHttpWalletBackend,
+  TESTNET,
+} from "vellar-sdk";
 import { StrKey } from "@stellar/stellar-sdk";
-
-const rpcUrl = "https://soroban-testnet.stellar.org";
-const networkPassphrase = "Test SDF Network ; September 2015";
 
 const vellar = createVellarWallet({
   network: "testnet",
   appName: "My App",
-  kit: new PasskeyKit({ rpcUrl, networkPassphrase, walletWasmHash }),
-  sac: new SACClient({ rpcUrl, networkPassphrase }),
-  backend: myBackend, // your server (see Installation)
+  kit: new PasskeyKit({
+    rpcUrl: TESTNET.rpcUrl,
+    networkPassphrase: TESTNET.networkPassphrase,
+    walletWasmHash: TESTNET.walletWasmHash,
+  }),
+  sac: new SACClient({
+    rpcUrl: TESTNET.rpcUrl,
+    networkPassphrase: TESTNET.networkPassphrase,
+  }),
+  // Point at YOUR backend — it holds the relayer/sponsor secrets.
+  backend: createHttpWalletBackend("https://api.myapp.com"),
   isValidAddress: (a) =>
     StrKey.isValidEd25519PublicKey(a) || StrKey.isValidContract(a),
 });
 ```
+
+`TESTNET` (shipped by the SDK) provides the RPC URL, passphrase, wallet wasm
+hash, and native-token id — no more digging for magic values. And
+`createHttpWalletBackend` is the ready-made client for your gateway.
 
 ## 2. Create a wallet
 
@@ -46,13 +59,13 @@ prompt — see [Wallet Methods](./wallet-methods.md).
 ## 4. Send a payment
 
 Builds and **simulates** first, so errors (e.g. insufficient balance) surface
-*before* the passkey prompt. Then the passkey signs and the transaction is
+_before_ the passkey prompt. Then the passkey signs and the transaction is
 submitted (fee-sponsored).
 
 ```ts
 const { hash } = await vellar.pay({
   to: "CDEST...",
-  amount: 5_0000000n,   // 5 XLM, in stroops (bigint)
+  amount: 5_0000000n, // 5 XLM, in stroops (bigint)
   token: {
     contractId: nativeTokenId,
     symbol: "XLM",

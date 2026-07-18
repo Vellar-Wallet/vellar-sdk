@@ -24,22 +24,37 @@ npm install vellar-sdk @stellar/stellar-sdk
 
 ## Quick start
 
-You supply three host pieces — a `PasskeyKit` engine, your backend (which holds
-the relayer/sponsor keys server-side), and a Soroban token client — and the SDK
-composes them into one wallet handle.
+You supply three host pieces — a `PasskeyKit` engine, a Soroban token client,
+and **your backend** — and the SDK composes them into one wallet handle. The SDK
+ships the network config (`TESTNET`) and an HTTP backend client
+(`createHttpWalletBackend`), so there's nothing to hand-wire.
 
 ```ts
 import { PasskeyKit, SACClient } from "passkey-kit";
-import { createVellarWallet } from "vellar-sdk";
+import {
+  createVellarWallet,
+  createHttpWalletBackend,
+  TESTNET,
+} from "vellar-sdk";
 import { StrKey } from "@stellar/stellar-sdk";
 
 const vellar = createVellarWallet({
   network: "testnet",
   appName: "My App",
-  kit: new PasskeyKit({ rpcUrl, networkPassphrase, walletWasmHash }),
-  sac: new SACClient({ rpcUrl, networkPassphrase }),
-  backend: myBackend, // implements submitWalletCreation / lookupContractId / submitTransaction
-  isValidAddress: (a) => StrKey.isValidEd25519PublicKey(a) || StrKey.isValidContract(a),
+  kit: new PasskeyKit({
+    rpcUrl: TESTNET.rpcUrl,
+    networkPassphrase: TESTNET.networkPassphrase,
+    walletWasmHash: TESTNET.walletWasmHash,
+  }),
+  sac: new SACClient({
+    rpcUrl: TESTNET.rpcUrl,
+    networkPassphrase: TESTNET.networkPassphrase,
+  }),
+  // Point this at YOUR backend (see "Your backend" below). It holds the
+  // relayer/sponsor secrets — the SDK never sees them.
+  backend: createHttpWalletBackend("https://api.myapp.com"),
+  isValidAddress: (a) =>
+    StrKey.isValidEd25519PublicKey(a) || StrKey.isValidContract(a),
 });
 
 // Create a wallet (prompts the passkey once):
@@ -53,12 +68,34 @@ await vellar.connect();
 const { hash } = await vellar.pay({
   to: "CDEST...",
   amount: 5_0000000n, // 5 XLM, in stroops
-  token: { contractId: nativeTokenId, symbol: "XLM", decimals: 7 },
+  token: {
+    contractId: TESTNET.nativeTokenContractId, // XLM
+    symbol: "XLM",
+    decimals: 7,
+  },
 });
 ```
 
 `pay()` simulates **before** the passkey prompt, so failures (e.g. insufficient
 balance) surface without asking the user to sign.
+
+## Your backend
+
+Submission is fee-sponsored, which requires an OpenZeppelin Relayer API key and
+a funded sponsor account. **These are secrets — they must live on your server,
+never in the browser.** So the SDK never submits directly: it hands signed
+transactions to your backend, which does the sponsored submit.
+
+`createHttpWalletBackend(apiUrl)` speaks to a gateway exposing three routes:
+
+| Route                  | Purpose                                        |
+| ---------------------- | ---------------------------------------------- |
+| `POST /wallet/create`  | Submit the deployment tx; store keyId→contract |
+| `POST /wallet/connect` | Resolve the smart-account for a known passkey  |
+| `POST /wallet/submit`  | Submit an already-signed transaction           |
+
+You run a backend implementing these (holding your relayer/sponsor creds). Your
+backend must also allow your app's origin via CORS.
 
 ## API
 
@@ -66,13 +103,21 @@ balance) surface without asking the user to sign.
 
 Returns a `VellarWallet`:
 
-| Member | Description |
-| --- | --- |
-| `session` | The current `WalletSession`, or `null` before create/connect |
-| `create({ username? })` | Register a passkey and create the smart account |
-| `connect()` | Reconnect with an existing passkey |
-| `pay({ to, amount, token })` | Build → simulate → sign → submit; returns `{ hash }` |
-| `connector` / `payments` | Lower-level building blocks for custom flows |
+| Member                       | Description                                                  |
+| ---------------------------- | ------------------------------------------------------------ |
+| `session`                    | The current `WalletSession`, or `null` before create/connect |
+| `create({ username? })`      | Register a passkey and create the smart account              |
+| `connect()`                  | Reconnect with an existing passkey                           |
+| `pay({ to, amount, token })` | Build → simulate → sign → submit; returns `{ hash }`         |
+| `connector` / `payments`     | Lower-level building blocks for custom flows                 |
+
+### Helpers
+
+| Export                         | Description                                                                              |
+| ------------------------------ | ---------------------------------------------------------------------------------------- |
+| `createHttpWalletBackend(url)` | An HTTP `backend` client for your gateway — pass straight to the config                  |
+| `TESTNET`                      | Testnet config: `rpcUrl`, `networkPassphrase`, `walletWasmHash`, `nativeTokenContractId` |
+| `WalletApiError`               | Thrown by the HTTP backend on non-2xx responses (has `status`, `code`)                   |
 
 ### Advanced
 
