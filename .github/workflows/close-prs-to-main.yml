@@ -1,0 +1,38 @@
+name: Close PRs targeting main
+
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, edited]
+    branches: [main]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  close:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            if (pr.state === "closed") return;
+            const repoUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              body: [
+                "Thanks for the contribution — but this repository does not accept pull requests to `main`.",
+                "",
+                "All contributions must target the **`drips`** branch. Please open your PR again with `drips` as the base branch (or use the *Edit* button next to the PR title to change the base).",
+                "",
+                `See [CONTRIBUTING.md](${repoUrl}/blob/main/CONTRIBUTING.md) for the contribution rules. Questions? Ask in the [Telegram group](https://t.me/+RWPCKXXJTj45Njk0).`,
+              ].join("\n"),
+            });
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              state: "closed",
+            });
