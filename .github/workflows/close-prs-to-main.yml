@@ -17,13 +17,15 @@ jobs:
           script: |
             const pr = context.payload.pull_request;
             if (pr.state === "closed") return;
+            // Maintainers (owner, org members, collaborators) may PR to main.
+            if (["OWNER", "MEMBER", "COLLABORATOR"].includes(pr.author_association)) return;
             const repoUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}`;
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: pr.number,
               body: [
-                "Thanks for the contribution — but this repository does not accept pull requests to `main`.",
+                "Thanks for the contribution — but pull requests to `main` are reserved for maintainers.",
                 "",
                 "All contributions must target the **`drips`** branch. Please open your PR again with `drips` as the base branch (or use the *Edit* button next to the PR title to change the base).",
                 "",
