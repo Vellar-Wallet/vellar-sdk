@@ -9,6 +9,7 @@ interface VellarWallet {
   create(input?: { username?: string }): Promise<WalletSession>;
   connect(): Promise<WalletSession>;
   pay(input: PayInput): Promise<{ hash: string }>;
+  readonly policies: PolicyFacade;     // see Policies
   readonly connector: WalletConnector; // advanced
   readonly payments: PaymentClient;    // advanced
 }
@@ -80,6 +81,13 @@ interface PayInput {
 
 Throws `WalletNotReadyError` if called before `create()` / `connect()`, and
 throws (before any signing) if `to` fails `isValidAddress`.
+
+## `policies`
+
+Programmable on-chain account policies — list templates, generate artifacts,
+simulate, and deploy (attach a policy with a single passkey signature). Requires
+`apiUrl` in the config; `deploy` additionally requires a `policyAttach` runtime.
+See [Policies](./policies.md).
 
 ## `connector` / `payments`
 

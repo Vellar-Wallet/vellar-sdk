@@ -16,6 +16,9 @@ seed phrases, or the low-level submission plumbing.
 > Status: early. Testnet-ready; mainnet use pending a security review. APIs may
 > change before `1.0`.
 
+📚 **Full documentation: [docs.vellar.xyz](https://docs.vellar.xyz)** — guides,
+API reference, wallet methods, policies, and the security model.
+
 ## Install
 
 ```sh
@@ -144,6 +147,8 @@ Your gateway must expose the policy routes (`/policies/templates`,
 `/policies/validate`, `/policies/generate`, `/policies/:id/simulate`,
 `/policies/:id/deploy-instance`, `/policies/deploy`) — instance deploys are
 funded by **your** sponsor account, server-side.
+
+→ Full guide: [Policies on docs.vellar.xyz](https://docs.vellar.xyz/docs/policies).
 
 ### Advanced
 
