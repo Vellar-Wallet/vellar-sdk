@@ -31,3 +31,20 @@ export interface SignTransactionInput {
   xdr: string;
   network: Network;
 }
+
+// --- Smart Account Policy Builder ---
+
+export interface PolicyDefinition {
+  version: string;
+  type: string;
+  owners: string[];
+  threshold?: number;
+  spendingLimits?: {
+    dailyXlm?: string;
+    perTxXlm?: string;
+  };
+  allowlistedContracts?: string[];
+  timelocks?: {
+    adminActionDelaySeconds?: number;
+  };
+}

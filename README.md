@@ -109,6 +109,7 @@ Returns a `VellarWallet`:
 | `create({ username? })`      | Register a passkey and create the smart account              |
 | `connect()`                  | Reconnect with an existing passkey                           |
 | `pay({ to, amount, token })` | Build → simulate → sign → submit; returns `{ hash }`         |
+| `policies`                   | Programmable account policies — see [Policies](#policies)   |
 | `connector` / `payments`     | Lower-level building blocks for custom flows                 |
 
 ### Helpers
@@ -118,6 +119,31 @@ Returns a `VellarWallet`:
 | `createHttpWalletBackend(url)` | An HTTP `backend` client for your gateway — pass straight to the config                  |
 | `TESTNET`                      | Testnet config: `rpcUrl`, `networkPassphrase`, `walletWasmHash`, `nativeTokenContractId` |
 | `WalletApiError`               | Thrown by the HTTP backend on non-2xx responses (has `status`, `code`)                   |
+
+### Policies
+
+Attach programmable policies (e.g. an on-chain spending limit) to a wallet.
+Pass `apiUrl` (your policy API gateway) in the config to enable
+`wallet.policies`:
+
+```ts
+const templates = await vellar.policies.listTemplates();
+const policy = await vellar.policies.generate(definition); // validate + artifacts
+await vellar.policies.simulate(policy.id); // dry-run, no submit
+const { contractId } = await vellar.policies.deploy(policy.id); // ONE passkey prompt
+```
+
+`deploy()` runs the full attach: your backend deploys the per-user policy
+contract instance (sponsor-funded, server-side), the user passkey-signs
+`addPolicy` to attach it — the only WebAuthn prompt, no silent signing — and
+the completed attach is recorded. It requires a `policyAttach` runtime in the
+config wired to your kit (`addPolicy` → sign → submit); without it, read,
+generate, and simulate still work and `deploy()` throws a clear error.
+
+Your gateway must expose the policy routes (`/policies/templates`,
+`/policies/validate`, `/policies/generate`, `/policies/:id/simulate`,
+`/policies/:id/deploy-instance`, `/policies/deploy`) — instance deploys are
+funded by **your** sponsor account, server-side.
 
 ### Advanced
 

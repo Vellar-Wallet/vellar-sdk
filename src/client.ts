@@ -8,6 +8,7 @@ import {
 } from "./passkeykit-connector";
 import { createPaymentClient, type PaymentClient, type SacClientLike } from "./payments-client";
 import type { WalletConnector } from "./connector";
+import { createPolicyFacade, type PolicyAttachRuntime, type PolicyFacade } from "./policy-facade";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Vellar Wallet SDK — public client facade.
@@ -49,6 +50,19 @@ export interface VellarWalletConfig {
   isValidAddress: (address: string) => boolean;
   /** Test/advanced hook: convert the kit's signed output to XDR. */
   signedToXdr?: (signed: unknown) => string;
+  /**
+   * Gateway base URL for the policy API (`wallet.policies`). Required to use
+   * policies; templates/generate are read-only, deploy is sponsor-funded.
+   * Never inferred from the backend's URL — pass it explicitly.
+   */
+  apiUrl?: string;
+  /**
+   * Passkey-attach runtime for `wallet.policies.deploy` — wires
+   * kit.addPolicy → passkey sign → backend submit. Without it, read/generate
+   * still work but deploy() throws a clear error. (The web app supplies its
+   * connector-factory runtime; a headless integrator supplies their own.)
+   */
+  policyAttach?: PolicyAttachRuntime;
 }
 
 export interface PayInput {
@@ -82,6 +96,13 @@ export interface VellarWallet {
    * WebAuthn prompt. There is no silent-signing path.
    */
   pay(input: PayInput): Promise<{ hash: string }>;
+  /**
+   * Programmable account policies (idea.md §6.2): list templates, generate the
+   * deployable artifacts, simulate, and deploy — attaching a policy (e.g. a
+   * spending limit) to this wallet with a single passkey signature. Requires
+   * `apiUrl`; `deploy` additionally requires `policyAttach`.
+   */
+  readonly policies: PolicyFacade;
   /** Lower-level: the composed connector, for flows beyond the paved road. */
   readonly connector: WalletConnector;
   /** Lower-level: the composed payment client. */
@@ -113,9 +134,31 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
 
   let session: WalletSession | null = null;
 
+  const policies = createPolicyFacade({
+    // Policies need a gateway; if apiUrl is omitted every policy call fails
+    // loudly with a clear message rather than hitting an empty base URL.
+    apiUrl: config.apiUrl ?? "",
+    network: config.network,
+    requireSession: () => {
+      if (!session) {
+        throw new WalletNotReadyError("Call create() or connect() before using policies");
+      }
+      return { accountId: session.accountId, keyId: session.keyId };
+    },
+    attach: config.policyAttach,
+  });
+
   return {
     get session() {
       return session;
+    },
+    get policies() {
+      if (!config.apiUrl) {
+        throw new WalletNotReadyError(
+          "wallet.policies requires `apiUrl` in createVellarWallet config (the policy API gateway).",
+        );
+      }
+      return policies;
     },
     get connector() {
       return connector;
