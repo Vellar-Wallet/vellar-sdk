@@ -95,8 +95,3 @@ export function mainnetConfig(opts: { rpcUrl: string; walletWasmHash: string }):
   }
   return { ...MAINNET, rpcUrl, walletWasmHash: walletWasmHash.toLowerCase() };
 }
-
-export const DEFAULTS = {
-  rpcUrl: TESTNET.rpcUrl,
-  networkPassphrase: TESTNET.networkPassphrase,
-} as const;
