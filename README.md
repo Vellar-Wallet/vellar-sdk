@@ -121,7 +121,35 @@ Returns a `VellarWallet`:
 | ------------------------------ | ---------------------------------------------------------------------------------------- |
 | `createHttpWalletBackend(url)` | An HTTP `backend` client for your gateway — pass straight to the config                  |
 | `TESTNET`                      | Testnet config: `rpcUrl`, `networkPassphrase`, `walletWasmHash`, `nativeTokenContractId` |
+| `MAINNET` / `mainnetConfig()`  | Mainnet config — see [Mainnet](#mainnet) (two values you must supply)                    |
 | `WalletApiError`               | Thrown by the HTTP backend on non-2xx responses (has `status`, `code`)                   |
+
+### Mainnet
+
+> Mainnet use of this SDK is **pending a security review**. Shipping a mainnet
+> config does not make mainnet blessed for production.
+
+Two of the four network values cannot be shipped as constants and you must
+supply them, so use `mainnetConfig()` rather than `MAINNET` directly:
+
+```ts
+import { mainnetConfig } from "vellar-sdk";
+
+const network = mainnetConfig({
+  // There is no free public SDF mainnet Soroban RPC — supply your provider.
+  rpcUrl: "https://your-mainnet-soroban-rpc.example.com",
+  // Verify this against the passkey-kit mainnet deployment manifest for YOUR
+  // passkey-kit version. Do not copy the testnet hash on faith.
+  walletWasmHash: "…64-char hex hash…",
+});
+```
+
+`mainnetConfig()` fills the values that are known (the canonical mainnet
+passphrase, SDF's public Horizon, and the XLM SAC id — derived and verified in
+tests) and throws if `rpcUrl` or `walletWasmHash` is missing or malformed, so a
+broken mainnet config can never be built silently. The bare `MAINNET` constant
+has those two fields blank on purpose: a blank value fails loudly, a guessed one
+fails silently.
 
 ### Policies
 
