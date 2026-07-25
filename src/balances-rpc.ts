@@ -11,7 +11,7 @@ import type { BalanceReader, TokenInfo } from "./balances";
 
 // RPC-backed BalanceReader: simulates the token contract's `balance(id)`
 // read — no signature, no fee, works for contract (C...) and classic (G...)
-// holders. Exported via the "@vela/wallet-sdk/rpc" subpath so consumers that
+// holders. Exported via the "vellar-sdk/rpc" subpath so consumers that
 // never read balances don't pull @stellar/stellar-sdk into their bundle.
 
 /** Standard null account used as the simulation source for read-only calls. */

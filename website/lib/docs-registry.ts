@@ -18,7 +18,7 @@ export const DOC_PAGES: DocPage[] = [
   { slug: "quickstart", title: "Quickstart", nav: "Quickstart", section: "Getting Started" },
   { slug: "how-it-works", title: "How It Works", nav: "How It Works", section: "Concepts" },
   { slug: "security", title: "Security", nav: "Security", section: "Concepts" },
-  { slug: "api-reference", title: "API Reference", nav: "createVelaWallet", section: "Reference" },
+  { slug: "api-reference", title: "API Reference", nav: "createVellarWallet", section: "Reference" },
   { slug: "wallet-methods", title: "Wallet Methods", nav: "Wallet methods", section: "Reference" },
   { slug: "policies", title: "Policies", nav: "Policies", section: "Reference" },
   { slug: "advanced", title: "Advanced Usage", nav: "Advanced", section: "Reference" },

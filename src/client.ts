@@ -17,7 +17,7 @@ import { createPolicyFacade, type PolicyAttachRuntime, type PolicyFacade } from 
 // connector + payment client behind ONE object so callers never touch
 // PasskeyKit, the backend seam, or the connector interface directly:
 //
-//   const vela = createVellarWallet({ network, appName, backend, kit, sac });
+//   const vellar = createVellarWallet({ network, appName, backend, kit, sac });
 //   const session = await vellar.connect();          // or vellar.create({ username })
 //   await vellar.pay({ to, amount, token });
 //
