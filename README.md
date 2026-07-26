@@ -12,6 +12,9 @@ seed phrases, or the low-level submission plumbing.
   server-side.
 - 🚫 **No key custody, no silent signing** — the SDK never holds secrets and
   never signs without an explicit passkey prompt.
+- 🤖 **Agentic payments (x402)** — pay HTTP-402 resources from the smart account
+  with a scoped session key bounded by an on-chain budget: *give your agent a
+  budget, not your keys.* See [x402](#x402).
 
 > Status: early. Testnet-ready; mainnet use pending a security review. APIs may
 > change before `1.0`.
@@ -113,6 +116,7 @@ Returns a `VellarWallet`:
 | `connect()`                  | Reconnect with an existing passkey                           |
 | `pay({ to, amount, token })` | Build → simulate → sign → submit; returns `{ hash }`         |
 | `policies`                   | Programmable account policies — see [Policies](#policies)   |
+| `x402`                       | Agentic payments — pay HTTP-402 resources — see [x402](#x402) |
 | `connector` / `payments`     | Lower-level building blocks for custom flows                 |
 
 ### Helpers
@@ -178,14 +182,75 @@ funded by **your** sponsor account, server-side.
 
 → Full guide: [Policies on docs.vellar.xyz](https://docs.vellar.xyz/docs/policies).
 
+### x402
+
+Pay [x402](https://x402.org) (HTTP-402) resources from a Vellar smart account —
+the "give your agent a budget, not your keys" flow. `wallet.x402.fetch()` handles
+the 402 challenge transparently: it parses the payment requirements, builds and
+signs the SEP-41 transfer as a smart-account auth entry, retries with the
+`PAYMENT-SIGNATURE` header, and returns the unlocked response plus the on-chain
+settlement.
+
+Pass `x402` config with a **signer** (who pays) and a `simulationSourceAccount`
+(any funded classic account, used only to simulate — the facilitator rebuilds the
+transaction and pays the fee):
+
+```ts
+import { createVellarWallet, createSessionKeySigner } from "vellar-sdk";
+
+const vellar = createVellarWallet({
+  /* …network, appName, kit, backend, sac, isValidAddress… */
+  x402: {
+    // The agent flow: a scoped ed25519 session key signs headlessly.
+    signer: createSessionKeySigner({ address: walletCAddress, secretKey: sessionKeySecret }),
+    simulationSourceAccount: aFundedGAccount,
+  },
+});
+
+const { response, paid, settlement } = await vellar.x402.fetch("https://api.example.com/paid", {
+  maxAmount: 1_000_000n, // hard per-request ceiling in the asset's base units
+  // allowedAssets: [usdcSac],   // optional — restrict which asset(s) you'll pay in
+});
+
+if (paid) console.log("settled on-chain:", settlement.transaction);
+const data = await response.json(); // the unlocked resource
+```
+
+Two signers ship, both satisfying the same `SmartAccountX402Signer` interface:
+
+| Signer | Flow |
+| ------ | ---- |
+| `createSessionKeySigner({ address, secretKey })` | **Agent** — an ed25519 session key signs headlessly (no passkey prompt). Its authority is bounded on-chain by the spending-limit policy attached to it. |
+| `createPasskeyX402Signer({ address, webAuthn })` | **Human** — one passkey prompt per payment. `webAuthn` is a small seam you wire to your passkey ceremony (keeps this SDK free of a passkey-kit dependency). |
+
+> **`maxAmount` is a client-side guard, not the budget.** It stops an
+> over-charging server before anything is signed. The durable, enforced budget is
+> the **on-chain spending-limit policy** attached to the signing key — for a
+> per-token budget, use the token-scoped policy so only that token's transfers
+> count. The SDK refuses to sign above `maxAmount`; the chain refuses to settle
+> above the policy cap.
+
+Errors are typed: `MaxAmountExceededError`, `DisallowedAssetError`,
+`NoUsablePaymentOptionError`, `InvalidRequirementsError`, `PaymentRejectedError`
+(the facilitator rejected it — e.g. an over-budget payment blocked by the policy),
+and `X402NotConfiguredError` (no `x402` config). Lower-level: `createX402Client`
+for a client without the wallet handle.
+
+> **Facilitator note:** a policy-governed payment runs the policy inside
+> `__check_auth`, which costs more resource fee than a plain transfer. Hosted
+> facilitators cap the fee they sponsor (x402.org's default is 50,000 stroops),
+> so a policy-governed payment needs a facilitator configured with a higher
+> ceiling (self-hosted, or a hosted one that allows it).
+
 ### Advanced
 
 The facade is the paved road. For custom flows the package also exports the
 underlying pieces: `createPasskeyKitConnector`, `createPaymentClient`,
-`createSessionStore`, the `WalletConnector` interface, balances helpers
-(`vellar-sdk/balances`), and RPC-backed readers (`vellar-sdk/rpc`,
-imported separately so `@stellar/stellar-sdk` stays out of bundles that don't
-read balances).
+`createSessionStore`, `createX402Client` (x402 without the wallet handle) and its
+signers (`createSessionKeySigner`, `createPasskeyX402Signer`), the
+`WalletConnector` interface, balances helpers (`vellar-sdk/balances`), and
+RPC-backed readers (`vellar-sdk/rpc`, imported separately so
+`@stellar/stellar-sdk` stays out of bundles that don't read balances).
 
 ## License
 

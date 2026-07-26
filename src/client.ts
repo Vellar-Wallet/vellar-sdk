@@ -9,6 +9,9 @@ import {
 import { createPaymentClient, type PaymentClient, type SacClientLike } from "./payments-client";
 import type { WalletConnector } from "./connector";
 import { createPolicyFacade, type PolicyAttachRuntime, type PolicyFacade } from "./policy-facade";
+import { createX402Facade } from "./x402-facade";
+import type { FetchLike } from "./x402-client";
+import { X402NotConfiguredError, type SmartAccountX402Signer, type X402Client } from "./x402-types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Vellar Wallet SDK — public client facade.
@@ -63,6 +66,24 @@ export interface VellarWalletConfig {
    * connector-factory runtime; a headless integrator supplies their own.)
    */
   policyAttach?: PolicyAttachRuntime;
+  /**
+   * x402 config for `wallet.x402` (agentic payments, technical-doc.md §17).
+   * Without it, `wallet.x402` throws a clear error. The `signer` is chosen by the
+   * caller: `createSessionKeySigner` (agent/headless ed25519) or
+   * `createPasskeyX402Signer` (human passkey). Its `address` must be this
+   * wallet's C-address. `simulationSourceAccount` is a funded G-account used only
+   * as the tx simulation source (never charged; the facilitator rebuilds + pays).
+   */
+  x402?: {
+    signer: SmartAccountX402Signer;
+    simulationSourceAccount: string;
+    /** Override the RPC URL used for x402 simulation (defaults to the backend's). */
+    rpcUrl?: string;
+    fetchImpl?: FetchLike;
+    expirationLedgerOffset?: number;
+  };
+  /** RPC URL for x402 simulation when `x402.rpcUrl` is not given. */
+  rpcUrl?: string;
 }
 
 export interface PayInput {
@@ -103,6 +124,14 @@ export interface VellarWallet {
    * `apiUrl`; `deploy` additionally requires `policyAttach`.
    */
   readonly policies: PolicyFacade;
+  /**
+   * x402 agentic payments (technical-doc.md §17): fetch a resource, transparently
+   * paying an HTTP-402 challenge from this smart account. The budget is enforced
+   * on-chain by the spending-limit policy attached to the signing key — the
+   * client-side `maxAmount` is only a per-request guard, not the budget. Requires
+   * `x402` config; otherwise every call throws `X402NotConfiguredError`.
+   */
+  readonly x402: X402Client;
   /** Lower-level: the composed connector, for flows beyond the paved road. */
   readonly connector: WalletConnector;
   /** Lower-level: the composed payment client. */
@@ -134,6 +163,33 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
 
   let session: WalletSession | null = null;
 
+  const x402 = createX402Facade({
+    config: config.x402
+      ? {
+          rpcUrl: config.x402.rpcUrl ?? config.rpcUrl ?? "",
+          network: config.network,
+          simulationSourceAccount: config.x402.simulationSourceAccount,
+          fetchImpl: config.x402.fetchImpl,
+          expirationLedgerOffset: config.x402.expirationLedgerOffset,
+        }
+      : undefined,
+    resolveSigner: () => {
+      if (!config.x402) {
+        throw new X402NotConfiguredError(
+          "wallet.x402 requires `x402` config in createVellarWallet.",
+        );
+      }
+      // The signer's address must be the connected wallet; if a session exists,
+      // enforce it (a signer for a different wallet is a configuration error).
+      if (session && config.x402.signer.address !== session.accountId) {
+        throw new X402NotConfiguredError(
+          `x402 signer address ${config.x402.signer.address} does not match the connected wallet ${session.accountId}.`,
+        );
+      }
+      return config.x402.signer;
+    },
+  });
+
   const policies = createPolicyFacade({
     // Policies need a gateway; if apiUrl is omitted every policy call fails
     // loudly with a clear message rather than hitting an empty base URL.
@@ -159,6 +215,9 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
         );
       }
       return policies;
+    },
+    get x402() {
+      return x402;
     },
     get connector() {
       return connector;
