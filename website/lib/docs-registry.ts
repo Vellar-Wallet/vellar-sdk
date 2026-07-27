@@ -21,6 +21,7 @@ export const DOC_PAGES: DocPage[] = [
   { slug: "api-reference", title: "API Reference", nav: "createVellarWallet", section: "Reference" },
   { slug: "wallet-methods", title: "Wallet Methods", nav: "Wallet methods", section: "Reference" },
   { slug: "policies", title: "Policies", nav: "Policies", section: "Reference" },
+  { slug: "x402", title: "x402 Agentic Payments", nav: "x402 Payments", section: "Reference" },
   { slug: "advanced", title: "Advanced Usage", nav: "Advanced", section: "Reference" },
 ];
 
