@@ -1,0 +1,65 @@
+name: Close PRs touching files outside contrib/
+
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, edited, synchronize]
+    branches: [drips]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            if (pr.state === "closed") return;
+            // Maintainers (owner, org members, collaborators) may touch anything.
+            if (["OWNER", "MEMBER", "COLLABORATOR"].includes(pr.author_association)) return;
+
+            const ALLOWED_PREFIX = "contrib/";
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              per_page: 100,
+            });
+
+            const outside = files
+              .map((f) => f.filename)
+              .filter((path) => !path.startsWith(ALLOWED_PREFIX));
+
+            if (outside.length === 0) return;
+
+            const repoUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}`;
+            const list = outside
+              .slice(0, 20)
+              .map((p) => `- \`${p}\``)
+              .join("\n");
+            const more = outside.length > 20 ? `\n- …and ${outside.length - 20} more` : "";
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              body: [
+                "Thanks for the contribution — but contributor PRs may only change files inside `contrib/`.",
+                "",
+                "This PR touches file(s) outside that folder:",
+                "",
+                list + more,
+                "",
+                `Please open a new PR with your changes scoped to \`contrib/\` only. See [CONTRIBUTING.md](${repoUrl}/blob/main/CONTRIBUTING.md) and [contrib/README.md](${repoUrl}/blob/main/contrib/README.md). If your assigned issue genuinely needs changes elsewhere, say so on the issue first — don't open a PR outside \`contrib/\`.`,
+                "",
+                "Questions? Ask in the [Telegram group](https://t.me/+RWPCKXXJTj45Njk0).",
+              ].join("\n"),
+            });
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              state: "closed",
+            });
