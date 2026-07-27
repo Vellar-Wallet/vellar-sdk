@@ -1,5 +1,7 @@
 # vellar-sdk
 
+![Vellar](assets/vellar-banner.jpg)
+
 **Passkey smart-wallet SDK for Stellar.** Add passkey login, a Soroban smart
 account, and fee-sponsored payments to your app — without handling private keys,
 seed phrases, or the low-level submission plumbing.
