@@ -14,13 +14,13 @@ await vellar.pay({ to, amount, token });  // simulate → passkey → sponsored 
 
 ## What you get
 
-- 🔐 **Passkeys, not seed phrases** — WebAuthn (Face ID / Touch ID / security
+- **Passkeys, not seed phrases** — WebAuthn (Face ID / Touch ID / security
   keys). Keys live in the device's secure enclave and never leave it.
-- 🪪 **Smart-contract accounts** — each wallet is a Soroban smart wallet, so it
+- **Smart-contract accounts** — each wallet is a Soroban smart wallet, so it
   can carry programmable policies (spending limits, multisig, allowlists).
-- ⛽ **Fee-sponsored** — users hold no XLM for fees; submission is sponsored
+- **Fee-sponsored** — users hold no XLM for fees; submission is sponsored
   server-side.
-- 🚫 **No key custody, no silent signing** — the SDK never holds secrets and
+- **No key custody, no silent signing** — the SDK never holds secrets and
   never signs without an explicit passkey prompt.
 
 ## Who this is for

@@ -4,22 +4,22 @@
 account, and fee-sponsored payments to your app — without handling private keys,
 seed phrases, or the low-level submission plumbing.
 
-- 🔐 **Passkeys, not seed phrases** — WebAuthn (Face ID / Touch ID / security
+- **Passkeys, not seed phrases** — WebAuthn (Face ID / Touch ID / security
   keys). Keys live in the device's secure enclave and never leave it.
-- 🪪 **Smart-contract accounts** — each wallet is a Soroban smart wallet, so it
+- **Smart-contract accounts** — each wallet is a Soroban smart wallet, so it
   can carry programmable policies (spending limits, multisig, allowlists).
-- ⛽ **Fee-sponsored** — users hold no XLM for fees; submission is sponsored
+- **Fee-sponsored** — users hold no XLM for fees; submission is sponsored
   server-side.
-- 🚫 **No key custody, no silent signing** — the SDK never holds secrets and
+- **No key custody, no silent signing** — the SDK never holds secrets and
   never signs without an explicit passkey prompt.
-- 🤖 **Agentic payments (x402)** — pay HTTP-402 resources from the smart account
+- **Agentic payments (x402)** — pay HTTP-402 resources from the smart account
   with a scoped session key bounded by an on-chain budget: *give your agent a
   budget, not your keys.* See [x402](#x402).
 
 > Status: early. Testnet-ready; mainnet use pending a security review. APIs may
 > change before `1.0`.
 
-📚 **Full documentation: [docs.vellar.xyz](https://docs.vellar.xyz)** — guides,
+**Full documentation: [docs.vellar.xyz](https://docs.vellar.xyz)** — guides,
 API reference, wallet methods, policies, and the security model.
 
 ## Install
