@@ -13,6 +13,7 @@ export interface DocPage {
 
 // Ordered table of contents — drives the sidebar and next/prev.
 export const DOC_PAGES: DocPage[] = [
+  { slug: "hackathon", title: "Vellar × Stellar Hackathon", nav: "Hackathon", section: "Hackathon" },
   { slug: "introduction", title: "Introduction", nav: "Introduction", section: "Getting Started" },
   { slug: "installation", title: "Installation", nav: "Installation", section: "Getting Started" },
   { slug: "quickstart", title: "Quickstart", nav: "Quickstart", section: "Getting Started" },
