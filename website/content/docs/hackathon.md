@@ -26,7 +26,7 @@ be the deciding factor. Free exposure, zero downside.
 
 ---
 
-## TL;DR
+## Quick Summary
 
 1. Follow [**@vellar_sdk**](https://x.com/vellar_sdk?s=11) on X, mandatory, checked at registration.
 2. Build something real using [`vellar-sdk`](https://www.npmjs.com/package/vellar-sdk): passkey wallets, on-chain policies, or x402 agent payments.
@@ -50,7 +50,9 @@ regardless of which SDK surface it leans on hardest.
 
 **Build things like:** a consumer payments app, a merchant checkout flow, a
 savings/goals product, a tipping or micropayments tool, anything where
-"create a wallet with a fingerprint, not a seed phrase" is the unlock.
+"create a wallet with a fingerprint, not a seed phrase" is the unlock. These
+are starting points, not the ceiling, the strongest submissions will surprise
+us.
 
 **Key SDK surface:** `createVellarWallet`, `.create()`, `.connect()`, `.pay()`.
 See [Quickstart](./quickstart.md).
@@ -64,6 +66,8 @@ not just in your UI.
 **Build things like:** a shared/family wallet with per-member spending caps, a
 sub-account or allowance system, a treasury tool with multisig-style
 approval, a budgeting app that makes the on-chain cap visible and trustworthy.
+These are starting points, not the ceiling, the strongest submissions will
+surprise us.
 
 **Key SDK surface:** `wallet.policies` (templates, generate, simulate, deploy).
 See [Policies](./policies.md).
@@ -77,7 +81,8 @@ cannot spend past its cap.
 
 **Build things like:** an agent that shops for API access on a budget, a
 bot that pays-per-call for data/compute and stops when it hits its cap, a
-multi-agent system where each agent has its own bounded wallet.
+multi-agent system where each agent has its own bounded wallet. These are
+starting points, not the ceiling, the strongest submissions will surprise us.
 
 **Key SDK surface:** `wallet.x402.fetch()`, `createSessionKeySigner`. See
 [x402 Agentic Payments](./x402.md).
@@ -87,12 +92,27 @@ multi-agent system where each agent has its own bounded wallet.
 > are not yet supported by any deployed facilitator; don't build around that
 > path, it will not settle.
 
+### Track 4, Open Innovation
+
+The catch-all for anything strong that doesn't fit neatly into Tracks 1
+through 3, or that combines more than one SDK surface into something new.
+Genuinely novel angles on passkeys, policies, or agent payments, or a project
+that uses all three together, belong here.
+
+**Build things like:** anything genuinely creative that uses `vellar-sdk` in a
+way we haven't listed above. This track exists so a great idea never gets
+forced into the wrong box.
+
+**Key SDK surface:** any combination of the above. See
+[Wallet Methods](./wallet-methods.md) for the full API surface.
+
 ### Can't decide?
 
 ```
 Is the core flow "onboard/pay with a passkey"?        > Track 1
 Is the core flow "enforce a spending rule on-chain"?   > Track 2
 Is the core flow "an agent pays for something itself"? > Track 3
+Something else strong that doesn't fit cleanly above?  > Track 4
 ```
 
 If your idea genuinely spans two tracks, submit to the one where your core
@@ -219,7 +239,7 @@ and fill in:
 [What it does, in one sentence]
 
 ## Track
-[Track 1: Wallet SDK | Track 2: Policy Builder | Track 3: x402 Agent Payments]
+[Track 1: Wallet SDK | Track 2: Policy Builder | Track 3: x402 Agent Payments | Track 4: Open Innovation]
 
 ## Problem It Solves
 [2-4 sentences. What real problem does this address? Who is the user?]
@@ -271,7 +291,7 @@ Put this in **your project's own repo**, not the submission Issue.
 raw Stellar SDK integration?]
 
 ## Track
-[Track 1: Wallet SDK | Track 2: Policy Builder | Track 3: x402 Agent Payments]
+[Track 1: Wallet SDK | Track 2: Policy Builder | Track 3: x402 Agent Payments | Track 4: Open Innovation]
 
 ## Tech Stack
 - Framework: [Next.js / React / ...]
