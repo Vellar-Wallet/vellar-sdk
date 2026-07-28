@@ -13,3 +13,16 @@ It covers both published entry points:
 - the `vellar-sdk/rpc` subpath (RPC-backed balance and transaction-status readers)
 
 Internal modules are not included — only what the package actually exports.
+
+## Regenerating it
+
+The reference is a build artifact (like `dist/`) — not committed. From the
+repository root:
+
+```sh
+npm run docs:api
+```
+
+This writes static HTML to `website/public/api`, which the docs site serves
+as-is. CI runs the same command on every push to catch a broken/unresolvable
+public export before it ships.

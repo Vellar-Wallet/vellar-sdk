@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>vellar-sdk example</title>
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
+      button { margin: 0.25rem 0.5rem 0.25rem 0; padding: 0.5rem 1rem; }
+      pre { background: #f4f4f4; padding: 1rem; overflow-x: auto; white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <h1>vellar-sdk example</h1>
+    <p>Create/connect a passkey smart wallet, send a payment, and attach a spending-limit policy — all on testnet.</p>
+
+    <div>
+      <button id="create">1. Create wallet</button>
+      <button id="connect">2. Connect wallet</button>
+      <button id="pay">3. Send payment</button>
+      <button id="attach-policy">4. Attach spending-limit policy</button>
+    </div>
+
+    <pre id="log">Ready.</pre>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

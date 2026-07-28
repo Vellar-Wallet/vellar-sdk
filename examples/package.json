@@ -1,0 +1,21 @@
+{
+  "name": "vellar-sdk-example",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Runnable example: create, connect, pay, and attach a spending-limit policy with vellar-sdk on testnet.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "vellar-sdk": "file:..",
+    "passkey-kit": "^0.14.0",
+    "@stellar/stellar-sdk": "^16.0.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2",
+    "vite": "^8.1.5"
+  }
+}

@@ -1,7 +1,7 @@
 {
   "name": "vellar-sdk",
   "version": "0.4.0",
-  "description": "Passkey smart-wallet SDK for Stellar \u2014 add passkey login, a Soroban smart account, fee-sponsored payments, and programmable policies to your app.",
+  "description": "Passkey smart-wallet SDK for Stellar — add passkey login, a Soroban smart account, fee-sponsored payments, and programmable policies to your app.",
   "license": "Apache-2.0",
   "type": "module",
   "sideEffects": false,
@@ -51,9 +51,11 @@
     "LICENSE"
   ],
   "scripts": {
+    "prepare": "npm run build",
     "build": "tsup",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "docs:api": "typedoc"
   },
   "peerDependencies": {
     "@stellar/stellar-sdk": "^16.0.0"
@@ -64,6 +66,7 @@
   "devDependencies": {
     "@stellar/stellar-sdk": "^16.0.1",
     "tsup": "^8.5.1",
+    "typedoc": "^0.28.20",
     "typescript": "^5.9.2",
     "vitest": "^3.2.0"
   },
