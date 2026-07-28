@@ -1,0 +1,14 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["src/index.ts", "src/rpc.ts"],
+  "tsconfig": "tsconfig.json",
+  "out": "website/public/api",
+  "name": "vellar-sdk API Reference",
+  "readme": "none",
+  "excludeInternal": true,
+  "excludePrivate": true,
+  "excludeProtected": true,
+  "cleanOutputDir": true,
+  "githubPages": false,
+  "searchInComments": true
+}

@@ -18,3 +18,12 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: npm run docs:api
+      - name: Fail if the generated API reference is stale (regenerate with `npm run docs:api` and commit)
+        run: git diff --exit-code -- website/public/api
+      - run: npm ci
+        working-directory: examples
+      - run: npm run typecheck
+        working-directory: examples
+      - run: npm run build
+        working-directory: examples
