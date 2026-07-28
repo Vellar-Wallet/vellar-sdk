@@ -6,7 +6,6 @@ you start.
 > **$500 in prizes.** Online, Aug 29–31, 2026. Build solo or as a team of up to
 > 4. Submit a public GitHub repo using `vellar-sdk`.
 
----
 
 ## Before You Do Anything Else
 
@@ -24,7 +23,6 @@ get reshared on our page during the weekend, and in the event of a close tie
 between two similarly-scored projects, visible momentum and community buzz can
 be the deciding factor. Free exposure, zero downside.
 
----
 
 ## Quick Summary
 
@@ -34,7 +32,6 @@ be the deciding factor. Free exposure, zero downside.
 4. Open a **GitHub Issue** on the submission repo using the template below.
 5. Submit before the deadline. Late submissions are not judged.
 
----
 
 ## What to Build
 
@@ -118,7 +115,6 @@ Something else strong that doesn't fit cleanly above?  > Track 4
 If your idea genuinely spans two tracks, submit to the one where your core
 flow lives, not a secondary feature.
 
----
 
 ## Judging
 
@@ -178,7 +174,6 @@ Fully async, there is no live/table judging.
 3. Judges reconcile close scores and confirm bonus points.
 4. Winners are announced in [Telegram](https://t.me/+JvRMWLJMWS0xYTBk).
 
----
 
 ## Eligibility
 
@@ -203,7 +198,6 @@ any meaningful way, can't be run or demonstrated by judges, or is found to be
 plagiarized or pre-existing work. If you're unsure whether something counts,
 disclose it in your README, honesty is rewarded, hidden re-use is not.
 
----
 
 ## How to Submit
 
@@ -331,7 +325,6 @@ npm run dev
 - [ ] Submission **Issue** opened with the correct title and template filled in
 - [ ] Submitted **before the deadline**
 
----
 
 ## Getting Started
 
@@ -344,7 +337,6 @@ npm run dev
 7. Record a 2–4 minute demo video.
 8. Submit via GitHub Issue before the deadline.
 
----
 
 ## Tips to Score Well
 
@@ -362,7 +354,6 @@ npm run dev
 - **Keep the demo video focused.** Show the core flow working. Skip the long
   intro.
 
----
 
 ## Questions
 
