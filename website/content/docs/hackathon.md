@@ -8,12 +8,29 @@ you start.
 
 ---
 
+## Before You Do Anything Else
+
+Following [**@vellar_sdk on X**](https://x.com/vellar_sdk?s=11) is **mandatory**
+to participate. This is checked at registration — if you haven't followed, your
+registration will not be approved.
+
+**Want to boost your visibility (and help us out)?** Repost the hackathon
+banner from our X page with a caption like *"I'm building at the Vellar ×
+Stellar Hackathon"* and tag [@vellar_sdk](https://x.com/vellar_sdk?s=11). It's
+not required for eligibility, but it's the easiest way to get your project in
+front of the Vellar community before you've even submitted — and a few of the
+most creative build-in-public threads may get shared back on our page during
+the weekend.
+
+---
+
 ## TL;DR
 
-1. Build something real using [`vellar-sdk`](https://www.npmjs.com/package/vellar-sdk) — passkey wallets, on-chain policies, or x402 agent payments.
-2. Put all your code in a **public GitHub repo** with a complete README.
-3. Open a **GitHub Issue** on the submission repo using the template below.
-4. Submit before the deadline. Late submissions are not judged.
+1. Follow [**@vellar_sdk**](https://x.com/vellar_sdk?s=11) on X — mandatory, checked at registration.
+2. Build something real using [`vellar-sdk`](https://www.npmjs.com/package/vellar-sdk) — passkey wallets, on-chain policies, or x402 agent payments.
+3. Put all your code in a **public GitHub repo** with a complete README.
+4. Open a **GitHub Issue** on the submission repo using the template below.
+5. Submit before the deadline. Late submissions are not judged.
 
 ---
 
