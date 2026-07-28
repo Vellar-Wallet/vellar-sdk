@@ -15,6 +15,7 @@ import {
   type PaymentRequirements,
   type SmartAccountX402Signer,
 } from "./x402-types";
+import { X402PaymentError } from "./errors";
 
 const C_ADDRESS = "CC5ZSTLTYKPNIFDSJ4233RVZPALGHHDBRTXGIN6Z3AJCWU57VR5ITXXR";
 const TOKEN = "CBIN4HTPJM2QLJ32DTRO6OCLIMM7TR7D74JDIPVQYLNYGL7SBWOXH5ND";
@@ -280,6 +281,13 @@ describe("body replay (bug #3)", () => {
     const fetchImpl = vi.fn(async () => response402([requirements()]));
     const c = client(fetchImpl);
     const stream = new ReadableStream();
+    await expect(
+      c.fetch("https://res.test/paid", {
+        method: "POST",
+        body: stream,
+        maxAmount: 10_000_000n,
+      }),
+    ).rejects.toBeInstanceOf(X402PaymentError);
     await expect(
       c.fetch("https://res.test/paid", {
         method: "POST",

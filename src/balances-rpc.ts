@@ -8,6 +8,7 @@ import {
   TransactionBuilder,
 } from "@stellar/stellar-sdk";
 import type { BalanceReader, TokenInfo } from "./balances";
+import { RpcRequestError } from "./errors";
 
 // RPC-backed BalanceReader: simulates the token contract's `balance(id)`
 // read — no signature, no fee, works for contract (C...) and classic (G...)
@@ -49,15 +50,22 @@ export function createRpcBalanceReader(options: RpcBalanceReaderOptions): Balanc
         .setTimeout(60)
         .build();
 
-      const sim = await server.simulateTransaction(tx);
+      let sim: Awaited<ReturnType<typeof server.simulateTransaction>>;
+      try {
+        sim = await server.simulateTransaction(tx);
+      } catch (err) {
+        throw new RpcRequestError(
+          `Balance read failed for ${tokenContractId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
       if (!rpc.Api.isSimulationSuccess(sim)) {
-        throw new Error(
+        throw new RpcRequestError(
           `Balance read failed for ${tokenContractId}: ${"error" in sim ? sim.error : "unknown simulation error"}`,
         );
       }
       const retval = sim.result?.retval;
       if (!retval) {
-        throw new Error(`Balance read for ${tokenContractId} returned no result`);
+        throw new RpcRequestError(`Balance read for ${tokenContractId} returned no result`);
       }
       return scValToBigInt(retval);
     },

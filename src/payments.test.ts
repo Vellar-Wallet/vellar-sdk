@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { InvalidAmountError, parseTokenAmount } from "./payments";
 import {
-  createPaymentClient,
+  buildPaymentUri,
+  InvalidAmountError,
+  InvalidAssetError,
   InvalidRecipientError,
-  type PaymentClientOptions,
-  type SacClientLike,
-} from "./payments-client";
+  parseTokenAmount,
+} from "./payments";
+import { createPaymentClient, type PaymentClientOptions, type SacClientLike } from "./payments-client";
 
 describe("parseTokenAmount", () => {
   it.each([
@@ -37,6 +38,57 @@ describe("parseTokenAmount", () => {
 
   it("rejects invalid decimals config", () => {
     expect(() => parseTokenAmount("1", -1)).toThrow(RangeError);
+  });
+});
+
+describe("buildPaymentUri", () => {
+  const dest = "CRECIPIENTWALLET";
+
+  it("builds a bare destination URI with no amount/asset", () => {
+    expect(buildPaymentUri(dest)).toBe(`web+stellar:pay?destination=${dest}`);
+  });
+
+  it("includes the amount when given", () => {
+    const uri = buildPaymentUri(dest, { amount: "12.5" });
+    expect(new URL(uri.replace("web+stellar:", "https://x/")).searchParams.get("amount")).toBe(
+      "12.5",
+    );
+  });
+
+  it("includes asset_code + asset_issuer together", () => {
+    const uri = buildPaymentUri(dest, { assetCode: "USDC", assetIssuer: "GISSUER" });
+    const params = new URL(uri.replace("web+stellar:", "https://x/")).searchParams;
+    expect(params.get("asset_code")).toBe("USDC");
+    expect(params.get("asset_issuer")).toBe("GISSUER");
+  });
+
+  it("includes memo + memo_type (defaulting to MEMO_TEXT)", () => {
+    const uri = buildPaymentUri(dest, { memo: "invoice-42" });
+    const params = new URL(uri.replace("web+stellar:", "https://x/")).searchParams;
+    expect(params.get("memo")).toBe("invoice-42");
+    expect(params.get("memo_type")).toBe("MEMO_TEXT");
+  });
+
+  it("rejects an empty destination", () => {
+    expect(() => buildPaymentUri("")).toThrow(InvalidRecipientError);
+  });
+
+  it.each([["abc"], ["-1"], ["0"], ["1.2.3"]])(
+    "rejects a malformed amount %j",
+    (amount) => {
+      expect(() => buildPaymentUri(dest, { amount })).toThrow(InvalidAmountError);
+    },
+  );
+
+  it("rejects assetCode without assetIssuer and vice versa", () => {
+    expect(() => buildPaymentUri(dest, { assetCode: "USDC" })).toThrow(InvalidAssetError);
+    expect(() => buildPaymentUri(dest, { assetIssuer: "GISSUER" })).toThrow(InvalidAssetError);
+  });
+
+  it("rejects a malformed asset code", () => {
+    expect(() =>
+      buildPaymentUri(dest, { assetCode: "way-too-long-code", assetIssuer: "GISSUER" }),
+    ).toThrow(InvalidAssetError);
   });
 });
 

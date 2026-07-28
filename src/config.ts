@@ -4,6 +4,8 @@
 // MUST match the passkey-kit version (see the passkey-kit deployment manifest);
 // re-check it on every passkey-kit upgrade.
 
+import { VellarError } from "./errors";
+
 export interface NetworkConfig {
   network: "testnet" | "mainnet";
   rpcUrl: string;
@@ -65,7 +67,7 @@ export const MAINNET: NetworkConfig = {
   nativeTokenContractId: "CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA",
 };
 
-export class MainnetConfigError extends Error {
+export class MainnetConfigError extends VellarError {
   constructor(message: string) {
     super(message);
     this.name = "MainnetConfigError";

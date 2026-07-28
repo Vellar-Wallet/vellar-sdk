@@ -23,7 +23,14 @@ export const DOC_PAGES: DocPage[] = [
   { slug: "wallet-methods", title: "Wallet Methods", nav: "Wallet methods", section: "Reference" },
   { slug: "policies", title: "Policies", nav: "Policies", section: "Reference" },
   { slug: "x402", title: "x402 Agentic Payments", nav: "x402 Payments", section: "Reference" },
+  { slug: "errors", title: "Errors", nav: "Errors", section: "Reference" },
   { slug: "advanced", title: "Advanced Usage", nav: "Advanced", section: "Reference" },
+  {
+    slug: "api-generated",
+    title: "Generated API Reference",
+    nav: "Generated Reference ↗",
+    section: "Reference",
+  },
 ];
 
 /** Sections in sidebar order, derived from DOC_PAGES. */

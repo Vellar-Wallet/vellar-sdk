@@ -7,6 +7,7 @@
 // (balances-rpc is intentionally NOT re-exported here — import it from
 // "vellar-sdk/rpc" so stellar-sdk stays out of bundles that don't need it)
 export * from "./types";
+export * from "./errors";
 export * from "./client";
 export * from "./config";
 export * from "./http-backend";

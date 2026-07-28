@@ -1,5 +1,6 @@
 import type { Network } from "./types";
 import { defaultSignedToXdr } from "./passkeykit-connector";
+import { VellarError } from "./errors";
 
 // HTTP implementation of the backend the SDK needs — talks to a Vellar-
 // compatible gateway (POST /wallet/create, /wallet/connect, /wallet/submit).
@@ -7,7 +8,7 @@ import { defaultSignedToXdr } from "./passkeykit-connector";
 // this is the client that speaks to it, so nobody has to hand-write the fetch
 // wrapper. Pass the result straight to `createVellarWallet({ backend })`.
 
-export class WalletApiError extends Error {
+export class WalletApiError extends VellarError {
   readonly status: number;
   readonly code: string | undefined;
 
@@ -66,12 +67,19 @@ export function createHttpWalletBackend(
 ): HttpWalletBackend {
   const base = apiUrl.replace(/\/+$/, "");
 
-  const post = (path: string, body: unknown): Promise<Response> =>
-    fetchImpl(`${base}${path}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
+  const post = async (path: string, body: unknown): Promise<Response> => {
+    try {
+      return await fetchImpl(`${base}${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      // A network-level fetch rejection (offline, DNS, CORS) — not an HTTP
+      // status. Wrap it so callers never see a raw fetch/TypeError.
+      throw new WalletApiError(err instanceof Error ? err.message : "network request failed", 0);
+    }
+  };
 
   return {
     async submitWalletCreation({ keyId, contractId, network, signedTx }) {

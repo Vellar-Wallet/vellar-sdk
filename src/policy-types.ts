@@ -1,4 +1,5 @@
 import type { PolicyDefinition } from "./types";
+import { VellarError } from "./errors";
 
 // Policy domain types for the SDK (idea.md §6.2, §11; technical-doc.md §5.4).
 // Mirrors the policy-service API shapes so the wallet-sdk is the single source
@@ -80,7 +81,7 @@ export function stroopsToXlm(stroops: string): string {
 }
 
 /** Error thrown by the policy API client for non-2xx responses. */
-export class PolicyApiError extends Error {
+export class PolicyApiError extends VellarError {
   readonly status: number;
   readonly errors?: string[];
   constructor(message: string, status: number, errors?: string[]) {

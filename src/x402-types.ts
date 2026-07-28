@@ -9,6 +9,7 @@
 // time. See docs/design-x402-sdk-client.md and technical-doc.md §17.
 
 import type { Network } from "./types";
+import { VellarError } from "./errors";
 
 /**
  * Payment requirements for one accepted payment option, as carried in a 402
@@ -133,7 +134,7 @@ export interface X402Client {
 // ── errors ───────────────────────────────────────────────────────────────────
 
 /** `wallet.x402` used without x402 config in `createVellarWallet`. */
-export class X402NotConfiguredError extends Error {
+export class X402NotConfiguredError extends VellarError {
   constructor(message: string) {
     super(message);
     this.name = "X402NotConfiguredError";
@@ -141,7 +142,7 @@ export class X402NotConfiguredError extends Error {
 }
 
 /** The server asked for more than the caller's `maxAmount`. No payment was signed. */
-export class MaxAmountExceededError extends Error {
+export class MaxAmountExceededError extends VellarError {
   constructor(
     readonly required: bigint,
     readonly maxAmount: bigint,
@@ -155,7 +156,7 @@ export class MaxAmountExceededError extends Error {
 }
 
 /** The server asked for an asset not in `allowedAssets`. No payment was signed. */
-export class DisallowedAssetError extends Error {
+export class DisallowedAssetError extends VellarError {
   constructor(
     readonly asset: string,
     readonly allowedAssets: string[],
@@ -166,7 +167,7 @@ export class DisallowedAssetError extends Error {
 }
 
 /** The 402 offered no payment option this client can satisfy (network/scheme/asset). */
-export class NoUsablePaymentOptionError extends Error {
+export class NoUsablePaymentOptionError extends VellarError {
   constructor(message: string) {
     super(message);
     this.name = "NoUsablePaymentOptionError";
@@ -175,7 +176,7 @@ export class NoUsablePaymentOptionError extends Error {
 
 /** The facilitator rejected the payment at verify time (e.g. over-budget → the
  * on-chain policy blocked it). Carries the facilitator's reason. */
-export class PaymentRejectedError extends Error {
+export class PaymentRejectedError extends VellarError {
   constructor(
     message: string,
     readonly reason?: string,
@@ -187,7 +188,7 @@ export class PaymentRejectedError extends Error {
 
 /** A payment requirement from the server was malformed (e.g. a non-integer or
  * negative `amount`). No payment was signed. */
-export class InvalidRequirementsError extends Error {
+export class InvalidRequirementsError extends VellarError {
   constructor(message: string) {
     super(message);
     this.name = "InvalidRequirementsError";

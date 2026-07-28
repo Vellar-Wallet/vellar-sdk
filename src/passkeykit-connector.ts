@@ -1,5 +1,6 @@
 import type { CreateWalletInput, Network, SignTransactionInput, WalletSession } from "./types";
 import type { SignedTransaction, WalletConnector } from "./connector";
+import { SignedTransactionError, VellarError } from "./errors";
 
 // PasskeyKit-backed WalletConnector (docs/decisions.md 2026-07-16, option 1A).
 // Structural subset of passkey-kit v0.13 so this package stays free of the
@@ -73,10 +74,10 @@ export function defaultSignedToXdr(signed: unknown): string {
   ) {
     return (signed as { toXDR: () => string }).toXDR();
   }
-  throw new TypeError("Cannot convert signed transaction to XDR");
+  throw new SignedTransactionError("Cannot convert signed transaction to XDR");
 }
 
-export class WalletNetworkMismatchError extends Error {
+export class WalletNetworkMismatchError extends VellarError {
   constructor(expected: Network, actual: Network) {
     super(`Connector is configured for ${expected} but was asked to operate on ${actual}`);
     this.name = "WalletNetworkMismatchError";

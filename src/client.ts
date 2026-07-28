@@ -7,11 +7,13 @@ import {
   type WalletBackend,
 } from "./passkeykit-connector";
 import { createPaymentClient, type PaymentClient, type SacClientLike } from "./payments-client";
+import { buildPaymentUri, type PaymentUriOptions } from "./payments";
 import type { WalletConnector } from "./connector";
 import { createPolicyFacade, type PolicyAttachRuntime, type PolicyFacade } from "./policy-facade";
 import { createX402Facade } from "./x402-facade";
 import type { FetchLike } from "./x402-client";
 import { X402NotConfiguredError, type SmartAccountX402Signer, type X402Client } from "./x402-types";
+import { VellarError } from "./errors";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Vellar Wallet SDK — public client facade.
@@ -136,6 +138,18 @@ export interface VellarWallet {
   readonly connector: WalletConnector;
   /** Lower-level: the composed payment client. */
   readonly payments: PaymentClient;
+  /**
+   * The current account's receive address — ready to display, copy, or embed
+   * in a payment URI. Throws `WalletNotReadyError` before create()/connect().
+   */
+  receiveAddress(): string;
+  /**
+   * A standard Stellar payment request URI (`web+stellar:pay?...`) prefilling
+   * this account as the recipient. Throws `WalletNotReadyError` before
+   * create()/connect(), or `InvalidAmountError`/`InvalidAssetError` for a
+   * malformed `amount`/`assetCode`/`assetIssuer`.
+   */
+  paymentUri(options?: PaymentUriOptions): string;
 }
 
 /**
@@ -251,10 +265,20 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
       });
       return prepared.confirm();
     },
+
+    receiveAddress() {
+      if (!session) throw new WalletNotReadyError("Call create() or connect() before receiveAddress()");
+      return session.accountId;
+    },
+
+    paymentUri(options) {
+      if (!session) throw new WalletNotReadyError("Call create() or connect() before paymentUri()");
+      return buildPaymentUri(session.accountId, options);
+    },
   };
 }
 
-export class WalletNotReadyError extends Error {
+export class WalletNotReadyError extends VellarError {
   constructor(message: string) {
     super(message);
     this.name = "WalletNotReadyError";

@@ -87,6 +87,13 @@ const { hash } = await vellar.pay({
 `pay()` simulates **before** the passkey prompt, so failures (e.g. insufficient
 balance) surface without asking the user to sign.
 
+Receiving is just as direct — share the address, or a payment request URI:
+
+```ts
+const address = vellar.receiveAddress(); // "C..." — display or copy
+const uri = vellar.paymentUri({ amount: "5" }); // "web+stellar:pay?destination=C...&amount=5"
+```
+
 ## Your backend
 
 Submission is fee-sponsored, which requires an OpenZeppelin Relayer API key and
@@ -117,6 +124,8 @@ Returns a `VellarWallet`:
 | `create({ username? })`      | Register a passkey and create the smart account              |
 | `connect()`                  | Reconnect with an existing passkey                           |
 | `pay({ to, amount, token })` | Build → simulate → sign → submit; returns `{ hash }`         |
+| `receiveAddress()`           | The account's receive address — see [Errors](#errors) below for the getting-started guard |
+| `paymentUri(options?)`       | A `web+stellar:pay` payment request URI addressed to this account |
 | `policies`                   | Programmable account policies — see [Policies](#policies)   |
 | `x402`                       | Agentic payments — pay HTTP-402 resources — see [x402](#x402) |
 | `connector` / `payments`     | Lower-level building blocks for custom flows                 |
@@ -128,7 +137,7 @@ Returns a `VellarWallet`:
 | `createHttpWalletBackend(url)` | An HTTP `backend` client for your gateway — pass straight to the config                  |
 | `TESTNET`                      | Testnet config: `rpcUrl`, `networkPassphrase`, `walletWasmHash`, `nativeTokenContractId` |
 | `MAINNET` / `mainnetConfig()`  | Mainnet config — see [Mainnet](#mainnet) (two values you must supply)                    |
-| `WalletApiError`               | Thrown by the HTTP backend on non-2xx responses (has `status`, `code`)                   |
+| `VellarError` and subclasses   | Every error the SDK throws — see [Errors](#errors)                                       |
 
 ### Mainnet
 
@@ -253,6 +262,52 @@ signers (`createSessionKeySigner`, `createPasskeyX402Signer`), the
 `WalletConnector` interface, balances helpers (`vellar-sdk/balances`), and
 RPC-backed readers (`vellar-sdk/rpc`, imported separately so
 `@stellar/stellar-sdk` stays out of bundles that don't read balances).
+
+### Errors
+
+Every error the SDK throws extends `VellarError`, so you can catch broadly or
+narrow to a specific class — never string-match `error.message`:
+
+```ts
+import { VellarError, WalletNotReadyError, WalletApiError } from "vellar-sdk";
+
+try {
+  await vellar.pay({ to, amount, token });
+} catch (err) {
+  if (err instanceof WalletNotReadyError) {
+    // call create() or connect() first
+  } else if (err instanceof WalletApiError) {
+    // err.status, err.code — your backend rejected the request
+  } else if (err instanceof VellarError) {
+    // any other typed SDK failure
+  } else {
+    throw err; // not ours
+  }
+}
+```
+
+| Class | Thrown when | Extra properties |
+| --- | --- | --- |
+| `WalletNotReadyError` | A method needs a session but `create()`/`connect()` hasn't run yet | — |
+| `InvalidRecipientError` | A payment or payment-URI destination is malformed | — |
+| `InvalidAmountError` | An amount is malformed, zero, negative, or over-precise | — |
+| `InvalidAssetError` | A payment URI's `assetCode`/`assetIssuer` is malformed or incomplete | — |
+| `WalletApiError` | Your wallet backend (`/wallet/*`) returned a non-2xx response, or the request itself failed (network down: `status` is `0`) | `status`, `code` |
+| `WalletNetworkMismatchError` | The connector is configured for one network but asked to operate on another | — |
+| `SignedTransactionError` | The SDK couldn't convert a signed transaction to XDR | — |
+| `MainnetConfigError` | `mainnetConfig()` is missing/malformed `rpcUrl` or `walletWasmHash` | — |
+| `RpcRequestError` | A direct Soroban RPC call failed (`vellar-sdk/rpc` balance/tx-status readers) | — |
+| `TransactionTimeoutError` | `waitForTransaction()` timed out before a final status | — |
+| `PolicyApiError` | Your policy backend (`/policies/*`) returned a non-2xx response, or the request itself failed | `status`, `errors` |
+| `PolicyNotDeployableError` | `policies.deploy()` was called without a `policyAttach` runtime configured | — |
+| `X402NotConfiguredError` | `wallet.x402` was used without `x402` config | — |
+| `X402PaymentError` | An x402 payment couldn't be built or sent (simulation, expired auth entry, non-replayable body) | — |
+| `X402SigningError` (extends `X402PaymentError`) | An x402 signer was misconfigured, or asked to sign an entry it can't | — |
+| `MaxAmountExceededError` | The x402 server asked for more than `maxAmount` | `required`, `maxAmount`, `asset` |
+| `DisallowedAssetError` | The x402 server asked for an asset not in `allowedAssets` | `asset`, `allowedAssets` |
+| `NoUsablePaymentOptionError` | The 402 offered no payment option this client can satisfy | — |
+| `InvalidRequirementsError` | An x402 payment requirement from the server was malformed | — |
+| `PaymentRejectedError` | The x402 facilitator rejected the payment at verify time | `reason` |
 
 ## License
 

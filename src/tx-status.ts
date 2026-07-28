@@ -2,13 +2,15 @@
 // "status is tracked until final result"). Pure polling logic; the RPC-backed
 // reader lives under the /rpc subpath.
 
+import { VellarError } from "./errors";
+
 export type TxStatus = "pending" | "success" | "failed";
 
 export interface TxStatusReader {
   getStatus(hash: string): Promise<TxStatus>;
 }
 
-export class TransactionTimeoutError extends Error {
+export class TransactionTimeoutError extends VellarError {
   constructor(hash: string, timeoutMs: number) {
     super(`Transaction ${hash} was still pending after ${timeoutMs}ms`);
     this.name = "TransactionTimeoutError";

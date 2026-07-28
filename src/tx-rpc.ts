@@ -1,5 +1,6 @@
 import { rpc, StrKey } from "@stellar/stellar-sdk";
 import type { TxStatus, TxStatusReader } from "./tx-status";
+import { RpcRequestError } from "./errors";
 
 // RPC-backed pieces of the payment flow (subpath export — see rpc.ts).
 
@@ -12,7 +13,14 @@ export function createRpcTxStatusReader(options: { rpcUrl: string }): TxStatusRe
   const server = new rpc.Server(options.rpcUrl);
   return {
     async getStatus(hash): Promise<TxStatus> {
-      const res = await server.getTransaction(hash);
+      let res: Awaited<ReturnType<typeof server.getTransaction>>;
+      try {
+        res = await server.getTransaction(hash);
+      } catch (err) {
+        throw new RpcRequestError(
+          `Transaction status read failed for ${hash}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
       switch (res.status) {
         case rpc.Api.GetTransactionStatus.SUCCESS:
           return "success";

@@ -13,6 +13,7 @@ import {
   createPasskeyX402Signer,
   type WebAuthnAssertion,
 } from "./x402-signer";
+import { X402SigningError } from "./errors";
 
 const PASSPHRASE = "Test SDF Network ; September 2015";
 const C_ADDRESS = "CC5ZSTLTYKPNIFDSJ4233RVZPALGHHDBRTXGIN6Z3AJCWU57VR5ITXXR";
@@ -50,9 +51,12 @@ function makeV1AuthEntry(contractAddress: string): xdr.SorobanAuthorizationEntry
 describe("createSessionKeySigner", () => {
   it("rejects a non-contract (G-address) as the payer address", () => {
     const kp = Keypair.random();
-    expect(() => createSessionKeySigner({ address: kp.publicKey(), secretKey: kp.secret() })).toThrow(
-      /must be a contract/,
-    );
+    expect(() =>
+      createSessionKeySigner({ address: kp.publicKey(), secretKey: kp.secret() }),
+    ).toThrow(X402SigningError);
+    expect(() =>
+      createSessionKeySigner({ address: kp.publicKey(), secretKey: kp.secret() }),
+    ).toThrow(/must be a contract/);
   });
 
   it("signs a V1 entry producing an ed25519 smart-wallet signature map, keeping V1 creds", async () => {
@@ -96,6 +100,12 @@ describe("createSessionKeySigner", () => {
         networkPassphrase: PASSPHRASE,
         expirationLedger: 1000,
       }),
+    ).rejects.toBeInstanceOf(X402SigningError);
+    await expect(
+      signer.signAuthEntry(entry.toXDR("base64"), {
+        networkPassphrase: PASSPHRASE,
+        expirationLedger: 1000,
+      }),
     ).rejects.toThrow(/does not match signer address/);
   });
 
@@ -108,6 +118,12 @@ describe("createSessionKeySigner", () => {
       credentials: xdr.SorobanCredentials.sorobanCredentialsAddressV2(v1.credentials().address()),
       rootInvocation: v1.rootInvocation(),
     });
+    await expect(
+      signer.signAuthEntry(v2.toXDR("base64"), {
+        networkPassphrase: PASSPHRASE,
+        expirationLedger: 1000,
+      }),
+    ).rejects.toBeInstanceOf(X402SigningError);
     await expect(
       signer.signAuthEntry(v2.toXDR("base64"), {
         networkPassphrase: PASSPHRASE,

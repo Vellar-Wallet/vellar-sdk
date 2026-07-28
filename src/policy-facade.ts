@@ -1,5 +1,6 @@
 import type { Network, PolicyDefinition } from "./types";
 import { createPolicyClient, type PolicyClient } from "./policy-client";
+import { VellarError } from "./errors";
 import type {
   DeployPolicyResult,
   GeneratedPolicy,
@@ -50,7 +51,7 @@ export interface PolicyFacadeDeps {
   fetch?: typeof fetch;
 }
 
-export class PolicyNotDeployableError extends Error {
+export class PolicyNotDeployableError extends VellarError {
   constructor(message: string) {
     super(message);
     this.name = "PolicyNotDeployableError";

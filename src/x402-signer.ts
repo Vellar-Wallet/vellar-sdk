@@ -25,6 +25,7 @@ import {
   xdr,
 } from "@stellar/stellar-sdk";
 import type { SmartAccountX402Signer } from "./x402-types";
+import { X402SigningError } from "./errors";
 
 // ── raw ScVal builders (byte-identical to the wallet contract spec; verified) ──
 //
@@ -75,7 +76,7 @@ function payloadHashForEntry(
 ) {
   const creds = entry.credentials();
   if (creds.switch().name !== "sorobanCredentialsAddress") {
-    throw new Error(
+    throw new X402SigningError(
       `x402 signer expects V1 sorobanCredentialsAddress, got ${creds.switch().name}`,
     );
   }
@@ -114,7 +115,9 @@ export function createSessionKeySigner(config: SessionKeySignerConfig): SmartAcc
   const keypair = Keypair.fromSecret(config.secretKey);
   const rawPk = keypair.rawPublicKey();
   if (!isContractAddress(config.address)) {
-    throw new Error(`session-key signer address must be a contract (C…): got ${config.address}`);
+    throw new X402SigningError(
+      `session-key signer address must be a contract (C…): got ${config.address}`,
+    );
   }
 
   return {
@@ -166,7 +169,9 @@ export interface PasskeyX402SignerConfig {
  */
 export function createPasskeyX402Signer(config: PasskeyX402SignerConfig): SmartAccountX402Signer {
   if (!isContractAddress(config.address)) {
-    throw new Error(`passkey signer address must be a contract (C…): got ${config.address}`);
+    throw new X402SigningError(
+      `passkey signer address must be a contract (C…): got ${config.address}`,
+    );
   }
   return {
     address: config.address,
@@ -200,13 +205,13 @@ function isContractAddress(address: string): boolean {
 function assertEntryAddress(entry: xdr.SorobanAuthorizationEntry, expected: string): void {
   const creds = entry.credentials();
   if (creds.switch().name !== "sorobanCredentialsAddress") {
-    throw new Error(
+    throw new X402SigningError(
       `x402 signer expects V1 sorobanCredentialsAddress, got ${creds.switch().name}`,
     );
   }
   const entryAddr = Address.fromScAddress(creds.address().address()).toString();
   if (entryAddr !== expected) {
-    throw new Error(
+    throw new X402SigningError(
       `auth entry credential address ${entryAddr} does not match signer address ${expected}`,
     );
   }

@@ -9,6 +9,8 @@ interface VellarWallet {
   create(input?: { username?: string }): Promise<WalletSession>;
   connect(): Promise<WalletSession>;
   pay(input: PayInput): Promise<{ hash: string }>;
+  receiveAddress(): string;
+  paymentUri(options?: PaymentUriOptions): string;
   readonly policies: PolicyFacade;     // see Policies
   readonly connector: WalletConnector; // advanced
   readonly payments: PaymentClient;    // advanced
@@ -81,6 +83,44 @@ interface PayInput {
 
 Throws `WalletNotReadyError` if called before `create()` / `connect()`, and
 throws (before any signing) if `to` fails `isValidAddress`.
+
+## `receiveAddress()`
+
+Returns the connected account's address — ready to display, copy, or embed in
+a QR code. Throws `WalletNotReadyError` before `create()` / `connect()`.
+
+```ts
+const address = vellar.receiveAddress(); // "C..."
+```
+
+## `paymentUri(options?)`
+
+Builds a `web+stellar:pay` payment request URI addressed to the connected
+account, so a payer's wallet can prefill the recipient and optionally the
+amount/asset. Throws `WalletNotReadyError` before `create()` / `connect()`,
+and `InvalidAmountError` / `InvalidAssetError` for a malformed `amount` /
+`assetCode` / `assetIssuer` — never a broken URI.
+
+```ts
+const uri = vellar.paymentUri({ amount: "5", assetCode: "USDC", assetIssuer: "G..." });
+// "web+stellar:pay?destination=C...&amount=5&asset_code=USDC&asset_issuer=G..."
+```
+
+```ts
+interface PaymentUriOptions {
+  amount?: string;       // decimal, e.g. "5" — not base units
+  assetCode?: string;    // requires assetIssuer (omit both for native XLM)
+  assetIssuer?: string;
+  memo?: string;
+  memoType?: "MEMO_TEXT" | "MEMO_ID" | "MEMO_HASH" | "MEMO_RETURN";
+}
+```
+
+> Vellar accounts are Soroban smart-wallet addresses (`C...`). SEP-0007's `pay`
+> operation was written for classic (`G...`) destinations, so this URI is
+> SEP-7-*shaped* but not a strict SEP-7 conformance claim — it's meant for
+> Vellar-aware payers or QR display, the same way `vellar.pay()` itself sends
+> via a SAC `transfer`, not a classic Payment operation.
 
 ## `policies`
 

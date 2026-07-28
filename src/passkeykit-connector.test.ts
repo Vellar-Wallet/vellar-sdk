@@ -7,6 +7,7 @@ import {
   type PasskeyKitLike,
   type WalletBackend,
 } from "./passkeykit-connector";
+import { SignedTransactionError } from "./errors";
 
 const FIXED_NOW = new Date("2026-07-16T15:00:00.000Z");
 
@@ -210,9 +211,9 @@ describe("defaultSignedToXdr", () => {
     expect(defaultSignedToXdr({ toXDR: () => "xdr" })).toBe("xdr");
   });
 
-  it("throws a TypeError on anything else", () => {
-    expect(() => defaultSignedToXdr(42)).toThrow(TypeError);
-    expect(() => defaultSignedToXdr(null)).toThrow(TypeError);
-    expect(() => defaultSignedToXdr({})).toThrow(TypeError);
+  it("throws a typed SignedTransactionError on anything else", () => {
+    expect(() => defaultSignedToXdr(42)).toThrow(SignedTransactionError);
+    expect(() => defaultSignedToXdr(null)).toThrow(SignedTransactionError);
+    expect(() => defaultSignedToXdr({})).toThrow(SignedTransactionError);
   });
 });

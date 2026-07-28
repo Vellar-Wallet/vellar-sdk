@@ -115,4 +115,26 @@ describe("createVellarWallet", () => {
     expect(typeof wallet.connector.signTransaction).toBe("function");
     expect(typeof wallet.payments.preparePayment).toBe("function");
   });
+
+  it("receiveAddress() before connect throws WalletNotReadyError", () => {
+    const { wallet } = build();
+    expect(() => wallet.receiveAddress()).toThrow(WalletNotReadyError);
+  });
+
+  it("receiveAddress() returns the connected session's account id", async () => {
+    const { wallet } = build();
+    await wallet.connect();
+    expect(wallet.receiveAddress()).toBe("CWALLET");
+  });
+
+  it("paymentUri() before connect throws WalletNotReadyError", () => {
+    const { wallet } = build();
+    expect(() => wallet.paymentUri()).toThrow(WalletNotReadyError);
+  });
+
+  it("paymentUri() builds a URI addressed to the connected session", async () => {
+    const { wallet } = build();
+    await wallet.connect();
+    expect(wallet.paymentUri({ amount: "5" })).toBe("web+stellar:pay?destination=CWALLET&amount=5");
+  });
 });

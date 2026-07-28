@@ -1,6 +1,6 @@
 import type { Network } from "./types";
 import type { TokenInfo } from "./balances";
-import { InvalidAmountError, type PaymentReview } from "./payments";
+import { InvalidAmountError, InvalidRecipientError, type PaymentReview } from "./payments";
 import { defaultSignedToXdr, type PasskeyKitLike } from "./passkeykit-connector";
 
 // Payment flow against a passkey smart wallet: build the SAC transfer
@@ -28,13 +28,6 @@ export interface SacClientLike {
 export interface PaymentSubmitBackend {
   /** POST /wallet/submit (idea.md §11) — resolves with the network tx hash. */
   submitTransaction(input: { signedXdr: string; network: Network }): Promise<{ hash: string }>;
-}
-
-export class InvalidRecipientError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "InvalidRecipientError";
-  }
 }
 
 export interface PreparedPayment {

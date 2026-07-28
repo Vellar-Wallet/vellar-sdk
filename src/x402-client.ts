@@ -31,6 +31,7 @@ import {
   type X402PayOptions,
   type X402Response,
 } from "./x402-types";
+import { X402PaymentError } from "./errors";
 
 /** Parse a requirement's `amount` (decimal string, base units) as a non-negative
  * i128. Throws a typed error rather than letting `BigInt(...)` throw a raw
@@ -212,7 +213,9 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
       latest.sequence + expirationOffsetFor(requirements.maxTimeoutSeconds, expirationCeiling);
 
     if (!tx.built) {
-      throw new Error("x402: failed to build the transfer transaction (simulation returned nothing).");
+      throw new X402PaymentError(
+        "x402: failed to build the transfer transaction (simulation returned nothing).",
+      );
     }
     const built = tx.built;
 
@@ -233,7 +236,7 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
       signed++;
     }
     if (signed === 0) {
-      throw new Error("No wallet auth entry found to sign for the payer address.");
+      throw new X402PaymentError("No wallet auth entry found to sign for the payer address.");
     }
     op.auth = auth;
 
@@ -271,7 +274,7 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
     // empty body. Reject it with a clear error; callers should pass a
     // replayable body (string, Uint8Array, Blob, FormData, URLSearchParams).
     if (init.body instanceof ReadableStream) {
-      throw new Error(
+      throw new X402PaymentError(
         "x402: a ReadableStream body cannot be replayed on the payment retry. " +
           "Pass a buffered body (string, Uint8Array, Blob, FormData) instead.",
       );
