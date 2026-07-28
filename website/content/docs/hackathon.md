@@ -14,13 +14,15 @@ Following [**@vellar_sdk on X**](https://x.com/vellar_sdk?s=11) is **mandatory**
 to participate. This is checked at registration — if you haven't followed, your
 registration will not be approved.
 
-**Want to boost your visibility (and help us out)?** Repost the hackathon
-banner from our X page with a caption like *"I'm building at the Vellar ×
-Stellar Hackathon"* and tag [@vellar_sdk](https://x.com/vellar_sdk?s=11). It's
-not required for eligibility, but it's the easiest way to get your project in
-front of the Vellar community before you've even submitted — and a few of the
-most creative build-in-public threads may get shared back on our page during
-the weekend.
+**Want better odds?** Repost the hackathon banner from our X page with a
+caption like *"I'm building at the Vellar × Stellar Hackathon"* and tag
+[@vellar_sdk](https://x.com/vellar_sdk?s=11). It's optional — it does **not**
+change your score on the judging rubric — but it's the single easiest way to
+get your project in front of the Vellar community before you've even
+submitted. Judges and mentors follow the tag, standout build-in-public threads
+get reshared on our page during the weekend, and in the event of a close tie
+between two similarly-scored projects, visible momentum and community buzz can
+be the deciding factor. Free exposure, zero downside.
 
 ---
 
