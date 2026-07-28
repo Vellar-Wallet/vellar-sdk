@@ -11,14 +11,14 @@ you start.
 ## Before You Do Anything Else
 
 Following [**@vellar_sdk on X**](https://x.com/vellar_sdk?s=11) is **mandatory**
-to participate. This is checked at registration — if you haven't followed, your
-registration will not be approved.
+to participate. This is checked at registration, and if you haven't followed,
+your registration will not be approved.
 
 **Want better odds?** Repost the hackathon banner from our X page with a
 caption like *"I'm building at the Vellar × Stellar Hackathon"* and tag
-[@vellar_sdk](https://x.com/vellar_sdk?s=11). It's optional — it does **not**
-change your score on the judging rubric — but it's the single easiest way to
-get your project in front of the Vellar community before you've even
+[@vellar_sdk](https://x.com/vellar_sdk?s=11). It's optional, and it does
+**not** change your score on the judging rubric, but it's the single easiest
+way to get your project in front of the Vellar community before you've even
 submitted. Judges and mentors follow the tag, standout build-in-public threads
 get reshared on our page during the weekend, and in the event of a close tie
 between two similarly-scored projects, visible momentum and community buzz can
@@ -28,8 +28,8 @@ be the deciding factor. Free exposure, zero downside.
 
 ## TL;DR
 
-1. Follow [**@vellar_sdk**](https://x.com/vellar_sdk?s=11) on X — mandatory, checked at registration.
-2. Build something real using [`vellar-sdk`](https://www.npmjs.com/package/vellar-sdk) — passkey wallets, on-chain policies, or x402 agent payments.
+1. Follow [**@vellar_sdk**](https://x.com/vellar_sdk?s=11) on X, mandatory, checked at registration.
+2. Build something real using [`vellar-sdk`](https://www.npmjs.com/package/vellar-sdk): passkey wallets, on-chain policies, or x402 agent payments.
 3. Put all your code in a **public GitHub repo** with a complete README.
 4. Open a **GitHub Issue** on the submission repo using the template below.
 5. Submit before the deadline. Late submissions are not judged.
@@ -39,23 +39,23 @@ be the deciding factor. Free exposure, zero downside.
 ## What to Build
 
 Anything using `vellar-sdk`. We want the boldest, most creative ideas for the
-Stellar ecosystem — not a clone of an existing product with Vellar bolted on.
+Stellar ecosystem, not a clone of an existing product with Vellar bolted on.
 Pick **one** track at submission; your project is judged only in that track.
 
-### Track 1 — Wallet SDK
+### Track 1, Wallet SDK
 
 Passkey onboarding, payments, or any app built on top of a Vellar smart
-account. This is the open lane — the strongest, most original product wins,
+account. This is the open lane, the strongest, most original product wins,
 regardless of which SDK surface it leans on hardest.
 
 **Build things like:** a consumer payments app, a merchant checkout flow, a
-savings/goals product, a tipping or micropayments tool — anything where
+savings/goals product, a tipping or micropayments tool, anything where
 "create a wallet with a fingerprint, not a seed phrase" is the unlock.
 
 **Key SDK surface:** `createVellarWallet`, `.create()`, `.connect()`, `.pay()`.
 See [Quickstart](./quickstart.md).
 
-### Track 2 — Policy Builder
+### Track 2, Policy Builder
 
 Programmable on-chain spending controls, built on `wallet.policies`. Vellar
 smart accounts are Soroban contracts, so policies are enforced **on-chain**,
@@ -68,10 +68,10 @@ approval, a budgeting app that makes the on-chain cap visible and trustworthy.
 **Key SDK surface:** `wallet.policies` (templates, generate, simulate, deploy).
 See [Policies](./policies.md).
 
-### Track 3 — x402 Agent Payments
+### Track 3, x402 Agent Payments
 
 **"Give your agent a budget, not your keys."** An autonomous agent holds a
-scoped session key and pays for HTTP-402 resources on its own — capped
+scoped session key and pays for HTTP-402 resources on its own, capped
 on-chain by a spending-limit policy. The agent never holds your passkey and
 cannot spend past its cap.
 
@@ -83,20 +83,20 @@ multi-agent system where each agent has its own bounded wallet.
 [x402 Agentic Payments](./x402.md).
 
 > **Scope note:** this track is specifically about **agent (session-key)
-> payments** — the proven, working path. Human passkey-signed x402 payments
+> payments**, the proven, working path. Human passkey-signed x402 payments
 > are not yet supported by any deployed facilitator; don't build around that
 > path, it will not settle.
 
 ### Can't decide?
 
 ```
-Is the core flow "onboard/pay with a passkey"?        → Track 1
-Is the core flow "enforce a spending rule on-chain"?   → Track 2
-Is the core flow "an agent pays for something itself"? → Track 3
+Is the core flow "onboard/pay with a passkey"?        > Track 1
+Is the core flow "enforce a spending rule on-chain"?   > Track 2
+Is the core flow "an agent pays for something itself"? > Track 3
 ```
 
 If your idea genuinely spans two tracks, submit to the one where your core
-flow lives — not a secondary feature.
+flow lives, not a secondary feature.
 
 ---
 
@@ -104,7 +104,7 @@ flow lives — not a secondary feature.
 
 ### Philosophy
 
-We reward **real, working products that use Vellar meaningfully** — not the
+We reward **real, working products that use Vellar meaningfully**, not the
 most lines of code, and not the most ambitious pitch deck. A rough but working
 demo beats a polished idea with nothing to show.
 
@@ -114,7 +114,7 @@ Every project is scored on 6 criteria, 100 points total.
 
 | # | Criterion | Weight | What judges ask |
 |---|---|---|---|
-| 1 | **Meaningful use of vellar-sdk** | 25 | Is `vellar-sdk` core to the product — passkeys, policies, or x402 — or just a login screen bolted onto something unrelated? |
+| 1 | **Meaningful use of vellar-sdk** | 25 | Is `vellar-sdk` core to the product, passkeys, policies, or x402, or just a login screen bolted onto something unrelated? |
 | 2 | **Problem & real-world relevance** | 20 | Does this solve a real problem for a real user? Is there genuine demand? |
 | 3 | **Functionality & completeness** | 20 | Does the core flow actually work end to end on testnet? Can a judge use it? |
 | 4 | **Technical execution & code quality** | 15 | Is the code well-structured and documented? Is signing/submission handled correctly (simulate before sign, no silent signing, poll for finality)? |
@@ -123,12 +123,12 @@ Every project is scored on 6 criteria, 100 points total.
 
 ### Bonus points (up to +10)
 
-- **+4 — Genuine innovation.** The idea is not an obvious/expected use of the
+- **+4, Genuine innovation.** The idea is not an obvious/expected use of the
   SDK. Tell judges what makes it different in your submission.
-- **+3 — Multi-surface use.** Combines more than one SDK surface meaningfully
+- **+3, Multi-surface use.** Combines more than one SDK surface meaningfully
   (e.g. a policy-governed wallet that also does agent payments), not just
   imported side by side.
-- **+3 — Testnet-to-mainnet readiness.** A clear, credible path to production
+- **+3, Testnet-to-mainnet readiness.** A clear, credible path to production
   beyond "swap the network config."
 
 ### Scoring bands
@@ -151,7 +151,7 @@ $500 total, awarded to the top 3 overall projects across all tracks:
 
 ### Process
 
-Fully async — there is no live/table judging.
+Fully async, there is no live/table judging.
 
 1. Judges review each submission's repo, README, and demo video.
 2. Each judge scores independently on the rubric above; scores are averaged.
@@ -166,7 +166,7 @@ Fully async — there is no live/table judging.
 |---|---|
 | **Team size** | 1–4 builders. Solo is welcome. |
 | **SDK** | Must use `vellar-sdk`. It must be core to the product, not cosmetic. |
-| **Network** | Stellar testnet is required and sufficient. Mainnet is optional (`vellar-sdk` mainnet use is pending a security review — do not deploy real funds). |
+| **Network** | Stellar testnet is required and sufficient. Mainnet is optional (`vellar-sdk` mainnet use is pending a security review, do not deploy real funds). |
 | **Build window** | Must be built during the hackathon period (Aug 29–31, 2026). Starting from a stock scaffold (Next.js/Vite starter, the SDK's own quickstart snippet) is fine; submitting pre-existing personal or third-party projects is not. |
 | **Originality** | Original work only. No re-use of pre-existing projects, no plagiarism. |
 | **License** | Code must be published under a permissive open-source license (MIT, Apache-2.0, or similar). |
@@ -181,7 +181,7 @@ example repo presented as your project.
 A project **will be disqualified** if it doesn't actually use `vellar-sdk` in
 any meaningful way, can't be run or demonstrated by judges, or is found to be
 plagiarized or pre-existing work. If you're unsure whether something counts,
-disclose it in your README — honesty is rewarded, hidden re-use is not.
+disclose it in your README, honesty is rewarded, hidden re-use is not.
 
 ---
 
@@ -193,7 +193,7 @@ Your submission has **three parts**. All three are required.
 
 - Contains all of your project's code, not just a forked template.
 - Includes a permissive open-source `LICENSE` file.
-- Final work is on the `main` branch — that's what gets judged.
+- Final work is on the `main` branch, that's what gets judged.
 
 ### 2. A complete README in that repo
 
@@ -225,22 +225,22 @@ and fill in:
 [2-4 sentences. What real problem does this address? Who is the user?]
 
 ## How It Uses vellar-sdk
-[Which SDK surfaces — create/connect/pay, wallet.policies, wallet.x402 — and
+[Which SDK surfaces, create/connect/pay, wallet.policies, wallet.x402, and
 why. Be specific. This maps to Judging criterion 1.]
 
 ## GitHub Repository
 [Link to your public repo. Final code must be on the `main` branch.]
 
 ## Demo Video
-[Link — 2-4 minutes, shows the core flow working]
+[Link, 2-4 minutes, shows the core flow working]
 
 ## Network & Deployment
 - Network: testnet
-- Live app URL (if any): [link, or "runs locally — see README"]
+- Live app URL (if any): [link, or "runs locally, see README"]
 - Contract IDs (if any): [list, or "N/A"]
 
 ## Team
-- [Full Name] — @[github-username]
+- [Full Name], @[github-username]
 - [up to 4 members]
 
 ## Anything Else
@@ -248,7 +248,7 @@ why. Be specific. This maps to Judging criterion 1.]
 ```
 
 > One Issue per team. If you need to update your submission before the
-> deadline, edit the same Issue — don't open a new one. The Issue's last-edit
+> deadline, edit the same Issue, don't open a new one. The Issue's last-edit
 > timestamp before the deadline is your official submission time.
 
 ### Project README template
@@ -290,7 +290,7 @@ npm run dev
 \`\`\`
 
 ## Team
-- [Name] — @[github-username]
+- [Name], @[github-username]
 
 ## License
 [MIT / Apache-2.0 / ...]
@@ -303,8 +303,8 @@ npm run dev
 - [ ] Repo has a complete **README** following the template above
 - [ ] A judge could **run the project from the README alone**
 - [ ] The project **actually runs** on Stellar testnet
-- [ ] The **core user flow works end to end** — you tested it yourself
-- [ ] `vellar-sdk` is **core** to the product — re-read criterion 1 above
+- [ ] The **core user flow works end to end**, you tested it yourself
+- [ ] `vellar-sdk` is **core** to the product, re-read criterion 1 above
 - [ ] **Track** selected
 - [ ] All **team members** listed with GitHub usernames
 - [ ] **Demo video** recorded (2–4 minutes, shows the core flow)
@@ -316,8 +316,8 @@ npm run dev
 ## Getting Started
 
 1. Read [Introduction](./introduction.md) and [Quickstart](./quickstart.md).
-2. `npm install vellar-sdk @stellar/stellar-sdk` — see [Installation](./installation.md).
-3. Point your backend at the hosted gateway: `VELLAR_API_URL=https://vellar-backend.onrender.com` — see [How It Works](./how-it-works.md) for why a backend is needed.
+2. `npm install vellar-sdk @stellar/stellar-sdk`, see [Installation](./installation.md).
+3. Point your backend at the hosted gateway: `VELLAR_API_URL=https://vellar-backend.onrender.com`, see [How It Works](./how-it-works.md) for why a backend is needed.
 4. Pick a track above and scope the **smallest strong version** of your idea.
 5. Build. Ask questions in [Telegram](https://t.me/+JvRMWLJMWS0xYTBk).
 6. Test your core flow on testnet, end to end, before recording your demo.
@@ -332,10 +332,10 @@ npm run dev
   Judges reward a working demo over a half-built grand vision.
 - **Make the SDK matter.** If your project would work identically without
   `vellar-sdk`, you'll lose 25 points on criterion 1.
-- **Test the golden path on testnet** before recording your demo — judges
+- **Test the golden path on testnet** before recording your demo, judges
   will try to use it.
 - **Handle transactions correctly.** `vellar-sdk`'s `.pay()` and
-  `wallet.policies.deploy()` already simulate before signing — don't bypass
+  `wallet.policies.deploy()` already simulate before signing, don't bypass
   that if you drop to the lower-level building blocks.
 - **Write the README for a stranger.** Judges should be able to run your
   project from the README alone.
@@ -346,7 +346,7 @@ npm run dev
 
 ## Questions
 
-Ask in [Telegram](https://t.me/+JvRMWLJMWS0xYTBk) — that's the live support
+Ask in [Telegram](https://t.me/+JvRMWLJMWS0xYTBk), that's the live support
 channel for the whole weekend. For SDK questions, start with
 [Quickstart](./quickstart.md), [Wallet Methods](./wallet-methods.md), and
 [Security](./security.md).
