@@ -1,4 +1,4 @@
-# Vellar Facilitator
+# x402 Facilitator
 
 Vellar runs a hosted **x402 facilitator for Stellar** with Bazaar discovery:
 
