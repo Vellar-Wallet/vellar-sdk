@@ -23,6 +23,7 @@ export const DOC_PAGES: DocPage[] = [
   { slug: "wallet-methods", title: "Wallet Methods", nav: "Wallet methods", section: "Reference" },
   { slug: "policies", title: "Policies", nav: "Policies", section: "Reference" },
   { slug: "x402", title: "x402 Agentic Payments", nav: "x402 Payments", section: "Reference" },
+  { slug: "facilitator", title: "Vellar Facilitator", nav: "Facilitator", section: "Reference" },
   { slug: "advanced", title: "Advanced Usage", nav: "Advanced", section: "Reference" },
 ];
 
