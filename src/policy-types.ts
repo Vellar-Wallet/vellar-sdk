@@ -13,10 +13,20 @@ export interface SpendingConstructor {
   windowSeconds: number;
 }
 
+/** Constructor args for the verified-recipient policy contract: each instance
+ * binds to the attestation registry it consults inside __check_auth. */
+export interface VerifiedRecipientConstructor {
+  registry: string;
+}
+
 /** How a template is enforced on-chain — honestly labelled so integrators (and
  * their users) know what actually protects the account, not just marketing. */
 export type Enforcement =
-  | { kind: "policy-contract"; wasmHash: string; constructorArgs?: SpendingConstructor }
+  | {
+      kind: "policy-contract";
+      wasmHash: string;
+      constructorArgs?: SpendingConstructor | VerifiedRecipientConstructor;
+    }
   | { kind: "signer-limits" }
   | { kind: "none" }
   | { kind: "custom-contract-pending" };

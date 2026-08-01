@@ -184,6 +184,40 @@ funded by **your** sponsor account, server-side.
 
 → Full guide: [Policies on docs.vellar.xyz](https://docs.vellar.xyz/docs/policies).
 
+### Agent keys
+
+Mint scoped **agent session keys** — *give your agent a budget, not your keys.*
+An agent key is a real on-chain signer restricted to specific tokens, each
+requiring one or more **policy contracts** to co-sign inside the wallet's
+`__check_auth`. Stack a spending-limit policy (how much) with a verified-only
+policy (which contracts) and the chain enforces both — a compromised agent
+holding the key cannot exceed the budget or pay through unverified code.
+
+```ts
+import { Keypair } from "@stellar/stellar-sdk";
+
+const agentKey = Keypair.random(); // YOU hold the secret; the SDK never sees it
+
+const { hash, expiresAt } = await vellar.agents.mint({
+  publicKey: agentKey.publicKey(),
+  grants: [{ token: usdcSac, policies: [spendingLimitId, verifiedOnlyId] }],
+  expiresAt: new Date(Date.now() + 7 * 864e5), // optional on-chain expiry
+});
+
+// hand the agent its secret + the wallet address; it pays via wallet.x402
+// under the on-chain budget — no passkey, no admin keys.
+
+await vellar.agents.revoke(agentKey.publicKey()); // remote kill (passkey-signed)
+```
+
+`mint`/`revoke` are wallet-admin actions, so they need an `agentKeys` runtime
+in the config wired to your kit (`addEd25519`/`remove` → passkey sign →
+submit) — the only WebAuthn prompt. Without it these throw a clear error;
+everything else on the wallet still works. Grants must name at least one
+policy (an unrestricted grant is deliberately not mintable here).
+
+→ Full guide: [Agent keys on docs.vellar.xyz](https://docs.vellar.xyz/docs/agent-keys).
+
 ### x402
 
 Pay [x402](https://x402.org) (HTTP-402) resources from a Vellar smart account —

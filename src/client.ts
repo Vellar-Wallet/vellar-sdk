@@ -9,6 +9,7 @@ import {
 import { createPaymentClient, type PaymentClient, type SacClientLike } from "./payments-client";
 import type { WalletConnector } from "./connector";
 import { createPolicyFacade, type PolicyAttachRuntime, type PolicyFacade } from "./policy-facade";
+import { createAgentsFacade, type AgentKeyRuntime, type AgentsFacade } from "./agents-facade";
 import { createX402Facade } from "./x402-facade";
 import type { FetchLike } from "./x402-client";
 import { X402NotConfiguredError, type SmartAccountX402Signer, type X402Client } from "./x402-types";
@@ -67,6 +68,12 @@ export interface VellarWalletConfig {
    */
   policyAttach?: PolicyAttachRuntime;
   /**
+   * Passkey-signed wallet-admin runtime for `wallet.agents` (mint/revoke scoped
+   * agent session keys). Wire to kit.addEd25519 / kit.remove + kit.sign +
+   * backend submit; without it `wallet.agents` calls throw a clear error.
+   */
+  agentKeys?: AgentKeyRuntime;
+  /**
    * x402 config for `wallet.x402` (agentic payments, technical-doc.md §17).
    * Without it, `wallet.x402` throws a clear error. The `signer` is chosen by the
    * caller: `createSessionKeySigner` (agent/headless ed25519) or
@@ -124,6 +131,9 @@ export interface VellarWallet {
    * `apiUrl`; `deploy` additionally requires `policyAttach`.
    */
   readonly policies: PolicyFacade;
+  /** Agent session keys: mint/revoke policy-limited signers ("give your agent
+   * a budget, not your keys"). Requires `agentKeys` in the config. */
+  readonly agents: AgentsFacade;
   /**
    * x402 agentic payments (technical-doc.md §17): fetch a resource, transparently
    * paying an HTTP-402 challenge from this smart account. The budget is enforced
@@ -190,6 +200,16 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
     },
   });
 
+  const agents = createAgentsFacade({
+    requireSession: () => {
+      if (!session) {
+        throw new WalletNotReadyError("Call create() or connect() before using agents");
+      }
+      return { accountId: session.accountId, keyId: session.keyId };
+    },
+    runtime: config.agentKeys,
+  });
+
   const policies = createPolicyFacade({
     // Policies need a gateway; if apiUrl is omitted every policy call fails
     // loudly with a clear message rather than hitting an empty base URL.
@@ -207,6 +227,9 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
   return {
     get session() {
       return session;
+    },
+    get agents(): AgentsFacade {
+      return agents;
     },
     get policies() {
       if (!config.apiUrl) {
