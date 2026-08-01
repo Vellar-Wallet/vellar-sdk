@@ -22,13 +22,33 @@ await vellar.pay({ to, amount, token });  // simulate → passkey → sponsored 
   server-side.
 - **No key custody, no silent signing** — the SDK never holds secrets and
   never signs without an explicit passkey prompt.
+- **Agentic payments (x402)** — pay HTTP-402 resources from the smart account,
+  and give an AI agent a scoped key that pays on its own within limits the
+  **chain** enforces, not your code. See [x402](./x402.md).
+
+## For the agent economy
+
+Vellar isn't only a human wallet — it's built for autonomous agents that spend
+money. Three surfaces make that safe:
+
+- **[Agent keys](./agent-keys.md)** — mint a scoped session key an agent holds
+  itself. *Give your agent a budget, not your keys.*
+- **[Policies](./policies.md)** — a spending-limit policy caps *how much*; a
+  verified-only policy restricts the agent to contracts with reproducible,
+  verified source (*provenance, not an audit*). Both are enforced on-chain in
+  the wallet's `__check_auth`, so a compromised agent can't exceed them.
+- **[x402 Facilitator](./facilitator.md)** — Vellar runs a hosted x402
+  verify/settle facilitator with Bazaar discovery, so agents can find and pay
+  for services (and it accepts the policy-governed payments other facilitators
+  reject).
 
 ## Who this is for
 
 Developers building on Stellar who want login + a wallet without becoming
-wallet-infrastructure experts — and teams who want programmable, on-chain
-security (spending limits, co-signers) instead of client-side checks that can be
-bypassed.
+wallet-infrastructure experts, teams who want programmable, on-chain security
+(spending limits, co-signers) instead of client-side checks that can be
+bypassed, and anyone building AI agents that need to transact under limits
+they can trust.
 
 ## Status
 
