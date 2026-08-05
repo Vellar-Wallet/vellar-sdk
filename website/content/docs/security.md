@@ -1,5 +1,11 @@
 # Security
 
+This covers the **wallet and SDK** security model. The payment layer adds its
+own on-chain guarantees: spending and verified-only policies enforced inside
+`__check_auth` (see [policies & provenance](./policies.md)), so a compromised
+agent key can't exceed its budget or pay unverified code even if the client is
+fully compromised.
+
 The SDK is designed so the secure default is the *only* path. The guarantees:
 
 ## No private-key custody

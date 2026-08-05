@@ -1,5 +1,10 @@
 # How It Works
 
+This page covers the **passkey smart-wallet** layer — the account model the rest
+of Vellar is built on. For the payment layer that sits on top of it, see [x402
+payments](./x402.md), the [Facilitator & Bazaar](./facilitator.md), and
+[policies & provenance](./policies.md).
+
 Vellar SDK composes several ecosystem primitives behind one clean interface.
 Here's what's happening underneath.
 

@@ -12,19 +12,32 @@ export interface DocPage {
 }
 
 // Ordered table of contents — drives the sidebar and next/prev.
+// Grouped by domain so the docs read as an x402 payment platform, not a
+// passkey-wallet SDK: Getting Started → x402 Payments (the core) →
+// Agents & Provenance → Wallet & Passkeys → Reference.
 export const DOC_PAGES: DocPage[] = [
   { slug: "hackathon", title: "Vellar × Stellar Hackathon", nav: "Hackathon", section: "Hackathon" },
+
+  // Getting Started
   { slug: "introduction", title: "Introduction", nav: "Introduction", section: "Getting Started" },
   { slug: "installation", title: "Installation", nav: "Installation", section: "Getting Started" },
   { slug: "quickstart", title: "Quickstart", nav: "Quickstart", section: "Getting Started" },
-  { slug: "how-it-works", title: "How It Works", nav: "How It Works", section: "Concepts" },
-  { slug: "security", title: "Security", nav: "Security", section: "Concepts" },
+
+  // x402 Payments — the core of the platform
+  { slug: "x402", title: "x402 Agentic Payments", nav: "x402 Payments", section: "x402 Payments" },
+  { slug: "facilitator", title: "x402 Facilitator & Bazaar", nav: "Facilitator & Bazaar", section: "x402 Payments" },
+
+  // Agents & Provenance
+  { slug: "agent-keys", title: "Agent Keys", nav: "Agent keys", section: "Agents & Provenance" },
+  { slug: "policies", title: "Policies & Provenance", nav: "Policies & provenance", section: "Agents & Provenance" },
+
+  // Wallet & Passkeys — one pillar, not the whole story
+  { slug: "how-it-works", title: "How It Works", nav: "How it works", section: "Wallet & Passkeys" },
+  { slug: "wallet-methods", title: "Wallet Methods", nav: "Wallet methods", section: "Wallet & Passkeys" },
+  { slug: "security", title: "Security", nav: "Security", section: "Wallet & Passkeys" },
+
+  // Reference
   { slug: "api-reference", title: "API Reference", nav: "createVellarWallet", section: "Reference" },
-  { slug: "wallet-methods", title: "Wallet Methods", nav: "Wallet methods", section: "Reference" },
-  { slug: "policies", title: "Policies", nav: "Policies", section: "Reference" },
-  { slug: "agent-keys", title: "Agent Keys", nav: "Agent keys", section: "Reference" },
-  { slug: "x402", title: "x402 Agentic Payments", nav: "x402 Payments", section: "Reference" },
-  { slug: "facilitator", title: "x402 Facilitator", nav: "x402 Facilitator", section: "Reference" },
   { slug: "advanced", title: "Advanced Usage", nav: "Advanced", section: "Reference" },
 ];
 

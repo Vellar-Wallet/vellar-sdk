@@ -1,9 +1,22 @@
-# Policies
+# Policies & Provenance
 
 Vellar smart accounts are Soroban contracts, so they can carry **programmable
-on-chain policies** — spending limits, multisig, allowlists — enforced by the
-account itself, not by your UI. The SDK exposes the full flow on the wallet
-handle as `wallet.policies`.
+on-chain policies** — spending limits, multisig, allowlists, and **provenance**
+— enforced by the account itself, not by your UI. The SDK exposes the full flow
+on the wallet handle as `wallet.policies`.
+
+Two policies matter most for agent payments, and they stack:
+
+- **Spending-limit** — a cumulative rolling-window cap on *how much* an agent can
+  move. Even a fully compromised key can't exceed it.
+- **Verified-only (provenance)** — restricts an agent to paying *only* contracts
+  whose source has been reproducibly verified against the deployed wasm. An
+  unverified recipient is rejected on-chain.
+
+Both are checked inside the wallet's `__check_auth` during authorization, so
+they're enforced by **Stellar consensus**, not by your code — see [x402
+payments](./x402.md) and [agent keys](./agent-keys.md) for how an agent pays
+under them.
 
 ## Enabling policies
 
@@ -66,6 +79,26 @@ const { contractId, attachTxHash } = await vellar.policies.deploy(policy.id);
 2. **Attach** — the user passkey-signs `addPolicy` to attach the instance. This
    is the **only** WebAuthn prompt — no silent signing.
 3. **Record** — the completed attach is recorded via your gateway.
+
+## Provenance (verified-only)
+
+The verified-only policy is the **provenance layer**. Instead of capping an
+amount, it reads an on-chain **attestation registry** inside `__check_auth` and
+rejects any payment whose recipient contract isn't attested as verified.
+
+- The **AttestationRegistry** (a Soroban contract, live on testnet) is the
+  on-chain source of truth for which contracts have reproducibly-verified
+  source. An attestor mirrors verification outcomes into it, with ledger-based
+  expiry so it fails closed.
+- The **verified-only policy** reads that registry during authorization. Attest
+  a contract → an agent's payment to it settles. Revoke the attestation → the
+  identical payment is rejected on-chain and no funds move. Nothing changes but
+  the verification status.
+
+Attach it exactly like a spending limit (through `wallet.policies`), and stack
+both so an agent key can pay *up to a budget* and *only through verified code*.
+This is `verified ≠ audited` — it proves *provenance* (reproducible, attributable
+source), not safety. See [agent keys](./agent-keys.md) for the full mint flow.
 
 ## API
 

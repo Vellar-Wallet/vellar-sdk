@@ -1,7 +1,9 @@
 # Quickstart
 
 Get a working passkey wallet — create, reconnect, and send a payment — in a few
-minutes.
+minutes. Once you have a wallet, add [x402 payments](./x402.md) to pay for
+HTTP-402 resources, and [agent keys](./agent-keys.md) to let an agent pay on its
+own under on-chain limits.
 
 ## 1. Create the client
 
