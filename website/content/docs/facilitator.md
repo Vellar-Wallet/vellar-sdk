@@ -13,20 +13,24 @@ verify it, submits it on-chain, and sponsors the network fee.
 
 > **Status: testnet, pre-production.** Open for anyone to build against. It
 > runs on a free tier for now, so the first request after idle can take up to
-> a minute (cold start). Mainnet is gated on a security review. Source:
+> a minute (cold start) — and the catalog does not survive that sleep (see
+> [Limits](#limits-and-operational-caveats)). The pre-mainnet security review
+> is complete; mainnet is now gated on a persistent-disk deployment and a
+> funded pubnet sponsor account. Source:
 > [Vellar-Wallet/vellar-facilitator](https://github.com/Vellar-Wallet/vellar-facilitator).
 
 ## Why it exists
 
 Policy-governed smart-account payments (the [x402 agent flow](./x402.md))
 run the spending-policy contract inside `__check_auth`, which raises the
-simulation-derived fee to roughly 140,000 stroops. Hosted facilitators
-default to a 50,000-stroop sponsorship ceiling and reject those payments
-with `fee_exceeds_maximum`, even though the payment is valid and
-policy-approved. The Vellar facilitator ships with a 2,000,000-stroop
-ceiling, so **agent payments bounded by an on-chain budget settle instead of
-being refused**. Both classic keypairs and Soroban smart accounts are
-supported.
+simulation-derived fee to roughly 130,000 stroops (worst settlement measured
+on testnet: 127,808). Hosted facilitators default to a 50,000-stroop
+sponsorship ceiling and reject those payments with `fee_exceeds_maximum`,
+even though the payment is valid and policy-approved. The Vellar facilitator
+ships with a 500,000-stroop ceiling — ~3.9× the worst real settlement,
+raisable via `MAX_TX_FEE_STROOPS` — so **agent payments bounded by an
+on-chain budget settle instead of being refused**. Both classic keypairs and
+Soroban smart accounts are supported.
 
 ## Endpoints
 
@@ -35,9 +39,9 @@ supported.
 | `POST /verify` | Verify a payment by re-simulation (runs the payer's `__check_auth`, including any policy) |
 | `POST /settle` | Submit on-chain, fee-sponsored |
 | `GET /supported` | Advertised scheme, network, extensions, signer addresses |
-| `GET /discovery/resources` | List cataloged x402 resources — filters: `type`, `payTo`, `scheme`, `network`, `extensions`; `limit`/`offset` pagination |
-| `GET /discovery/search` | Natural-language search over the catalog — `query`, cursor pagination |
-| `GET /health` | Liveness |
+| `GET /discovery/resources` | List cataloged x402 resources — filters: `type`, `payTo`, `scheme`, `network`, `extensions`, `verified_only`; `limit`/`offset` pagination |
+| `GET /discovery/search` | Keyword search over the catalog — token-scored relevance ranking (not semantic); `query` plus the same filters as list, cursor pagination |
+| `GET /health` | Liveness; also reports `catalogFrozen` if the catalog has stopped accepting writes |
 
 Wire-compatible with the canonical x402 clients — `HTTPFacilitatorClient`
 and the `withBazaar` extension work unmodified.
@@ -73,6 +77,12 @@ server.registerExtension(bazaarResourceServerExtension);
 //   })
 ```
 
+Listing metadata is sanitized at ingest (matching the upstream
+`@x402/extensions` rules): `serviceName` must be printable ASCII, max 64
+chars — a non-ASCII name (non-Latin characters, emoji) is **silently
+dropped**, not transliterated — descriptions are clamped to 256 chars, and
+tags follow the same ASCII rule.
+
 ## For buyers and agents
 
 `vellar-sdk`'s [`wallet.x402.fetch()`](./x402.md) works against any compliant
@@ -103,6 +113,46 @@ For AI agents there is also an **MCP discovery server** exposing
 `x402_list_resources` and `x402_search_resources` as tools — see the
 [repo README](https://github.com/Vellar-Wallet/vellar-facilitator#mcp-discovery-server-for-ai-agents)
 for the client config.
+
+## Trust signals
+
+Each catalog entry's payment options carry a trust block so agents can weigh
+a resource before paying:
+
+- `settlements` — count of observed on-chain settlements for this resource.
+- `uniquePayers` — how many distinct accounts have paid it.
+- `verification` — reads `"verified"` only when the resource's URL ownership
+  has been actively verified (`ownerVerified`): the facilitator fetches the
+  URL and checks that its 402 challenge advertises the same `payTo` that
+  settled.
+- `observedSettlements` / `statsSource` — provenance: whether the stats were
+  observed live by this process or restored from persistence.
+
+> **Don't build UI on trust badges yet.** On the hosted free-tier instance,
+> ownership verification does not survive restarts, so badges currently read
+> unverified and `verified_only=true` can return an empty list.
+
+## Limits and operational caveats
+
+Things a developer building against the hosted instance should know up front:
+
+- **The catalog is ephemeral.** The free tier has no persistent disk, so
+  catalog entries and URL ownership bindings vanish on every restart or idle
+  sleep — cold start doesn't just mean latency, it means data loss. A
+  resource is re-cataloged after its next settled payment.
+- **URL ownership is trust-on-first-use.** The first settled payment binds a
+  resource URL to its `payTo` (then verified against the URL's own 402
+  challenge). A different `payTo` settling the same URL is refused from the
+  catalog — and on the hosted instance that first-settler race reopens after
+  each restart.
+- **Rate and size limits.** 60 requests/min per IP; `/verify` and `/settle`
+  bodies are capped at 32 KiB.
+- **Settlement can be refused.** `/settle` returns
+  `503 { error: "settlement_refused", reason }`. `sponsor_balance_low`
+  (sponsor under its hard balance floor) refuses on every network. Four
+  spend-policy reasons — `rate_limited_payto`, `rate_limited_url`,
+  `spend_ceiling`, `unbound_pool_exhausted` — refuse on pubnet; on testnet
+  they are logged as would-reject and the settlement proceeds.
 
 ## Proven end to end
 
