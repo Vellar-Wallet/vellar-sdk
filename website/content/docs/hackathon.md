@@ -74,7 +74,7 @@ See [Policies](./policies.md).
 **"Give your agent a budget, not your keys."** An autonomous agent holds a
 scoped session key and pays for HTTP-402 resources on its own, capped
 on-chain by a spending-limit policy. The agent never holds your passkey and
-cannot spend past its cap.
+cannot spend past its per-window cap.
 
 **Build things like:** an agent that shops for API access on a budget, a
 bot that pays-per-call for data/compute and stops when it hits its cap, a

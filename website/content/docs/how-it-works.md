@@ -56,10 +56,10 @@ passkey's credential id (`keyId`). Persisting the `keyId` lets a returning user
 reconnect without the WebAuthn discovery ceremony — the passkey prompt then only
 appears at signing time.
 
-## Programmable policies (roadmap)
+## Programmable policies
 
 Because accounts are smart contracts, Vellar wallets can carry on-chain policies
-— e.g. a **cumulative rolling-window spending limit** that bounds how much can
-move per period, enforced by the network rather than by client-side checks. A
-dedicated policy SDK for authoring and deploying these is on the roadmap; the
-underlying contract already exists.
+— e.g. a **cumulative fixed-window spending limit** that bounds how much can
+move per window, enforced by the network rather than by client-side checks. The
+SDK exposes the full authoring and deploy flow as
+[`wallet.policies`](./policies.md).

@@ -7,8 +7,10 @@ on the wallet handle as `wallet.policies`.
 
 Two policies matter most for agent payments, and they stack:
 
-- **Spending-limit** — a cumulative rolling-window cap on *how much* an agent can
-  move. Even a fully compromised key can't exceed it.
+- **Spending-limit** — a cumulative cap on *how much* an agent can move per
+  fixed window. Even a fully compromised key stays inside its bound — at most
+  the cap per window, and never more than 2× the cap in a short span around a
+  window reset (see [Honesty](#honesty)).
 - **Verified-only (provenance)** — restricts an agent to paying *only* contracts
   whose source has been reproducibly verified against the deployed wasm. An
   unverified recipient is rejected on-chain.
@@ -62,7 +64,7 @@ const policy = await vellar.policies.generate({
   version: "1",
   type: "spending_limit",
   owners: [vellar.session!.accountId],
-  spendingLimits: { dailyXlm: "100" }, // 100 XLM per rolling window
+  spendingLimits: { dailyXlm: "100" }, // 100 XLM per 24h fixed window
 });
 
 // 3. (optional) dry-run the on-chain deploy — surfaces cost/errors, no submit
@@ -127,9 +129,14 @@ POST /policies/deploy
 
 Each template declares how it is **actually** enforced on-chain (`enforcementLabel`)
 — e.g. a spending limit is a dedicated policy contract enforcing a cumulative
-rolling-window allowance; multisig/allowlists use the smart wallet's native
-signer limits. The SDK never claims enforcement a template doesn't provide, and
-a policy is inert until the passkey-signed attach lands.
+allowance over a **fixed (tumbling) window**: spent resets to zero when the
+window elapses; it does not slide continuously. Spending timed around a window
+boundary can therefore move up to **2× the cap** in a short span — treat the
+limit as an on-chain spending guardrail, not a to-the-stroop hard cap. (For a
+hard guarantee, the contract itself recommends pairing it with a cryptographic
+co-signer.) Multisig/allowlists use the smart wallet's native signer limits.
+The SDK never claims enforcement a template doesn't provide, and a policy is
+inert until the passkey-signed attach lands.
 
 ## Next steps
 

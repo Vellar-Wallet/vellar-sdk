@@ -6,8 +6,8 @@ An agent key is a real on-chain signer on the user's smart wallet, restricted
 so it can only move specific tokens, and only when the **policy contracts** you
 attach co-sign inside the wallet's `__check_auth`. The chain enforces the
 result: an autonomous agent holding the key can pay for things on its own, but
-cannot exceed its budget or step outside its policies — even if the key is
-fully compromised.
+cannot spend past its per-window cap or step outside its policies — even if
+the key is fully compromised.
 
 > Requires `vellar-sdk` ≥ 0.5.0. The SDK exposes this as `wallet.agents`.
 
@@ -19,13 +19,15 @@ agent key's limits live in the smart wallet's `__check_auth`, so they are
 checked by **consensus** every time the agent signs. Stack two policies and
 both are enforced on-chain:
 
-- a **spending-limit** policy — *how much* (a cumulative rolling-window cap),
+- a **spending-limit** policy — *how much* (a cumulative fixed-window cap),
 - a **verified-only** policy — *through what* (only contracts whose source is
   attested as verified; see [Policies](./policies.md)).
 
-A key restricted by both can pay for API calls all day, but cannot overspend
-its cap and cannot be tricked into paying through unverified code. Nobody —
-not your server, not the SDK, not a hijacked agent process — can override that.
+A key restricted by both can pay for API calls all day, but cannot spend past
+its per-window cap (at most 2× the cap in a short span around a window reset —
+see [Policies](./policies.md#honesty)) and cannot be tricked into paying
+through unverified code. Nobody — not your server, not the SDK, not a hijacked
+agent process — can override that.
 
 ## The flow
 

@@ -25,9 +25,8 @@ await vellar.pay({ to, amount, token });  // simulate → passkey → sponsored 
   **sponsors the fee**. People and agents pay for HTTP-402 resources; buyers
   hold no XLM.
 - **[Bazaar discovery](./facilitator.md)** — every settled payment auto-catalogs
-  its resource, so an agent can **find** what to pay for by searching in plain
-  language over HTTP or an MCP server. This is the piece a bare facilitator
-  doesn't have.
+  its resource, so an agent can **find** what to pay for by keyword search over
+  HTTP or an MCP server. This is the piece a bare facilitator doesn't have.
 - **[On-chain governance](./policies.md)** — spending-limit and verified-only
   policies co-sign inside the wallet's `__check_auth`, so an over-budget or
   unverified payment is **rejected by consensus** and no funds move. *Provenance
@@ -46,7 +45,7 @@ money. Three surfaces make that safe:
 - **[Policies](./policies.md)** — a spending-limit policy caps *how much*; a
   verified-only policy restricts the agent to contracts with reproducible,
   verified source (*provenance, not an audit*). Both are enforced on-chain in
-  the wallet's `__check_auth`, so a compromised agent can't exceed them.
+  the wallet's `__check_auth`, so they bind even a fully compromised agent.
 - **[x402 Facilitator](./facilitator.md)** — Vellar runs a hosted x402
   verify/settle facilitator with Bazaar discovery, so agents can find and pay
   for services (and it accepts the policy-governed payments other facilitators
@@ -66,7 +65,7 @@ agents, and the services they pay. It's live on Stellar testnet today.
   auth entries, or fee handling.
 - **[Bazaar discovery](./facilitator.md)** — every settled payment auto-catalogs
   its resource, so services show up just by getting paid, with no separate
-  registration. An agent searches the catalog in plain language over HTTP or
+  registration. An agent searches the catalog by keyword over HTTP or
   through an **MCP server**, and each result carries the exact asset, amount, and
   `payTo` it needs to pay. *This is how an agent finds what to pay for in the
   first place.*
@@ -92,8 +91,8 @@ they can trust.
 
 ## Status
 
-Early and evolving. **Testnet-ready**; mainnet use is pending a security review.
-APIs may change before `1.0`.
+Early and evolving. **Testnet-ready**; mainnet is gated on remaining
+security-review and deployment work. APIs may change before `1.0`.
 
 > New here? Go to [Installation](./installation.md), then the
 > [Quickstart](./quickstart.md) to get a working wallet in a few minutes.
