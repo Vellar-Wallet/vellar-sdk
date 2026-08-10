@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DOC_PAGES, getDocMarkdown, getDocPage } from "@/lib/docs";
+import { CopyForAgentButton } from "../copy-button";
 import { Markdown } from "../markdown";
 
 // Statically generate one page per doc in the registry.
@@ -17,7 +18,7 @@ export async function generateMetadata({
   const { slug } = await params;
   const page = getDocPage(slug);
   if (!page) return { title: "Docs — Vellar SDK" };
-  return { title: `${page.title} — Vellar SDK` };
+  return { title: `${page.title} — Vellar SDK`, description: page.description };
 }
 
 export default async function DocPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -32,8 +33,13 @@ export default async function DocPage({ params }: { params: Promise<{ slug: stri
 
   return (
     <article className="docs-article">
-      <p className="docs-eyebrow mono">{page.section}</p>
-      <h1 className="docs-title">{page.title}</h1>
+      <div className="docs-head">
+        <div>
+          <p className="docs-eyebrow mono">{page.section}</p>
+          <h1 className="docs-title">{page.title}</h1>
+        </div>
+        <CopyForAgentButton slug={slug} />
+      </div>
       <div className="docs-prose">
         <Markdown>{markdown}</Markdown>
       </div>
