@@ -72,6 +72,11 @@ unrestricted grant is deliberately *not* mintable through `wallet.agents`
 For a budget in more than one token, attach a separate token-scoped policy per
 token and add a grant for each.
 
+`usdcSac` above is a placeholder — any SEP-41 token's contract id works, and
+there's no faucet for one. See [bringing your own payment
+asset](./facilitator.md#bring-your-own-payment-asset) if you don't have a
+testnet token yet.
+
 `expiresAt` accepts a `Date` or unix **seconds**; an expired key stops signing
 with no `revoke` needed. `mint` returns the transaction hash and, if set, the
 ISO expiry.
@@ -156,5 +161,14 @@ same reason `policyAttach` is wired the host side.
   actions, never unverified code.
 
 Once minted, the agent pays with [x402](./x402.md) using
-`createSessionKeySigner`. Together that is the full loop: *give your agent a
-budget, not your keys.*
+`createSessionKeySigner`. One thing that will bite you right at that step:
+`simulationSourceAccount` must be a **different**, separately funded account
+from the wallet the agent pays out of — never the agent's own smart-account
+address. The facilitator rebuilds the transaction with itself as the source
+before submitting, so yours only ever simulates; simulate from the payer
+itself instead and Soroban authorizes with source-account credentials,
+which the x402 exact scheme rejects outright
+(`invalid_exact_stellar_payload_unsupported_credential_type`). Any funded
+`G...` keypair works — it never signs and is never charged.
+
+Together that is the full loop: *give your agent a budget, not your keys.*

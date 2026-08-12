@@ -69,7 +69,7 @@ const { hash } = await vellar.pay({
   to: "CDEST...",
   amount: 5_0000000n, // 5 XLM, in stroops (bigint)
   token: {
-    contractId: nativeTokenId,
+    contractId: TESTNET.nativeTokenId, // XLM's Stellar Asset Contract — no faucet needed, it's shipped by TESTNET
     symbol: "XLM",
     decimals: 7,
   },
