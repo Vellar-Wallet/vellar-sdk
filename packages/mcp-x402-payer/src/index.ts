@@ -34,4 +34,5 @@ export {
   type X402ResourceInfo,
 } from "./protocol.js";
 export { createMcpServer, startStdio, type ServerDeps } from "./server.js";
-export { createOfficialSigner, type PaymentSigner } from "./signer.js";
+export { createOfficialSigner, createSmartAccountSigner, type PaymentSigner } from "./signer.js";
+export { createSmartAccountScheme, SmartAccountAuthError, type SchemeClientLike } from "./smart-account-scheme.js";

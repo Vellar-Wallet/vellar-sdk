@@ -11,7 +11,7 @@ import { createSpendLedger } from "./ledger.js";
 import { formatError, log, registerSecret } from "./output.js";
 import { createPayer } from "./payer.js";
 import { createMcpServer, startStdio } from "./server.js";
-import { createOfficialSigner } from "./signer.js";
+import { createOfficialSigner, createSmartAccountSigner } from "./signer.js";
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -20,15 +20,21 @@ async function main(): Promise<void> {
   registerSecret(config.secret);
 
   const ledger = createSpendLedger(config.ceilings);
-  // Built once: the keypair is derived a single time, and a malformed secret
-  // fails here rather than at the first payment.
-  const signer = createOfficialSigner(config);
+  // Built once: the key is derived a single time, and a malformed secret fails
+  // here rather than at the first payment. A configured wallet selects the
+  // smart-account path, where the spending limit is enforced on-chain.
+  const smartAccount = config.walletAddress !== undefined;
+  const signer = smartAccount ? createSmartAccountSigner(config) : createOfficialSigner(config);
   const payer = createPayer({ config, ledger, signer });
 
   log("info", "vellar x402 payer ready", {
     network: config.network,
     payer: signer.address,
     assets: config.allowedAssets.length,
+    // Stated at startup because it is the difference between a limit a
+    // compromised agent can escape and one it cannot.
+    spendLimit: smartAccount ? "chain-enforced (smart account policy)" : "process-only (hot wallet)",
+    ...(smartAccount ? { policies: config.policies.length } : {}),
   });
 
   await startStdio(createMcpServer({ payer, config, ledger }));
