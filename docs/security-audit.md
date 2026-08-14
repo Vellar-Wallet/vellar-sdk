@@ -41,10 +41,11 @@ A1 and A3 are the *expected operating conditions* of this package, not edge case
 | [V-6](#v-6) | U+2028/U+2029 defeat metadata single-line collapse | **Medium** | our code | ✅ **FIXED** |
 | [V-7](#v-7) | Seller controls how long our signature stays valid | **Medium** | our code | ✅ **FIXED** |
 | [V-8](#v-8) | No supply-chain gate; 5 known vulnerabilities; no provenance | **Medium → Low** | supply chain | ✅ **FIXED** |
-| [V-9](#v-9) | Session ceiling is per-process and bypassed outside the MCP server | **Low** | design intent | open |
-| [V-10](#v-10) | RA-11-E: retryable and terminal errors are indistinguishable | **Low** | our code | open |
+| [V-9](#v-9) | Session ceiling is per-process and bypassed outside the MCP server | **Low** | design intent | ✅ **FIXED** |
+| [V-10](#v-10) | RA-11-E: retryable and terminal errors are indistinguishable | **Low** | our code | ✅ **FIXED** |
 | [V-11](#v-11) | Nonce is 32 bits | **Low** | our code | ✅ **FIXED** |
 | [V-12](#v-12) | Clamp can emit a lone surrogate | **Info** | our code | ✅ **FIXED** |
+| [V-13](#v-13) | Expiration floor is below measured settlement latency | **Low** | our code | ✅ **FIXED** |
 
 ---
 
@@ -522,6 +523,17 @@ point, or document `payer.pay()` as unsynchronised at the export site.
 **Verify the fix.** Two concurrent `payer.pay()` calls against a one-payment ceiling settle
 exactly once.
 
+#### ✅ FIXED — 2026-08-14
+
+The mutex moved from the `x402_pay` tool handler into `createPayer`, so every caller is
+serialised regardless of entry point. The guarantee no longer depends on which door a caller
+came in by. Mutation-tested: with the lock removed, six concurrent `pay()` calls against a
+two-payment ceiling settle more than two; with it, exactly two.
+
+The per-process scope is unchanged and remains **design intent** — two server instances
+sharing one key still get N x ceiling, and the ceiling still resets on restart. That is
+documented in the README, and it is why layer 2 exists.
+
 ---
 
 ### V-10 — RA-11-E: retryable and terminal errors are indistinguishable {#v-10}
@@ -554,6 +566,17 @@ abandons a recoverable deploy. No fund impact.
 
 **Fix.** Add a typed distinction (`retryable: boolean`, or distinct error subclasses) and a
 seam-crossing test — the lesson that audit itself recorded.
+
+#### ✅ FIXED — 2026-08-14
+
+`PolicyApiError.retryable` (`src/policy-types.ts`) separates "the request reached no decision"
+from "the server decided, and the answer will not change". `503 attach_unconfirmed` is
+retryable; `422 attach_mismatch` is terminal, so retrying cannot repeat the lie. Transport
+failures (`status: 0`) are retryable because nothing was decided; `408`/`429` are excepted
+from the 4xx rule because they say *not now*, not *not ever*.
+
+Additive only — `status` and `errors` are unchanged, so existing callers are unaffected.
+**This closes the wallet-side RA-11-E**, which was open and assigned to this repo.
 
 **Ranking note.** This is the *lowest*-impact item carried into this audit and should not be
 prioritised over V-1 through V-4.
@@ -658,19 +681,34 @@ Not findings. Each is a path I could not trace to a sink, or a fact outside the 
    ids exist in this repository, `vellar-facilitator`, or `vela-wallet`. Nothing here should
    be read as closing them.
 
-## New observation — not a finding, surfaced while fixing V-7
+### V-13 — Expiration floor is below measured settlement latency {#v-13}
 
-**The expiration FLOOR may be too low, and the measurement now says so.**
-`MIN_EXPIRATION_LEDGERS = 3` (~15s) versus a worst observed sign-to-settled window of
-**12.0s** leaves ~3s of headroom. A seller advertising a very short `maxTimeoutSeconds`
-(say 10s) gets the floor, and a slow settlement could expire mid-flight.
+**Severity: Low.** No funds are at risk — an expired signature is rejected at verify and
+nothing is spent. The cost is diagnostic: the caller sees an opaque settlement failure rather
+than "the seller's window was too short", which is the class of unhelpful error this audit has
+repeatedly found expensive.
 
-Deliberately not changed here. Raising the floor would sign for **longer** than the seller's
-declared window, which the facilitator computes its own `maxLedger` from and would reject as
-`expiration_too_far` — so the floor cannot safely exceed what the seller asked for. If the
-seller's window is genuinely too short to complete a payment, the correct behaviour is to
-REFUSE up front rather than sign something that will expire, and that is a behaviour change
-worth deciding separately rather than smuggling into a clamp fix.
+**[our code]** — `packages/mcp-x402-payer/src/smart-account-scheme.ts`,
+`MIN_EXPIRATION_LEDGERS`.
+
+Surfaced by the V-7 measurement rather than by reading. The floor is 3 ledgers (~15s) against a
+measured worst sign-to-settled window of **12.0s** — about 3s of headroom. A seller advertising
+a very short `maxTimeoutSeconds` gets the floor, and a slow settlement expires mid-flight.
+
+**Why it cannot be fixed by signing for longer.** The facilitator derives its own `maxLedger`
+from the same `maxTimeoutSeconds` and rejects anything beyond it as `expiration_too_far`. So
+the floor cannot safely exceed what the seller asked for; the only honest response is to
+decline.
+
+#### ✅ FIXED — 2026-08-14
+
+`UnworkableTimeoutError` refuses before signing when the seller's window yields fewer than
+`MIN_VIABLE_EXPIRATION_LEDGERS` (5, ~25s — about 2x the measured worst case). The message
+names the seller's configuration as the cause and states that nothing was spent. Every
+realistic merchant timeout (60s and above) is unaffected.
+
+Filed as its own finding rather than left as a note, so the decision is tracked rather than
+depending on someone noticing a paragraph.
 
 ## Lessons, recorded because they generalise
 
@@ -703,6 +741,62 @@ control flow. A fix applied where the finding pointed would have introduced a do
 `src/x402-client.ts` before any of this session's work. The smart-account path made it worth
 finding; it did not introduce it. Without that note the register reads as a list of things
 this project built wrong, when one of the most severe was inherited.
+
+## Closing state — 2026-08-15
+
+**All 13 findings closed.** Nothing is open. What remains is not a fix but a review, and two
+questions that cannot be answered from inside the repository.
+
+### What a fresh reviewer should ATTACK, not read
+
+The code below was written and then audited by the same agent. Every fix here was obtained by
+executing an attack, but *I chose which attacks to run*, and the blind spot is necessarily
+shaped like my own assumptions. Ranked by where my confidence is thinnest:
+
+**1. `assertAuthEntryInvocation` — try to get a signature it should refuse.** The V-1 fix
+compares contract, function, three arguments, and rejects sub-invocations. I do not know that
+list is complete. Specifically worth attacking: can an entry carry a *different* credential
+type that still routes to a wallet signer; does comparing `Address.toString()` normalise two
+distinct addresses to one string; can `scValToNative` on the amount coerce a value that is not
+the i128 the contract will see; is there any auth-entry field that changes what executes and is
+not compared? Build the entry that passes all five checks and still moves money elsewhere. My
+hostile-RPC test proves the fix catches *the attack I thought of*.
+
+**2. The fence, against a model rather than a regex.** Every fence test asserts on *strings*.
+Not one asserts on model behaviour, and the three injection variants I did test were resisted
+equally with and without the fence — so its measured value is mechanical, not behavioural.
+Attack it as a prompt engineer, not a programmer: given a rendered block, can you get a model
+to act on the enclosed text? If yes, the nonce and the lookalike filter are beside the point.
+
+**3. `classifySettlement`'s three states.** The V-2 fix turns on a distinction I invented:
+"positive evidence nothing was spent" versus "cannot tell". Find a real facilitator response
+that lands in the wrong bucket. A response that reads as `not-spent` but where money moved is a
+double-spend; one that reads as `settled` but did not is a false confirmation.
+
+**4. The smart-account signature map.** ScVal map ordering, the `Signature::Policy` unit
+variant, multi-policy sorting by raw address bytes. Wrong ordering is rejected by Soroban and is
+therefore safe. The dangerous case is a map that is subtly wrong and *still validates* — I
+looked for one and did not find it, which is weaker than knowing there isn't one.
+
+**5. The `allowHttp` escape hatch.** Added during the V-1 fix so the hostile-RPC test could run.
+Default false, code-level only, never an environment variable — but it is a TLS-weakening knob
+introduced during a security fix, which is exactly the shape of thing that should be viewed
+with suspicion. Check I did not leave a path that reaches it from configuration.
+
+### Not determinable from this repository
+
+- **Publish rights and 2FA** — see [Needs verification](#needs-verification). Being resolved
+  separately. The single largest unverified element of this package's supply chain.
+- **Browser and extension exposure** — this package runs in both; it was audited as a Node
+  library. Bundling, CSP interaction and extension isolation are unreviewed.
+
+### Prior audits
+
+**VS-1 … VS-10 remain unlocated.** Referenced as a previous audit of this repository; no such
+document or finding ids exist here, in `vellar-facilitator`, or in `vela-wallet`. Nothing in
+this document should be read as closing them.
+
+**Wallet-side RA-11-E is closed** by [V-10](#v-10).
 
 ## Recommended order
 

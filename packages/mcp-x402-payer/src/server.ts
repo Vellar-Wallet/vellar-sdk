@@ -16,7 +16,6 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import type { PayerConfig } from "./config.js";
 import type { SpendLedger } from "./ledger.js";
-import { createMutex } from "./ledger.js";
 import {
   divertStdoutToStderr,
   formatError,
@@ -176,11 +175,6 @@ export function createMcpServer(deps: ServerDeps): McpServer {
     },
   );
 
-  // One key, one budget, one payment at a time. Without this, two concurrent
-  // calls could each pass the ceiling check before either recorded a spend and
-  // together exceed it.
-  const exclusive = createMutex();
-
   server.registerTool(
     "x402_quote",
     {
@@ -238,25 +232,27 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       },
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
-    async ({ resource_url, max_amount }) =>
-      exclusive(async () => {
-        try {
-          const result = await deps.payer.pay(resource_url, max_amount);
-          log("info", "payment", {
-            url: resource_url,
-            paid: result.paid,
-            attempts: result.attempts,
-            transaction: result.settlement?.transaction,
-          });
-          return textResult(renderPayment(result));
-        } catch (err) {
-          log("warn", "payment refused or failed", {
-            url: resource_url,
-            error: formatError(err),
-          });
-          return textResult(`Payment did not complete: ${formatError(err)}`, true);
-        }
-      }),
+    // No mutex here: `createPayer` serialises internally, so the guarantee holds
+    // for every caller rather than only the ones arriving through this tool
+    // (security audit V-9).
+    async ({ resource_url, max_amount }) => {
+      try {
+        const result = await deps.payer.pay(resource_url, max_amount);
+        log("info", "payment", {
+          url: resource_url,
+          paid: result.paid,
+          attempts: result.attempts,
+          transaction: result.settlement?.transaction,
+        });
+        return textResult(renderPayment(result));
+      } catch (err) {
+        log("warn", "payment refused or failed", {
+          url: resource_url,
+          error: formatError(err),
+        });
+        return textResult(`Payment did not complete: ${formatError(err)}`, true);
+      }
+    },
   );
 
   server.registerTool(

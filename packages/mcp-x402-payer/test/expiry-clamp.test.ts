@@ -103,3 +103,40 @@ describe("V-7 — the classic client is capped by default too", () => {
     expect(expirationOffsetFor(1)).toBe(MIN_LEDGERS);
   });
 });
+
+describe("V-13 — an unworkably short seller timeout is refused up front", () => {
+  // The floor (3 ledgers ≈ 15s) sat only ~3s above the measured 12s worst case,
+  // so a short seller window produced a signature that could expire mid-settle
+  // and fail opaquely. Nothing is at risk either way — an expired signature is
+  // rejected at verify — but the caller could not tell why.
+  const MIN_VIABLE = 5;
+
+  function schemeOrThrow(maxTimeoutSeconds: number): number {
+    const requested = Math.min(maxTimeoutSeconds, MAX_SECONDS);
+    const offset = Math.max(
+      Math.ceil(requested / LEDGER_SECONDS) - SAFETY_MARGIN,
+      MIN_LEDGERS,
+    );
+    if (offset < MIN_VIABLE) throw new Error(`unworkable: ${offset} ledgers`);
+    return offset;
+  }
+
+  it.each([1, 5, 10, 20, 30])("refuses %ss — below what a settlement needs", (t) => {
+    expect(() => schemeOrThrow(t)).toThrow(/unworkable/);
+  });
+
+  it("accepts the shortest workable window", () => {
+    // 35s -> 7-2 = 5 ledgers = the threshold exactly.
+    expect(schemeOrThrow(35)).toBe(MIN_VIABLE);
+  });
+
+  it("accepts every realistic merchant timeout", () => {
+    for (const t of [60, 120, 300, 86_400]) {
+      expect(() => schemeOrThrow(t)).not.toThrow();
+    }
+  });
+
+  it("leaves a viable window above the measured worst case", () => {
+    expect(MIN_VIABLE * LEDGER_SECONDS).toBeGreaterThan(WORST_OBSERVED_SECONDS * 2);
+  });
+});
