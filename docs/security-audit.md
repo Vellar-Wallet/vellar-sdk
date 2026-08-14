@@ -40,7 +40,7 @@ A1 and A3 are the *expected operating conditions* of this package, not edge case
 | [V-5](#v-5) | Fence lookalike filter is bypassable four ways | **Medium** | our code | ✅ **FIXED** |
 | [V-6](#v-6) | U+2028/U+2029 defeat metadata single-line collapse | **Medium** | our code | ✅ **FIXED** |
 | [V-7](#v-7) | Seller controls how long our signature stays valid | **Medium** | our code | open |
-| [V-8](#v-8) | No supply-chain gate; 5 known vulnerabilities; no provenance | **Medium** | supply chain | open |
+| [V-8](#v-8) | No supply-chain gate; 5 known vulnerabilities; no provenance | **Medium → Low** | supply chain | ✅ **FIXED** |
 | [V-9](#v-9) | Session ceiling is per-process and bypassed outside the MCP server | **Low** | design intent | open |
 | [V-10](#v-10) | RA-11-E: retryable and terminal errors are indistinguishable | **Low** | our code | open |
 | [V-11](#v-11) | Nonce is 32 bits | **Low** | our code | ✅ **FIXED** |
@@ -440,6 +440,35 @@ build and tests; enforce 2FA and a publish allowlist.
 **Verify the fix.** CI fails on an introduced high-severity advisory; a published tarball
 carries a provenance attestation resolving to the tagged commit.
 
+#### ✅ FIXED — 2026-08-14 · severity downgraded Medium → Low on evidence
+
+**The published artifact is bit-for-bit reproducible from source.** Rebuilding `0.5.0` from
+its source commit `52879ef` in a clean worktree (`npm ci && npm run build && npm pack`)
+produced a tarball whose SHA-1 is `03df62c91ad5668442437a5b6bfdb898addcb827` — **identical to
+npm's own recorded `dist.shasum`**, and all 25 files match by SHA-256. So nothing was
+injected at publish time for the version currently in every consumer's browser. That is the
+strongest available answer to "is what's published clean", and it is why this drops to Low:
+the remaining risk is prospective, not historical.
+
+**Vulnerabilities: 5 → 1**, lockfile-only, `package.json` ranges untouched. The survivor is
+`esbuild` (Low, arbitrary file read via its *development server on Windows*) — reachable only
+through `tsup`/`vitest`, so it is a devDependency that never enters the published tarball
+(confirmed: the tarball contains `dist/`, `README.md`, `LICENSE`, `package.json` only).
+Nothing here required a breaking upgrade, so nothing was forced.
+
+**CI gate:** `npm audit --audit-level=high` now blocks in `.github/workflows/ci.yml`.
+Verified not inert — exit 0 at `high`, exit 1 at `low`.
+
+**Provenance:** `.github/workflows/publish.yml` publishes with `--provenance` under
+`id-token: write`, so npm mints a signed attestation binding the tarball to the workflow and
+commit. Consumers can then verify with `npm audit signatures`. Publishing runs only from a
+`v*` tag, only after the same gates that guard a PR, and fails if the tag and
+`package.json` version disagree — otherwise the attestation would point at the wrong commit.
+`prepublishOnly` guards a manual publish with typecheck, tests and build.
+
+**Still open (needs a human):** who holds publish rights and whether 2FA is enforced. Not
+determinable from the repository — see [Needs verification](#needs-verification).
+
 ---
 
 ### V-9 — Session ceiling is per-process and bypassed outside the MCP server {#v-9}
@@ -588,6 +617,38 @@ Not findings. Each is a path I could not trace to a sink, or a fact outside the 
 6. **VS-1 … VS-10** — referenced as a prior audit of this repo. No such document or finding
    ids exist in this repository, `vellar-facilitator`, or `vela-wallet`. Nothing here should
    be read as closing them.
+
+## Lessons, recorded because they generalise
+
+Three of this session's defects were found only by running the real system, and two fixes
+were nearly wrong in instructive ways. These are worth more than the individual findings.
+
+**A test suite proves the code does what it does; only the real binary proves the system
+works.** Three live-run catches:
+
+1. The MCP payer's retry loop was dead code in production — the benign settle failure arrives
+   as HTTP 402, not 2xx, so the classifier never reached the retry path. 405 hermetic tests
+   passed throughout.
+2. CI's build ordering meant `npm test` ran before `dist/` existed. Passed locally against a
+   stale build.
+3. V-4's stdout diversion **silently killed the transport**: `StdioServerTransport` writes
+   through the `process.stdout` object at send time, so diverting it swallowed the JSON-RPC
+   stream. The unit tests passed in *both* the working and the broken state; only running the
+   built server distinguished them. Compounding it, the symptom was first misdiagnosed as the
+   diversion when the actual cause was a stale SDK build — right fix, wrong reasoning,
+   verified as load-bearing only afterwards by reverting it and re-running.
+
+**Trace what a fix touches, not just where the finding points.** V-2's obvious repair —
+validate the transaction hash, treat anything else as unsettled — was **actively worse than
+the bug**. It composed with an existing retry path so that a seller returning a malformed
+hash *for a payment that genuinely settled* would cause a second signature and a second
+payment. The finding was about trusting the seller; the danger was in a different module's
+control flow. A fix applied where the finding pointed would have introduced a double-spend.
+
+**Provenance of a finding matters to how the register reads.** V-1 existed in
+`src/x402-client.ts` before any of this session's work. The smart-account path made it worth
+finding; it did not introduce it. Without that note the register reads as a list of things
+this project built wrong, when one of the most severe was inherited.
 
 ## Recommended order
 
