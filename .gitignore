@@ -3,3 +3,7 @@ dist/
 *.tsbuildinfo
 .DS_Store
 coverage/
+
+# Throwaway diagnostics. A one-off probe committed next to the source reads as
+# product to the next person — name it *-tmp.mjs and it stays local.
+*-tmp.mjs

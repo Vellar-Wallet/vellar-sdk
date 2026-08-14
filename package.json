@@ -25,21 +25,69 @@
   "exports": {
     ".": {
       "source": "./src/index.ts",
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./balances": {
       "source": "./src/balances.ts",
-      "types": "./dist/balances.d.ts",
-      "import": "./dist/balances.js",
-      "require": "./dist/balances.cjs"
+      "import": {
+        "types": "./dist/balances.d.ts",
+        "default": "./dist/balances.js"
+      },
+      "require": {
+        "types": "./dist/balances.d.cts",
+        "default": "./dist/balances.cjs"
+      }
     },
     "./rpc": {
       "source": "./src/rpc.ts",
-      "types": "./dist/rpc.d.ts",
-      "import": "./dist/rpc.js",
-      "require": "./dist/rpc.cjs"
+      "import": {
+        "types": "./dist/rpc.d.ts",
+        "default": "./dist/rpc.js"
+      },
+      "require": {
+        "types": "./dist/rpc.d.cts",
+        "default": "./dist/rpc.cjs"
+      }
+    },
+    "./x402-guards": {
+      "source": "./src/x402-guards.ts",
+      "import": {
+        "types": "./dist/x402-guards.d.ts",
+        "default": "./dist/x402-guards.js"
+      },
+      "require": {
+        "types": "./dist/x402-guards.d.cts",
+        "default": "./dist/x402-guards.cjs"
+      }
+    },
+    "./x402-untrusted": {
+      "source": "./src/x402-untrusted.ts",
+      "import": {
+        "types": "./dist/x402-untrusted.d.ts",
+        "default": "./dist/x402-untrusted.js"
+      },
+      "require": {
+        "types": "./dist/x402-untrusted.d.cts",
+        "default": "./dist/x402-untrusted.cjs"
+      }
+    },
+    "./x402-untrusted-vectors": {
+      "source": "./src/x402-untrusted-vectors.ts",
+      "import": {
+        "types": "./dist/x402-untrusted-vectors.d.ts",
+        "default": "./dist/x402-untrusted-vectors.js"
+      },
+      "require": {
+        "types": "./dist/x402-untrusted-vectors.d.cts",
+        "default": "./dist/x402-untrusted-vectors.cjs"
+      }
     }
   },
   "main": "./dist/index.cjs",
@@ -50,10 +98,14 @@
     "README.md",
     "LICENSE"
   ],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "build": "tsup",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p packages/mcp-x402-payer/tsconfig.json",
+    "test": "vitest run",
+    "test:integration": "npm run test:integration --workspace @vellar/mcp-x402-payer"
   },
   "peerDependencies": {
     "@stellar/stellar-sdk": "^16.0.0"
