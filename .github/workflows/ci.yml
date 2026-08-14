@@ -15,6 +15,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # Security audit V-8. Blocking at `high` matches the sibling repos. Fixes
+      # are lockfile-only by policy: anything needing a `package.json` range
+      # change is reported and decided, not forced through by CI.
+      - run: npm audit --audit-level=high
       - run: npm run typecheck
       - run: npm test
       - run: npm run build

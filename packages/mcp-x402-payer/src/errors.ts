@@ -74,3 +74,37 @@ export class SelectionMismatchError extends Error {
     this.name = "SelectionMismatchError";
   }
 }
+
+/**
+ * The payment MAY have succeeded and we cannot tell.
+ *
+ * Raised when the settlement is unreadable — a malformed transaction hash, or a
+ * 2xx carrying no settle information. Deliberately NOT retried: retrying an
+ * indeterminate settlement risks paying twice, which is worse than the
+ * uncertainty it would resolve.
+ *
+ * The session ledger IS debited in this state. If the payment did settle, a
+ * ledger that ignored it would under-count real spend and allow the ceiling to
+ * be exceeded later; over-counting merely refuses a legitimate payment. Given
+ * layer 1 is a guard against mistakes, it must err toward refusing.
+ */
+export class IndeterminateSettlementError extends Error {
+  constructor(
+    readonly reason: string,
+    readonly asset: string,
+    readonly amount: bigint,
+    readonly rawTransaction?: string,
+  ) {
+    super(
+      `The payment may have completed, but this could not be confirmed: ${reason}. ` +
+        `It was NOT retried, because retrying could pay a second time. ` +
+        `${amount} base units of ${asset} have been counted against this session's ceiling ` +
+        `as a precaution.` +
+        (rawTransaction
+          ? ` The server reported "${rawTransaction}", which is not a valid transaction hash — ` +
+            `check the payer account on-chain before paying again.`
+          : ` Check the payer account on-chain before paying again.`),
+    );
+    this.name = "IndeterminateSettlementError";
+  }
+}

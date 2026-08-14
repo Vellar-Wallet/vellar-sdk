@@ -77,13 +77,33 @@ export function response402(c: X402Challenge = challenge()): Response {
   });
 }
 
+/**
+ * A deterministic, well-formed 64-hex transaction hash derived from a label.
+ * The payer validates the shape (security audit V-2), so fixtures must use
+ * realistic hashes rather than "tx-1".
+ */
+export function txHash(label: string): string {
+  let h = "";
+  for (let i = 0; h.length < 64; i++) {
+    h += [...`${label}#${i}`]
+      .reduce((a, c) => (a * 33 + c.charCodeAt(0)) >>> 0, 5381)
+      .toString(16)
+      .padStart(8, "0");
+  }
+  return h.slice(0, 64);
+}
+
 /** A 200 Response carrying a settlement header (a successful paid retry). */
 export function responsePaid(transaction: string, body = '{"ok":true}'): Response {
   return new Response(body, {
     status: 200,
     headers: {
       "content-type": "application/json",
-      "X-PAYMENT-RESPONSE": b64({ transaction, payer: PAYTO }),
+      "X-PAYMENT-RESPONSE": b64({
+        success: true,
+        transaction: /^[0-9a-f]{64}$/i.test(transaction) ? transaction : txHash(transaction),
+        payer: PAYTO,
+      }),
     },
   });
 }
@@ -96,7 +116,7 @@ export function responseUnsettled(body = '{"ok":true}'): Response {
     status: 200,
     headers: {
       "content-type": "application/json",
-      "X-PAYMENT-RESPONSE": b64({ transaction: "", payer: PAYTO }),
+      "X-PAYMENT-RESPONSE": b64({ success: false, transaction: "", payer: PAYTO }),
     },
   });
 }

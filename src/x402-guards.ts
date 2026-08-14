@@ -237,6 +237,85 @@ export function isRetryableSettleFailure(settle: SettleResult | undefined): bool
   return settle.success === false && !settle.transaction;
 }
 
+/** A Stellar transaction hash: 32 bytes, hex. */
+const TRANSACTION_HASH = /^[0-9a-f]{64}$/i;
+
+/**
+ * What we know about whether money moved.
+ *
+ * The three states are NOT interchangeable, and collapsing the last two is a
+ * money-losing bug (security audit V-2):
+ *
+ *  - `settled`       — a confirmed, well-formed transaction hash.
+ *  - `not-spent`     — POSITIVE evidence nothing reached the chain: the
+ *                      facilitator said `success: false` with an empty
+ *                      transaction, and released its fee reservation. Safe to
+ *                      retry with a freshly signed payload.
+ *  - `indeterminate` — we cannot tell. A malformed hash, or a 2xx carrying no
+ *                      settle information at all. The payment MAY have
+ *                      succeeded.
+ *
+ * `indeterminate` must never be retried. A seller returning a malformed hash for
+ * a payment that genuinely settled would otherwise have us sign and pay a second
+ * time — the buyer pays twice and the seller is paid twice for one purchase.
+ * Retrying is only safe against positive evidence of non-spend, never against
+ * absence of evidence.
+ */
+export type SettlementOutcome =
+  | { kind: "settled"; transaction: string; payer?: string }
+  | { kind: "not-spent"; reason: string }
+  | { kind: "indeterminate"; reason: string; raw?: string };
+
+/**
+ * Classify a paid response. See {@link SettlementOutcome} for why the three
+ * states must stay distinct.
+ */
+export function classifySettlement(res: Response): SettlementOutcome {
+  const settle = decodeSettleResponseHeader(res);
+
+  if (!settle) {
+    return {
+      kind: "indeterminate",
+      reason: "the response carried no settlement information",
+    };
+  }
+
+  if (settle.success === false && !settle.transaction) {
+    return {
+      kind: "not-spent",
+      reason: settle.errorReason ?? "the facilitator reported failure before submission",
+    };
+  }
+
+  const tx = settle.transaction ?? "";
+  if (!TRANSACTION_HASH.test(tx)) {
+    // Not a hash we can verify. It may still name a real settlement, so this is
+    // NOT evidence of non-spend.
+    return {
+      kind: "indeterminate",
+      reason:
+        tx === ""
+          ? "the settlement reported success but carried no transaction hash"
+          : "the settlement carried a malformed transaction hash",
+      ...(tx === "" ? {} : { raw: tx }),
+    };
+  }
+
+  if (settle.success === false) {
+    return {
+      kind: "indeterminate",
+      reason: `the facilitator reported failure after submitting ${tx} — fees were charged`,
+      raw: tx,
+    };
+  }
+
+  return {
+    kind: "settled",
+    transaction: tx,
+    ...(settle.payer !== undefined ? { payer: settle.payer } : {}),
+  };
+}
+
 /**
  * Decode a CONFIRMED settlement, or `undefined` if the payment did not settle.
  *

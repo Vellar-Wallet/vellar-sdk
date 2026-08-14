@@ -36,10 +36,10 @@ describe("fence conformance vectors", () => {
 
       it("opens and closes with the SAME nonce", () => {
         const open = out.match(
-          new RegExp(String.raw`----BEGIN ${FENCE_LABEL} ([0-9a-f]{8})----`),
+          new RegExp(String.raw`----BEGIN ${FENCE_LABEL} ([0-9a-f]{32})----`),
         )?.[1];
         const close = out.match(
-          new RegExp(String.raw`----END ${FENCE_LABEL} ([0-9a-f]{8})----`),
+          new RegExp(String.raw`----END ${FENCE_LABEL} ([0-9a-f]{32})----`),
         )?.[1];
         expect(open).toBeDefined();
         expect(open).toBe(close);
