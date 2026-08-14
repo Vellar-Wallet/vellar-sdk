@@ -33,18 +33,18 @@ A1 and A3 are the *expected operating conditions* of this package, not edge case
 
 | ID | Title | Severity | Class | Status |
 | --- | --- | --- | --- | --- |
-| [V-1](#v-1) | Auth entry's invocation is signed without validation | **Critical** | our code | ✅ **FIXED** `9f1a` |
+| [V-1](#v-1) | Auth entry's invocation is signed without validation | **Critical** | our code | ✅ **FIXED** |
 | [V-2](#v-2) | Settlement is believed on the seller's word alone | **High** | our code | open |
 | [V-3](#v-3) | Seller-controlled text reaches the model outside the fence | **High** | our code | open |
 | [V-4](#v-4) | Dependency writes to stdout, corrupting the MCP transport | **High** | dependency | open |
-| [V-5](#v-5) | Fence lookalike filter is bypassable four ways | **Medium** | our code | open |
-| [V-6](#v-6) | U+2028/U+2029 defeat metadata single-line collapse | **Medium** | our code | open |
+| [V-5](#v-5) | Fence lookalike filter is bypassable four ways | **Medium** | our code | ✅ **FIXED** |
+| [V-6](#v-6) | U+2028/U+2029 defeat metadata single-line collapse | **Medium** | our code | ✅ **FIXED** |
 | [V-7](#v-7) | Seller controls how long our signature stays valid | **Medium** | our code | open |
 | [V-8](#v-8) | No supply-chain gate; 5 known vulnerabilities; no provenance | **Medium** | supply chain | open |
 | [V-9](#v-9) | Session ceiling is per-process and bypassed outside the MCP server | **Low** | design intent | open |
 | [V-10](#v-10) | RA-11-E: retryable and terminal errors are indistinguishable | **Low** | our code | open |
-| [V-11](#v-11) | Nonce is 32 bits | **Low** | our code | open |
-| [V-12](#v-12) | Clamp can emit a lone surrogate | **Info** | our code | open |
+| [V-11](#v-11) | Nonce is 32 bits | **Low** | our code | ✅ **FIXED** |
+| [V-12](#v-12) | Clamp can emit a lone surrogate | **Info** | our code | ✅ **FIXED** |
 
 ---
 
@@ -283,6 +283,14 @@ Unicode dash class (`\p{Pd}`), not a required trailing run.
 **Verify the fix.** Add all four rows above to `FENCE_VECTORS`
 (`src/x402-untrusted-vectors.ts`) and assert none survive.
 
+#### ✅ FIXED — 2026-08-14
+
+`FENCE_LOOKALIKE` now anchors on the **marker phrase** rather than the delimiter shape:
+surrounding punctuation is optional and covers the whole Unicode dash class (`\p{Pd}`), so
+neither the no-trailing-dashes forgery nor any dash variant survives. Added as vectors
+`terminator-without-trailing-dashes` and `unicode-dash-fence`, which the facilitator inherits
+with the module.
+
 ---
 
 ### V-6 — U+2028/U+2029 defeat metadata single-line collapse {#v-6}
@@ -471,6 +479,11 @@ repo, which fixes the value in place.
 **Fix.** Raise to 16 bytes before the facilitator adopts the format. Cheap now, a coordinated
 format change later.
 
+#### ✅ FIXED — 2026-08-14
+
+`NONCE_BYTES = 16` (128 bits). Done in the same pass as V-5/V-6 precisely because the
+facilitator is about to fix this format in place.
+
 ---
 
 ### V-12 — Clamp can emit a lone surrogate {#v-12}
@@ -484,6 +497,8 @@ or a different serialiser may not.
 
 **Fix.** Trim a trailing lone surrogate after slicing, as `truncateUtf8` already does for
 U+FFFD (`packages/mcp-x402-payer/src/output.ts:110`).
+
+#### ✅ FIXED — 2026-08-14 — the clamp drops a trailing high surrogate.
 
 ---
 

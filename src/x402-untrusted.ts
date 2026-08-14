@@ -34,8 +34,16 @@
 /** The label both repos use. Changing it is a breaking format change. */
 export const FENCE_LABEL = "UNTRUSTED RESOURCE DATA";
 
-/** Nonce length in bytes; rendered as 2x hex characters. */
-const NONCE_BYTES = 4;
+/**
+ * Nonce length in bytes; rendered as 2x hex characters.
+ *
+ * 16 bytes (128 bits), raised from 4 in response to security audit V-11. A
+ * seller has no feedback channel with which to confirm a guess, so 32 bits was
+ * not practically exploitable — but this value is about to be fixed in place by
+ * a second repo adopting the format, and widening it afterwards is a
+ * coordinated breaking change rather than a one-line edit.
+ */
+const NONCE_BYTES = 16;
 
 /** Metadata is a label, not a document — one line, and bounded. */
 export const METADATA_MAX_CHARS = 256;
@@ -47,8 +55,14 @@ export const METADATA_MAX_CHARS = 256;
  * convincing FAKE block inside the real one even without closing it.
  */
 const FENCE_LOOKALIKE = new RegExp(
-  String.raw`-{2,}\s*(?:BEGIN|END)\s+UNTRUSTED\s+RESOURCE\s+DATA[^\n]*?-{2,}`,
-  "gi",
+  // Anchor on the MARKER PHRASE, not the delimiter shape. Security audit V-5:
+  // the previous pattern required a trailing run of dashes and matched ASCII
+  // hyphen only, so `----END UNTRUSTED RESOURCE DATA deadbeef` (no trailing
+  // dashes) and any Unicode-dash variant passed through untouched. Both were
+  // confirmed by execution. Leading/trailing punctuation is now optional and
+  // covers the whole Unicode dash class.
+  String.raw`[\p{Pd}=~_*#]*\s*(?:BEGIN|END)\s+UNTRUSTED\s+RESOURCE\s+DATA\b[^\n]*`,
+  "giu",
 );
 
 /**
@@ -60,7 +74,12 @@ const FENCE_LOOKALIKE = new RegExp(
  */
 const CONTROL_AND_FORMAT =
   /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]|\p{Cf}/gu;
-const NEWLINES_AND_TABS = /[\n\r\t]/g;
+// Security audit V-6: U+2028 LINE SEPARATOR and U+2029 PARAGRAPH SEPARATOR are
+// Unicode category Zl/Zp — NOT Cf — so they survived the strip above and defeated
+// the single-line collapse, letting one metadata value forge another field.
+// Confirmed by execution. Every line terminator a renderer or JS engine honours
+// must be here, not just the ASCII ones.
+const NEWLINES_AND_TABS = /[\n\r\t\u000B\u000C\u0085\u2028\u2029]/g;
 
 export const REMOVED_FENCE_MARKER = "[removed fence-like text]";
 
@@ -113,7 +132,10 @@ export function sanitizeUntrusted(text: string, opts: SanitizeOptions = {}): str
   if (opts.singleLine) out = out.replace(NEWLINES_AND_TABS, " ");
   out = out.replace(FENCE_LOOKALIKE, REMOVED_FENCE_MARKER);
   if (opts.maxChars !== undefined && out.length > opts.maxChars) {
-    out = `${out.slice(0, opts.maxChars)}…[clamped]`;
+    // Slicing counts UTF-16 units, so a cut can orphan a high surrogate and emit
+    // malformed text downstream (security audit V-12). Drop it, as truncateUtf8
+    // already does for U+FFFD.
+    out = `${out.slice(0, opts.maxChars).replace(/[\uD800-\uDBFF]$/, "")}…[clamped]`;
   }
   return out;
 }

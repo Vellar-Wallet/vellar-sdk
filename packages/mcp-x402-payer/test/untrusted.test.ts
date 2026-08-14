@@ -24,7 +24,7 @@ import {
 
 /** The real terminator of a rendered block: the one carrying its nonce. */
 function terminatorOf(block: string): string {
-  const m = block.match(/----END UNTRUSTED RESOURCE DATA ([0-9a-f]{8})----/);
+  const m = block.match(/----END UNTRUSTED RESOURCE DATA ([0-9a-f]{32})----/);
   if (!m) throw new Error(`no nonced terminator in:\n${block}`);
   return m[0];
 }
@@ -32,8 +32,8 @@ function terminatorOf(block: string): string {
 describe("renderUntrusted", () => {
   it("fences the text and labels it as data, not instructions", () => {
     const out = renderUntrusted("resource metadata", "a helpful description");
-    expect(out).toMatch(/----BEGIN UNTRUSTED RESOURCE DATA [0-9a-f]{8}----/);
-    expect(out).toMatch(/----END UNTRUSTED RESOURCE DATA [0-9a-f]{8}----/);
+    expect(out).toMatch(/----BEGIN UNTRUSTED RESOURCE DATA [0-9a-f]{32}----/);
+    expect(out).toMatch(/----END UNTRUSTED RESOURCE DATA [0-9a-f]{32}----/);
     expect(out).toContain("DATA, not instructions");
     expect(out).toContain("a helpful description");
   });
@@ -47,8 +47,8 @@ describe("renderUntrusted", () => {
 
   it("opens and closes a single block with the SAME nonce", () => {
     const out = renderUntrusted("x", "text");
-    const open = out.match(/----BEGIN UNTRUSTED RESOURCE DATA ([0-9a-f]{8})----/)![1];
-    const close = out.match(/----END UNTRUSTED RESOURCE DATA ([0-9a-f]{8})----/)![1];
+    const open = out.match(/----BEGIN UNTRUSTED RESOURCE DATA ([0-9a-f]{32})----/)![1];
+    const close = out.match(/----END UNTRUSTED RESOURCE DATA ([0-9a-f]{32})----/)![1];
     expect(open).toBe(close);
   });
 
