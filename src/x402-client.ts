@@ -74,6 +74,13 @@ const EXPIRATION_SAFETY_MARGIN = 2;
 // Never sign an expiration less than this many ledgers out, even for a tiny
 // server timeout — below this the payment can't realistically round-trip.
 const MIN_EXPIRATION_LEDGERS = 3;
+/**
+ * Default ceiling on seller-requested signature lifetime (security audit V-7).
+ * `maxTimeoutSeconds` is attacker-controlled and previously had no upper bound
+ * here unless a caller passed `expirationLedgerOffset`. 300s / 5s = 60 ledgers,
+ * less the safety margin. See the scheme client for the measurement behind 300s.
+ */
+const DEFAULT_MAX_EXPIRATION_LEDGERS = 58;
 
 /**
  * Ledgers-from-now to set as the signature expiration. Derived from the server's
@@ -90,7 +97,9 @@ export function expirationOffsetFor(
 ): number {
   const windowLedgers = Math.ceil((maxTimeoutSeconds ?? 120) / ESTIMATED_LEDGER_SECONDS);
   let offset = windowLedgers - EXPIRATION_SAFETY_MARGIN;
-  if (ceiling !== undefined) offset = Math.min(offset, ceiling);
+  // An explicit ceiling still wins; absent one, fall back to the default bound
+  // rather than honouring whatever the seller asked for.
+  offset = Math.min(offset, ceiling ?? DEFAULT_MAX_EXPIRATION_LEDGERS);
   return Math.max(offset, MIN_EXPIRATION_LEDGERS);
 }
 

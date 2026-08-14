@@ -39,7 +39,7 @@ A1 and A3 are the *expected operating conditions* of this package, not edge case
 | [V-4](#v-4) | Dependency writes to stdout, corrupting the MCP transport | **High** | dependency | ✅ **FIXED** |
 | [V-5](#v-5) | Fence lookalike filter is bypassable four ways | **Medium** | our code | ✅ **FIXED** |
 | [V-6](#v-6) | U+2028/U+2029 defeat metadata single-line collapse | **Medium** | our code | ✅ **FIXED** |
-| [V-7](#v-7) | Seller controls how long our signature stays valid | **Medium** | our code | open |
+| [V-7](#v-7) | Seller controls how long our signature stays valid | **Medium** | our code | ✅ **FIXED** |
 | [V-8](#v-8) | No supply-chain gate; 5 known vulnerabilities; no provenance | **Medium → Low** | supply chain | ✅ **FIXED** |
 | [V-9](#v-9) | Session ceiling is per-process and bypassed outside the MCP server | **Low** | design intent | open |
 | [V-10](#v-10) | RA-11-E: retryable and terminal errors are indistinguishable | **Low** | our code | open |
@@ -403,6 +403,35 @@ reference) and refuse or clamp challenges exceeding it.
 **Verify the fix.** Assert a challenge with `maxTimeoutSeconds: 86400` produces an expiration
 no further out than the configured cap.
 
+#### ✅ FIXED — 2026-08-14
+
+**Cap: 300 seconds (58 ledgers), and the number is measured, not chosen.** A signature must
+survive exactly ONE attempt, because every retry re-signs (`payer.ts` calls `signPayment`
+inside the loop) and there is no backoff. Timed against the live local facilitator over three
+real settlements, the worst sign-to-settled window was **12.0s (~3 ledgers)**, typical 8s.
+300s is ~25x that worst case. A hostile seller's window falls from 24 hours to 5 minutes —
+about 288x less exposure — while no legitimate settlement is touched.
+
+**Clamped, not rejected**, with a warning on stderr. A merchant advertising a generous
+timeout is not attacking anyone, and refusing would break legitimate sellers for no security
+gain: we are never obliged to honour the full window they ask for. Since the clamp neutralises
+the risk by itself, the payment proceeds and the operator is told. The warning is deliberately
+NOT surfaced to the model — the clamp leaves it no decision to make, and adding narration
+would grow the model-facing surface for nothing.
+
+Applied to both paths: `smart-account-scheme.ts` clamps directly, and `expirationOffsetFor`
+in `src/x402-client.ts` now falls back to a default ceiling instead of honouring an unbounded
+seller value when no explicit `expirationLedgerOffset` is configured.
+
+**The retry interaction was checked, because a fix that expires legitimate payments would
+cause the failure it prevents.** Each attempt re-signs, so the chain total is never charged
+against one signature. The tests assert the conservative case anyway — that the window would
+survive the *whole* three-attempt chain at worst-observed latency even if a signature were
+shared — so a future change to the retry logic cannot silently invalidate the clamp.
+Confirmed live: a real payment still settles with the clamp active
+(`5e0393c7f93c7b4f4dda4710c3898ef069af764a5ecd2f218375cece0d1682ce`, Horizon
+`successful: true`), and a seller demanding 86,400s is clamped to 300s and logged.
+
 ---
 
 ### V-8 — No supply-chain gate; 5 known vulnerabilities; no provenance {#v-8}
@@ -608,8 +637,19 @@ Not findings. Each is a path I could not trace to a sink, or a fact outside the 
    V8 stacks do not carry argument values, and I found no error whose *message* embeds the
    secret, but I could not exhaustively enumerate library errors thrown while the secret is in
    scope.
-3. **Publish rights and 2FA** — who can publish `vellar-sdk`, and whether 2FA is enforced.
-   Not determinable from the repository.
+3. **Publish rights and 2FA — UNDETERMINED, assumed neither way.** Who can publish
+   `vellar-sdk`, and whether 2FA is enforced, cannot be established from the repository and
+   has not been established elsewhere. It is recorded as unknown rather than assumed safe or
+   assumed broken.
+
+   **This one matters more here than it would elsewhere.** The sole npm maintainer is an
+   account whose email does not match the repository's git identity. That may be entirely
+   benign — a separate publishing account is normal practice — but it means the reproducibility
+   proof in [V-8](#v-8) covers only what was published, not *who may publish next*. Provenance
+   (added in V-8) narrows the window by binding future tarballs to a workflow and commit, but
+   it does not answer who can trigger that workflow or push a tag. Until the maintainer list
+   and 2FA status are confirmed, treat publish authority as the largest unverified element of
+   this package's supply chain.
 4. **Browser-side exposure** — this package runs in a browser and an extension. I audited it
    as a Node library; I did not review bundling, CSP interaction, or extension isolation.
 5. **`x402-guards` consumers** — the fence is about to be adopted by the facilitator. Whether
@@ -617,6 +657,20 @@ Not findings. Each is a path I could not trace to a sink, or a fact outside the 
 6. **VS-1 … VS-10** — referenced as a prior audit of this repo. No such document or finding
    ids exist in this repository, `vellar-facilitator`, or `vela-wallet`. Nothing here should
    be read as closing them.
+
+## New observation — not a finding, surfaced while fixing V-7
+
+**The expiration FLOOR may be too low, and the measurement now says so.**
+`MIN_EXPIRATION_LEDGERS = 3` (~15s) versus a worst observed sign-to-settled window of
+**12.0s** leaves ~3s of headroom. A seller advertising a very short `maxTimeoutSeconds`
+(say 10s) gets the floor, and a slow settlement could expire mid-flight.
+
+Deliberately not changed here. Raising the floor would sign for **longer** than the seller's
+declared window, which the facilitator computes its own `maxLedger` from and would reject as
+`expiration_too_far` — so the floor cannot safely exceed what the seller asked for. If the
+seller's window is genuinely too short to complete a payment, the correct behaviour is to
+REFUSE up front rather than sign something that will expire, and that is a behaviour change
+worth deciding separately rather than smuggling into a clamp fix.
 
 ## Lessons, recorded because they generalise
 

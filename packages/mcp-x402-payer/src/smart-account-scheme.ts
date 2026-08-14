@@ -24,6 +24,7 @@ import {
   type ExpectedInvocation,
   type SmartAccountX402Signer,
 } from "vellar-sdk";
+import { log } from "./output.js";
 import type { X402Requirement } from "./protocol.js";
 
 /** Ledger close time used to turn the server's timeout into a ledger window. */
@@ -32,6 +33,21 @@ const ESTIMATED_LEDGER_SECONDS = 5;
  * beat after we read ours, so its "current" is ≥ ours. */
 const EXPIRATION_SAFETY_MARGIN = 2;
 const MIN_EXPIRATION_LEDGERS = 3;
+/**
+ * Upper bound on the signature validity a seller can ask for (security audit
+ * V-7). `maxTimeoutSeconds` arrives in the 402 challenge — attacker-controlled —
+ * and previously had a floor but no ceiling, so a seller advertising 86,400
+ * bought a signature valid ~17,000 ledgers. Anyone who then obtained that
+ * payload could choose when it settled.
+ *
+ * 300s is set from measurement, not taste. A signature must survive exactly ONE
+ * attempt, because every retry re-signs (see `payer.ts`) and there is no
+ * backoff. Measured against a live local facilitator, the worst sign-to-settled
+ * window was 12.0s (~3 ledgers), typical 8s. 300s is ~25x that worst case, so no
+ * legitimate settlement is affected, while a hostile seller's window shrinks
+ * from 24 hours to 5 minutes — roughly 288x less exposure.
+ */
+const MAX_EXPIRATION_SECONDS = 300;
 
 const NETWORK_PASSPHRASE: Record<string, string> = {
   "stellar:testnet": "Test SDF Network ; September 2015",
@@ -62,7 +78,21 @@ export interface SchemeClientLike {
 }
 
 function expirationLedgersFor(maxTimeoutSeconds: number): number {
-  const window = Math.ceil(maxTimeoutSeconds / ESTIMATED_LEDGER_SECONDS);
+  // CLAMP, don't reject. A merchant with a generous timeout is not attacking
+  // anyone, and refusing would break legitimate sellers for no security gain —
+  // we are never obliged to honour the full window they ask for. The clamp
+  // neutralises the risk on its own, so the payment proceeds and the operator is
+  // told on stderr rather than the payment failing.
+  const requested = Math.min(maxTimeoutSeconds, MAX_EXPIRATION_SECONDS);
+  if (maxTimeoutSeconds > MAX_EXPIRATION_SECONDS) {
+    log("warn", "clamped the seller's requested signature lifetime", {
+      requestedSeconds: maxTimeoutSeconds,
+      clampedToSeconds: MAX_EXPIRATION_SECONDS,
+      reason:
+        "a signature valid far beyond one settlement attempt can be held and settled later",
+    });
+  }
+  const window = Math.ceil(requested / ESTIMATED_LEDGER_SECONDS);
   return Math.max(window - EXPIRATION_SAFETY_MARGIN, MIN_EXPIRATION_LEDGERS);
 }
 
