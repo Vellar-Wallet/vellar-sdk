@@ -14,6 +14,7 @@
 
 import { Address, nativeToScVal, rpc, xdr } from "@stellar/stellar-sdk";
 import { AssembledTransaction } from "@stellar/stellar-sdk/contract";
+import { assertAuthEntryInvocation, type ExpectedInvocation } from "./x402-auth-entry";
 import type { Network } from "./types";
 import {
   CAIP2_BY_NETWORK,
@@ -132,6 +133,16 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
     }
     const built = tx.built;
 
+    // What we intend to authorise. `built` came back from the RPC's simulation,
+    // so its auth entries are untrusted input until compared against this.
+    const expected: ExpectedInvocation = {
+      contract: requirements.asset,
+      functionName: "transfer",
+      from: deps.signer.address,
+      to: requirements.payTo,
+      amount: parseAmount(requirements.amount),
+    };
+
     // Sign every wallet auth entry (V1) via the injected signer.
     const op = built.operations[0] as { auth?: xdr.SorobanAuthorizationEntry[] };
     const auth = op.auth ?? [];
@@ -141,6 +152,12 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
       if (entry.credentials().switch().name !== "sorobanCredentialsAddress") continue;
       const addr = Address.fromScAddress(entry.credentials().address().address()).toString();
       if (addr !== deps.signer.address) continue;
+
+      // Security audit V-1. The credential address only establishes that the
+      // entry is ours to sign; this establishes WHAT it does. Predates the
+      // smart-account work — the classic path has always had this gap.
+      assertAuthEntryInvocation(entry, expected);
+
       const signedXdr = await deps.signer.signAuthEntry(entry.toXDR("base64"), {
         networkPassphrase: net.passphrase,
         expirationLedger,

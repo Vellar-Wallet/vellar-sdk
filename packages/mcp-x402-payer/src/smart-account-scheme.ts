@@ -19,7 +19,11 @@
 
 import { Address, rpc, nativeToScVal, xdr } from "@stellar/stellar-sdk";
 import { AssembledTransaction } from "@stellar/stellar-sdk/contract";
-import type { SmartAccountX402Signer } from "vellar-sdk";
+import {
+  assertAuthEntryInvocation,
+  type ExpectedInvocation,
+  type SmartAccountX402Signer,
+} from "vellar-sdk";
 import type { X402Requirement } from "./protocol.js";
 
 /** Ledger close time used to turn the server's timeout into a ledger window. */
@@ -38,6 +42,13 @@ export interface SmartAccountSchemeDeps {
   /** Produces V1 auth-entry signatures the wallet's `__check_auth` accepts. */
   signer: SmartAccountX402Signer;
   rpcUrl: string;
+  /**
+   * Permit a plaintext `http://` RPC. Default false, and deliberately NOT
+   * exposed as an environment variable — a plaintext RPC is exactly the
+   * position an attacker needs for V-1, so enabling it must be a code decision,
+   * not a deployment typo. Used by the hostile-RPC test.
+   */
+  allowHttp?: boolean;
 }
 
 /** The subset of `SchemeNetworkClient` @x402/core actually calls on a client. */
@@ -64,7 +75,7 @@ function expirationLedgersFor(maxTimeoutSeconds: number): number {
  * exceed it, and neither can anything that drives this client.
  */
 export function createSmartAccountScheme(deps: SmartAccountSchemeDeps): SchemeClientLike {
-  const server = new rpc.Server(deps.rpcUrl);
+  const server = new rpc.Server(deps.rpcUrl, { allowHttp: deps.allowHttp ?? false });
 
   return {
     scheme: "exact",
@@ -91,6 +102,7 @@ export function createSmartAccountScheme(deps: SmartAccountSchemeDeps): SchemeCl
         ],
         networkPassphrase: passphrase,
         rpcUrl: deps.rpcUrl,
+        allowHttp: deps.allowHttp ?? false,
         parseResultXdr: (r: unknown) => r,
       });
 
@@ -105,6 +117,16 @@ export function createSmartAccountScheme(deps: SmartAccountSchemeDeps): SchemeCl
       // Sign every auth entry belonging to the wallet. Fresh every call —
       // signatures expire in ledgers (~5s each), so a cached payload is a
       // payload that will be rejected.
+      // What we intend to authorise. The entries below arrived from the RPC's
+      // simulation, so they are untrusted input until compared against this.
+      const expected: ExpectedInvocation = {
+        contract: requirements.asset,
+        functionName: "transfer",
+        from: deps.signer.address,
+        to: requirements.payTo,
+        amount: BigInt(requirements.amount),
+      };
+
       const op = tx.built.operations[0] as { auth?: xdr.SorobanAuthorizationEntry[] };
       const auth = op.auth ?? [];
       let signed = 0;
@@ -113,6 +135,14 @@ export function createSmartAccountScheme(deps: SmartAccountSchemeDeps): SchemeCl
         if (entry.credentials().switch().name !== "sorobanCredentialsAddress") continue;
         const addr = Address.fromScAddress(entry.credentials().address().address()).toString();
         if (addr !== deps.signer.address) continue;
+
+        // The credential address only says "this is mine to sign". This says
+        // WHAT it is. Security audit V-1 — the on-chain policy validates token
+        // and amount and has no opinion on the recipient, so a redirected
+        // payment within the cap would satisfy it completely. This is the only
+        // check standing between a hostile RPC and a signature over an
+        // attacker-chosen recipient.
+        assertAuthEntryInvocation(entry, expected);
 
         const signedXdr = await deps.signer.signAuthEntry(entry.toXDR("base64"), {
           networkPassphrase: passphrase,

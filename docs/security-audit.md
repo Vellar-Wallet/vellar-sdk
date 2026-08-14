@@ -31,20 +31,20 @@ A1 and A3 are the *expected operating conditions* of this package, not edge case
 
 ## Findings, ranked by exploitability × impact
 
-| ID | Title | Severity | Class |
-| --- | --- | --- | --- |
-| [V-1](#v-1) | Auth entry's invocation is signed without validation | **Critical** | our code |
-| [V-2](#v-2) | Settlement is believed on the seller's word alone | **High** | our code |
-| [V-3](#v-3) | Seller-controlled text reaches the model outside the fence | **High** | our code |
-| [V-4](#v-4) | Dependency writes to stdout, corrupting the MCP transport | **High** | dependency |
-| [V-5](#v-5) | Fence lookalike filter is bypassable four ways | **Medium** | our code |
-| [V-6](#v-6) | U+2028/U+2029 defeat metadata single-line collapse | **Medium** | our code |
-| [V-7](#v-7) | Seller controls how long our signature stays valid | **Medium** | our code |
-| [V-8](#v-8) | No supply-chain gate; 5 known vulnerabilities; no provenance | **Medium** | supply chain |
-| [V-9](#v-9) | Session ceiling is per-process and bypassed outside the MCP server | **Low** | design intent |
-| [V-10](#v-10) | RA-11-E: retryable and terminal errors are indistinguishable | **Low** | our code |
-| [V-11](#v-11) | Nonce is 32 bits | **Low** | our code |
-| [V-12](#v-12) | Clamp can emit a lone surrogate | **Info** | our code |
+| ID | Title | Severity | Class | Status |
+| --- | --- | --- | --- | --- |
+| [V-1](#v-1) | Auth entry's invocation is signed without validation | **Critical** | our code | ✅ **FIXED** `9f1a` |
+| [V-2](#v-2) | Settlement is believed on the seller's word alone | **High** | our code | open |
+| [V-3](#v-3) | Seller-controlled text reaches the model outside the fence | **High** | our code | open |
+| [V-4](#v-4) | Dependency writes to stdout, corrupting the MCP transport | **High** | dependency | open |
+| [V-5](#v-5) | Fence lookalike filter is bypassable four ways | **Medium** | our code | open |
+| [V-6](#v-6) | U+2028/U+2029 defeat metadata single-line collapse | **Medium** | our code | open |
+| [V-7](#v-7) | Seller controls how long our signature stays valid | **Medium** | our code | open |
+| [V-8](#v-8) | No supply-chain gate; 5 known vulnerabilities; no provenance | **Medium** | supply chain | open |
+| [V-9](#v-9) | Session ceiling is per-process and bypassed outside the MCP server | **Low** | design intent | open |
+| [V-10](#v-10) | RA-11-E: retryable and terminal errors are indistinguishable | **Low** | our code | open |
+| [V-11](#v-11) | Nonce is 32 bits | **Low** | our code | open |
+| [V-12](#v-12) | Clamp can emit a lone surrogate | **Info** | our code | open |
 
 ---
 
@@ -95,6 +95,31 @@ hand at `smart-account-scheme.ts:86-92`.
 **Verify the fix.** Construct an entry whose invocation names a different `to` address, pass
 it through the signer, and assert it throws. A test that only checks the credential address
 will pass without the fix and must not be used as the proof.
+
+#### ✅ FIXED — 2026-08-14
+
+`src/x402-auth-entry.ts` adds `assertAuthEntryInvocation`, called before signing in **both**
+paths: `packages/mcp-x402-payer/src/smart-account-scheme.ts:137` (smart account) and
+`src/x402-client.ts:159` (the **pre-existing** classic path, which had the same gap and
+predates the smart-account work). It compares contract, function name, and every argument —
+`from`, `to`, `amount` — and rejects any entry carrying sub-invocations, since signing the
+root authorises those too.
+
+**Proof (`packages/mcp-x402-payer/test/hostile-rpc.test.ts`).** A stub Soroban RPC replays a
+recording captured from live testnet (`test/fixtures/soroban-rpc-recording.json`), so the
+auth entry is genuinely well-formed and correctly credentialed to the wallet — it passes the
+credential-address check that already existed. Only the recipient inside the invocation is
+changed. The test asserts the payment is refused **and that the signer is never reached**.
+
+Mutation-tested: with `assertAuthEntryInvocation` commented out, the two hostile cases fail
+and the control still passes. The test therefore catches this specific defect rather than
+passing for an unrelated reason.
+
+**What layer 2 does and does not cover** — recorded here because it must survive into
+anything said publicly: the on-chain spending-limit policy validates the **token** and the
+**amount**, and has **no opinion on the recipient**. *"The agent cannot exceed its budget"* is
+true. *"The agent's funds are protected"* is not. Stated in
+`src/x402-auth-entry.ts:16-25` and in the payer README's opening callout.
 
 ---
 
@@ -275,24 +300,24 @@ const NEWLINES_AND_TABS = /[\n\r\t]/g;
 
 `U+2028 LINE SEPARATOR` and `U+2029 PARAGRAPH SEPARATOR` are Unicode category **Zl/Zp**, not
 `Cf`, and are outside both ranges. Confirmed by execution: `sanitizeMetadata("real
-value description: FORGED")` returns the separator intact.
+valuedescription: FORGED")` returns the separator intact.
 
 Many renderers and every JS engine treat U+2028/U+2029 as line terminators, so the
 "collapsed to a single line" guarantee in `server.ts:44-52` — which is what stops one metadata
 value forging another field — does not hold.
 
 **Attack path.** Seller sets `description` to
-`benign mimeType: text/plain url: https://attacker.example`. The rendered block
+`benignmimeType: text/plainurl: https://attacker.example`. The rendered block
 appears to contain three server-supplied fields, two of them forged.
 
 **Impact.** Field forgery inside the fence. Contained by the fence itself, so this is
 misleading-data rather than instruction-injection.
 
-**Fix.** Add `  ` to `NEWLINES_AND_TABS`, and consider stripping the whole `Zl`/`Zp`
+**Fix.** Add `` to `NEWLINES_AND_TABS`, and consider stripping the whole `Zl`/`Zp`
 classes.
 
 **Verify the fix.** Assert `sanitizeMetadata` output contains no character matching
-`/[  ]/u`.
+`/[]/u`.
 
 ---
 
