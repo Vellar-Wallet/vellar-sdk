@@ -673,13 +673,11 @@ Not findings. Each is a path I could not trace to a sink, or a fact outside the 
    it does not answer who can trigger that workflow or push a tag. Until the maintainer list
    and 2FA status are confirmed, treat publish authority as the largest unverified element of
    this package's supply chain.
-4. **Browser-side exposure** — this package runs in a browser and an extension. I audited it
-   as a Node library; I did not review bundling, CSP interaction, or extension isolation.
+4. **Browser-side exposure** — promoted out of this list; see
+   [Unreviewed surface](#unreviewed-surface--an-explicit-gap-not-a-footnote).
 5. **`x402-guards` consumers** — the fence is about to be adopted by the facilitator. Whether
    *its* rendering preserves the block intact is outside this repo and unaudited.
-6. **VS-1 … VS-10** — referenced as a prior audit of this repo. No such document or finding
-   ids exist in this repository, `vellar-facilitator`, or `vela-wallet`. Nothing here should
-   be read as closing them.
+6. **The lost prior audit** — closed out; see [Prior audits](#prior-audits). Not chased.
 
 ### V-13 — Expiration floor is below measured settlement latency {#v-13}
 
@@ -753,20 +751,27 @@ The code below was written and then audited by the same agent. Every fix here wa
 executing an attack, but *I chose which attacks to run*, and the blind spot is necessarily
 shaped like my own assumptions. Ranked by where my confidence is thinnest:
 
-**1. `assertAuthEntryInvocation` — try to get a signature it should refuse.** The V-1 fix
-compares contract, function, three arguments, and rejects sub-invocations. I do not know that
-list is complete. Specifically worth attacking: can an entry carry a *different* credential
-type that still routes to a wallet signer; does comparing `Address.toString()` normalise two
-distinct addresses to one string; can `scValToNative` on the amount coerce a value that is not
-the i128 the contract will see; is there any auth-entry field that changes what executes and is
-not compared? Build the entry that passes all five checks and still moves money elsewhere. My
-hostile-RPC test proves the fix catches *the attack I thought of*.
+**1. The fence, against a model rather than a regex. Rank this first.** Every fence test
+asserts on **strings**. Not one asserts on model behaviour — and my own measurement is worse
+than neutral: across three injection variants, the model resisted **equally with and without
+the fence**. So the fence's demonstrated value is mechanical (an unforgeable boundary,
+characters removed), and its *behavioural* value has never been shown at all.
 
-**2. The fence, against a model rather than a regex.** Every fence test asserts on *strings*.
-Not one asserts on model behaviour, and the three injection variants I did test were resisted
-equally with and without the fence — so its measured value is mechanical, not behavioural.
-Attack it as a prompt engineer, not a programmer: given a rendered block, can you get a model
-to act on the enclosed text? If yes, the nonce and the lookalike filter are beside the point.
+**This matters beyond this repo. The facilitator is about to adopt this module on the strength
+of those string-asserting tests.** If a prompt engineer can get a model to act on text inside a
+rendered block, then we have shipped a mechanism whose value we never demonstrated, to a second
+codebase, as a shared dependency. Attack it as a prompt engineer rather than a programmer:
+given a rendered block, make a model act on the enclosed text. A single success reframes the
+nonce and the lookalike filter as beside the point.
+
+**2. `assertAuthEntryInvocation` — construct an entry it should refuse and doesn't.** The V-1
+fix compares contract, function, three arguments, and rejects sub-invocations. I do not know
+that list is complete. Specifically worth attacking: can an entry carry a *different*
+credential type that still routes to a wallet signer; does comparing `Address.toString()`
+normalise two distinct addresses to one string; can `scValToNative` on the amount coerce a
+value that is not the i128 the contract will see; is there any auth-entry field that changes
+what executes and is not compared? Build the entry that passes all five checks and still moves
+money elsewhere. My hostile-RPC test proves the fix catches *the attack I thought of*.
 
 **3. `classifySettlement`'s three states.** The V-2 fix turns on a distinction I invented:
 "positive evidence nothing was spent" versus "cannot tell". Find a real facilitator response
@@ -783,6 +788,20 @@ Default false, code-level only, never an environment variable — but it is a TL
 introduced during a security fix, which is exactly the shape of thing that should be viewed
 with suspicion. Check I did not leave a path that reaches it from configuration.
 
+### Unreviewed surface — an explicit gap, not a footnote
+
+**This package was audited as a Node library. It ships to two browser contexts that were not
+examined at all.**
+
+- The **wallet web app** — bundling behaviour, what a bundler does with the browser-safe
+  invariants (`types: []`, the hand-rolled base64, Web Crypto), and CSP interaction.
+- The **browser extension** — which has its own isolation model (content script vs background
+  vs page context) that this audit did not consider. Key material and payment flows behave
+  differently across those boundaries, and none of that was looked at.
+
+A reviewer should treat both as **unreviewed**, not as covered-by-implication. Everything in
+this document was reasoned about and executed in Node.
+
 ### Not determinable from this repository
 
 - **Publish rights and 2FA** — see [Needs verification](#needs-verification). Being resolved
@@ -792,9 +811,14 @@ with suspicion. Check I did not leave a path that reaches it from configuration.
 
 ### Prior audits
 
-**VS-1 … VS-10 remain unlocated.** Referenced as a previous audit of this repository; no such
-document or finding ids exist here, in `vellar-facilitator`, or in `vela-wallet`. Nothing in
-this document should be read as closing them.
+**A previous audit of this repository existed and was not preserved.** It was never committed
+and lived only in a conversation, so its findings are unrecoverable. **This document supersedes
+it.**
+
+That lost audit predates the MCP payer, the untrusted-data fence, the smart-account signature
+path and the spend ledger — more than half the code reviewed here — so reconstructing it would
+be archaeology against a codebase that no longer exists. It is deliberately not chased. This
+file is committed for exactly that reason.
 
 **Wallet-side RA-11-E is closed** by [V-10](#v-10).
 
