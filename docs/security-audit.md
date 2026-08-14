@@ -34,9 +34,9 @@ A1 and A3 are the *expected operating conditions* of this package, not edge case
 | ID | Title | Severity | Class | Status |
 | --- | --- | --- | --- | --- |
 | [V-1](#v-1) | Auth entry's invocation is signed without validation | **Critical** | our code | ✅ **FIXED** |
-| [V-2](#v-2) | Settlement is believed on the seller's word alone | **High** | our code | open |
-| [V-3](#v-3) | Seller-controlled text reaches the model outside the fence | **High** | our code | open |
-| [V-4](#v-4) | Dependency writes to stdout, corrupting the MCP transport | **High** | dependency | open |
+| [V-2](#v-2) | Settlement is believed on the seller's word alone | **High** | our code | ✅ **FIXED** |
+| [V-3](#v-3) | Seller-controlled text reaches the model outside the fence | **High** | our code | ✅ **FIXED** |
+| [V-4](#v-4) | Dependency writes to stdout, corrupting the MCP transport | **High** | dependency | ✅ **FIXED** |
 | [V-5](#v-5) | Fence lookalike filter is bypassable four ways | **Medium** | our code | ✅ **FIXED** |
 | [V-6](#v-6) | U+2028/U+2029 defeat metadata single-line collapse | **Medium** | our code | ✅ **FIXED** |
 | [V-7](#v-7) | Seller controls how long our signature stays valid | **Medium** | our code | open |
@@ -162,6 +162,27 @@ the capability exists but is absent from the product path.
 **Verify the fix.** Serve a 200 with `transaction: "not-a-hash"` and assert the payer treats
 it as unsettled and does not debit.
 
+#### ✅ FIXED — 2026-08-14, and the naive fix would have been worse
+
+The obvious repair — validate the hash, treat anything else as unsettled — creates a
+**double-spend**. `payer.ts` retried on "no settlement", so a seller returning a malformed
+hash *for a payment that genuinely settled* would have us sign and pay a second time.
+
+`classifySettlement` (`src/x402-guards.ts`) therefore returns three states, and the
+distinction between the last two is the fix:
+
+| state | meaning | retry? | debit? |
+| --- | --- | --- | --- |
+| `settled` | confirmed 64-hex hash | no — done | yes |
+| `not-spent` | **positive evidence** nothing reached the chain | **yes** | no |
+| `indeterminate` | malformed hash, or no settle info at all | **never** | **yes** |
+
+`indeterminate` debits deliberately. If the payment did settle, a ledger that ignored it
+would under-count real spend and let the ceiling be exceeded later; over-counting merely
+refuses a legitimate payment. Layer 1 is a guard against mistakes, so it must err toward
+refusing — and the error tells the operator to check the account on-chain rather than
+implying failure. Pinned by `packages/mcp-x402-payer/test/settlement-trust.test.ts`.
+
 ---
 
 ### V-3 — Seller-controlled text reaches the model outside the fence {#v-3}
@@ -201,6 +222,13 @@ Validating `transaction` as hex (V-2) neutralises that half.
 **Verify the fix.** Assert that a `Content-Type` containing injection text appears only after
 a `----BEGIN UNTRUSTED RESOURCE DATA` marker, or not at all.
 
+#### ✅ FIXED — 2026-08-14
+
+`contentType` is passed through `sanitizeMetadata()` before interpolation
+(`server.ts:120`, `:124`). The settlement hash is now shape-validated upstream by V-2, so it
+is safe to print unfenced — and that is stated at the call site, because the safety depends
+on a check in another module.
+
 ---
 
 ### V-4 — Dependency writes to stdout, corrupting the MCP transport {#v-4}
@@ -237,6 +265,17 @@ library writing to stdout in a library context).
 
 **Verify the fix.** Force the code path with a seller returning extension responses and assert
 every line on stdout parses as JSON-RPC.
+
+#### ✅ FIXED — 2026-08-14, with a trap worth recording
+
+`startStdio` hands the transport a `Writable` bound to the **real** stdout captured before
+diverting, then redirects `process.stdout.write` to stderr for the process lifetime.
+
+The obvious implementation — connect the default transport, then divert — **silently breaks
+the protocol**: `StdioServerTransport` writes through the `process.stdout` object at send
+time, so the diversion swallows the JSON-RPC stream itself. Verified both ways by running the
+built binary: naive version emits **0** lines, the current one emits valid JSON-RPC. The unit
+tests passed in both cases, so only running the real server distinguished them.
 
 ---
 

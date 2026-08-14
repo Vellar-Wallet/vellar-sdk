@@ -19,6 +19,7 @@ import {
   responsePaid,
   scriptedFetch,
   stubSigner,
+  txHash,
   testConfig,
 } from "./helpers.js";
 
@@ -174,7 +175,7 @@ describe("tool output fences untrusted server text", () => {
           status: 200,
           headers: {
             "content-type": "text/plain",
-            "X-PAYMENT-RESPONSE": b64({ transaction: "tx-1" }),
+            "X-PAYMENT-RESPONSE": b64({ success: true, transaction: txHash("tx-1") }),
           },
         }),
       ]),
@@ -215,7 +216,7 @@ describe("tool output fences untrusted server text", () => {
 
   it("still reports the settlement alongside fenced content", async () => {
     const text = await payWith("normal", "the goods");
-    expect(text).toContain("Settlement transaction: tx-1");
+    expect(text).toContain(`Settlement transaction: ${txHash("tx-1")}`);
     expect(text).toContain(`asset ${ASSET_A}`);
   });
 });

@@ -16,9 +16,9 @@
 //   the limiter never drifts away from what was actually spent.
 
 import {
+  classifySettlement,
   decodePaymentRequired,
   decodeSettleResponseHeader,
-  decodeSettlementHeader,
   extractRejectionReason,
   isRetryableSettleFailure,
   parseAmount,
@@ -26,7 +26,7 @@ import {
   selectRequirements,
 } from "vellar-sdk/x402-guards";
 import type { PayerConfig } from "./config.js";
-import { SettlementFailedError } from "./errors.js";
+import { IndeterminateSettlementError, SettlementFailedError } from "./errors.js";
 import type { SpendLedger } from "./ledger.js";
 import { truncateUtf8, type Truncated } from "./output.js";
 import {
@@ -324,13 +324,30 @@ export function createPayer(deps: PayerDeps): Payer {
         );
       }
 
-      const settlement = decodeSettlementHeader(res);
-      if (!settlement) {
-        // A 2xx with no settlement transaction. Same meaning: nothing settled,
-        // nothing spent, sign again.
-        lastReason = `attempt ${attempt} returned no settlement transaction`;
+      const outcome = classifySettlement(res);
+
+      if (outcome.kind === "not-spent") {
+        // POSITIVE evidence nothing reached the chain — the facilitator released
+        // its fee reservation. The only state it is safe to retry.
+        lastReason = `attempt ${attempt}: ${outcome.reason}`;
         await discardBody(res);
         continue;
+      }
+
+      if (outcome.kind === "indeterminate") {
+        // We cannot tell whether money moved. Retrying could pay twice, so we
+        // stop — and we DEBIT, because if the payment did settle, a ledger that
+        // ignored it would under-count real spend and let the ceiling be
+        // exceeded later. Over-counting refuses a legitimate payment; the other
+        // direction permits an illegitimate one. (Security audit V-2.)
+        ledger.record(chosen.asset, amount);
+        await discardBody(res);
+        throw new IndeterminateSettlementError(
+          outcome.reason,
+          chosen.asset,
+          amount,
+          outcome.raw,
+        );
       }
 
       // Confirmed settlement — debit exactly once, here and nowhere else.
@@ -341,8 +358,8 @@ export function createPayer(deps: PayerDeps): Payer {
         paid: true,
         content: await readContent(res, config.maxResponseBytes),
         settlement: {
-          transaction: settlement.transaction,
-          payer: settlement.payer ?? signer.address,
+          transaction: outcome.transaction,
+          payer: outcome.payer ?? signer.address,
           asset: chosen.asset,
           amount: amount.toString(),
           network: config.network,

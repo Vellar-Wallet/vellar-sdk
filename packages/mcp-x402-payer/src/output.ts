@@ -141,6 +141,36 @@ export function formatError(err: unknown): string {
 
 export type LogLevel = "info" | "warn" | "error";
 
+/**
+ * Redirect anything written to stdout into stderr, for the process lifetime.
+ *
+ * Security audit V-4. stdout IS the MCP JSON-RPC channel, and our own code is
+ * disciplined about that — but our DEPENDENCIES are not. `@x402/core` calls
+ * `console.log` unguarded on the payment-response path
+ * (`chunk-3LURPWBI.mjs:367`, reached from `:451`/`:500`), and whether it fires
+ * depends on extension data the SELLER supplies. So a seller can desynchronise
+ * the agent's transport, and the stdout-discipline test cannot catch it because
+ * it only scans our own source.
+ *
+ * Call this AFTER the transport has captured its own handle: the returned
+ * `restore` is for tests. Diverted output is prefixed so it is obvious in logs
+ * that something bypassed the sanctioned path.
+ */
+export function divertStdoutToStderr(): () => void {
+  const original = process.stdout.write.bind(process.stdout);
+  process.stdout.write = ((chunk: unknown, ...rest: unknown[]) => {
+    const text = typeof chunk === "string" ? chunk : String(chunk);
+    process.stderr.write(redact(`[diverted-stdout] ${text}`));
+    // Honour the callback so a caller awaiting the write does not hang.
+    const cb = rest.find((a) => typeof a === "function") as undefined | (() => void);
+    cb?.();
+    return true;
+  }) as typeof process.stdout.write;
+  return () => {
+    process.stdout.write = original;
+  };
+}
+
 /** Structured log line → stderr. NEVER stdout: stdout is the MCP transport. */
 export function log(level: LogLevel, message: string, fields: Record<string, unknown> = {}): void {
   const line = {

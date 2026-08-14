@@ -10,13 +10,20 @@
 // is something the model can be talked into changing. `max_amount` is the
 // model's to supply; everything that bounds it is the server's.
 
+import { Writable } from "node:stream";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import type { PayerConfig } from "./config.js";
 import type { SpendLedger } from "./ledger.js";
 import { createMutex } from "./ledger.js";
-import { formatError, log, renderUntrusted, sanitizeMetadata } from "./output.js";
+import {
+  divertStdoutToStderr,
+  formatError,
+  log,
+  renderUntrusted,
+  sanitizeMetadata,
+} from "./output.js";
 import type { PayResult, Payer, QuoteResult } from "./payer.js";
 import type { X402ResourceInfo } from "./protocol.js";
 
@@ -98,6 +105,10 @@ function renderPayment(result: PayResult): string {
     const s = result.settlement!;
     parts.push(
       `Paid ${s.amount} base units of asset ${s.asset} on ${s.network}.`,
+      // Safe to print unfenced ONLY because classifySettlement has already
+      // rejected anything that is not 64 hex characters (security audit V-2/V-3).
+      // Before that check this field was arbitrary seller-controlled text in the
+      // region the model reads as the server speaking.
       `Settlement transaction: ${s.transaction}`,
     );
     if (result.attempts && result.attempts > 1) {
@@ -117,11 +128,13 @@ function renderPayment(result: PayResult): string {
   const c = result.content;
   if (c.binaryOmitted) {
     parts.push(
-      `The resource returned ${c.bytes} bytes of ${c.contentType}, which is not text and was not ` +
+      `The resource returned ${c.bytes} bytes of ${sanitizeMetadata(c.contentType)}, which is not text and was not ` +
         `inlined. The payment above still settled.`,
     );
   } else {
-    parts.push(`Content (${c.contentType}, ${c.bytes} bytes${c.truncated ? ", truncated" : ""}):`);
+    parts.push(
+      `Content (${sanitizeMetadata(c.contentType)}, ${c.bytes} bytes${c.truncated ? ", truncated" : ""}):`,
+    );
     parts.push(renderUntrusted("resource content", c.text ?? ""));
   }
 
@@ -280,8 +293,33 @@ export function createMcpServer(deps: ServerDeps): McpServer {
   return server;
 }
 
-/** Connect the server to stdio. stdout is the protocol channel from here on. */
+/**
+ * Connect the server to stdio. stdout is the protocol channel from here on.
+ *
+ * Security audit V-4. `StdioServerTransport` writes through the `process.stdout`
+ * OBJECT at send time, so simply overriding `process.stdout.write` after
+ * connecting diverts the protocol itself — verified by running the built server
+ * and observing an empty stream. Instead the transport is handed a stream bound
+ * to the REAL sink, captured before the diversion; afterwards anything else
+ * writing to stdout (a dependency's `console.log`) goes to stderr and cannot
+ * desynchronise the JSON-RPC stream.
+ */
 export async function startStdio(server: McpServer): Promise<void> {
-  const transport = new StdioServerTransport();
+  const realWrite = process.stdout.write.bind(process.stdout);
+  const protocolOut = new Writable({
+    // decodeStrings is left on, so `chunk` arrives as a Buffer; pass it straight
+    // through rather than forwarding an encoding the real stream would reject.
+    write(chunk, _encoding, callback) {
+      realWrite(chunk as Uint8Array);
+      callback();
+    },
+  });
+
+  const transport = new StdioServerTransport(
+    process.stdin,
+    protocolOut as unknown as NodeJS.WriteStream,
+  );
   await server.connect(transport);
+
+  divertStdoutToStderr();
 }
