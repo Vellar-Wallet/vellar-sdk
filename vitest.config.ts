@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config";
+import { sdkSourceAliases } from "./vitest.alias";
 
 // The default suite is HERMETIC: no network, no local stack, no chain.
 //
@@ -8,6 +9,9 @@ import { defineConfig } from "vitest/config";
 // a URL writes a permanent public catalog entry that nobody can delete. Run
 // them deliberately with `npm run test:integration`.
 export default defineConfig({
+  // `vellar-sdk/*` self-imports resolve to source, so `npm test` does not
+  // require a prior `npm run build`. See vitest.alias.ts.
+  resolve: { alias: sdkSourceAliases },
   test: {
     exclude: [
       "**/node_modules/**",

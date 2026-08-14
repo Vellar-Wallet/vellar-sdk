@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config";
+import { sdkSourceAliases } from "../../vitest.alias";
 
 // Integration tests ONLY. Run deliberately with `npm run test:integration`.
 //
@@ -6,6 +7,9 @@ import { defineConfig } from "vitest/config";
 // never part of `npm test`, and the localhost guard in test/integration/
 // local-only.ts refuses to let them touch a hosted facilitator.
 export default defineConfig({
+  // Same source resolution as the hermetic suite, so integration runs do not
+  // depend on a freshly built dist either.
+  resolve: { alias: sdkSourceAliases },
   test: {
     include: ["test/**/*.integration.test.ts"],
     // A single settle attempt costs several round-trips, and the settle step
