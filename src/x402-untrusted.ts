@@ -64,10 +64,33 @@ const NEWLINES_AND_TABS = /[\n\r\t]/g;
 
 export const REMOVED_FENCE_MARKER = "[removed fence-like text]";
 
-/** Cryptographically random hex, via the Web Crypto API (browser + Node 19+). */
+/**
+ * Cryptographically random hex, via the Web Crypto API.
+ *
+ * Available in browsers, and in Node from v19 — v18 exposes `globalThis.crypto`
+ * ONLY under `--experimental-global-webcrypto`, so it is undefined in a normal
+ * module there. (Confusingly it IS defined under `node -e`, which makes a quick
+ * one-liner check report a false positive; verified on v18.20.4.)
+ *
+ * We do not silently fall back to `Math.random()`: an attacker who could predict
+ * the nonce could close the fence, which is the whole property this provides.
+ * Nor do we import `node:crypto`, which would break browser bundling — the
+ * reason this module is dependency-free. So an unsupported runtime fails loudly
+ * and says what to do, rather than throwing a bare TypeError from a dependency.
+ */
 function nonce(): string {
+  const webcrypto = globalThis.crypto;
+  if (typeof webcrypto?.getRandomValues !== "function") {
+    throw new Error(
+      "vellar-sdk/x402-untrusted requires the Web Crypto API " +
+        "(globalThis.crypto.getRandomValues), which this runtime does not expose. " +
+        "Node 18 and earlier need --experimental-global-webcrypto; Node 20+ and all " +
+        "browsers work out of the box. The fence nonce must be unpredictable, so " +
+        "there is deliberately no non-cryptographic fallback.",
+    );
+  }
   const bytes = new Uint8Array(NONCE_BYTES);
-  globalThis.crypto.getRandomValues(bytes);
+  webcrypto.getRandomValues(bytes);
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
