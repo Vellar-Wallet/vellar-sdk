@@ -768,6 +768,20 @@ had stopped being a path to `main` between the child being opened and the child 
 the base is still the path to `main` **at the moment the child merges**, not when it was
 opened.
 
+**A near-miss from the same family, minutes later.** While writing this record, the local
+`feat/smart-account-layer2` was still at its pre-#188 commit. Editing `docs/security-audit.md`
+failed with **"no such file or directory"** — a file that existed on the remote branch and not
+in the local checkout. The error named the symptom, not the cause: it said the file was
+missing, not that the view was stale. Recovery needed a stash, a sync to the remote tip, and a
+`package.json` conflict resolution.
+
+Same family as the merge loss — **acting on a stale view of where content is** — and it
+happened to the person who had just finished diagnosing that exact failure. Worth recording
+because it shows the failure is not a lapse of attention that care prevents. Both times the
+tooling reported something locally true and globally wrong, and in neither case did the message
+point at staleness. The generalisation: when a file, branch or merge "isn't there", check
+*which view you are looking at* before concluding it does not exist.
+
 **The check.** `scripts/verify-merged.mjs` (ported from `vellar-facilitator`, which hit this
 class five times) asserts by CONTENT that a merged PR's added lines are present in `main`.
 `.github/workflows/verify-merged.yml` runs it after every push to `main`, so it fires on merge
