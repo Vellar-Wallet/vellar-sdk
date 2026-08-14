@@ -740,6 +740,46 @@ control flow. A fix applied where the finding pointed would have introduced a do
 finding; it did not introduce it. Without that note the register reads as a list of things
 this project built wrong, when one of the most severe was inherited.
 
+## Incident — content merged successfully and did not reach main (2026-08-14)
+
+Recorded precisely because this is the **third** such loss in this repository and the cause was
+misattributed twice before. It was neither of the things previously blamed.
+
+**What happened.** This audit and its thirteen fixes were opened as #188, *stacked* on #187 so
+a reviewer could read a feature and a security remediation separately.
+
+| | merged at | into |
+| --- | --- | --- |
+| **#187** | 23:36:59Z | `main` — carried the feature commit only |
+| **#188** | 23:37:**18**Z | `feat/smart-account-layer2` — **19 seconds later** |
+
+By the time #188 merged, its base had already merged to `main` and was **no longer a route
+there**. Both merges were honest. Both PRs report `MERGED` to this day. `main` was missing 30
+files and +2435/−92, including a **Critical** fix, and reported nothing wrong.
+
+**The mechanism, stated exactly.** A stacked PR merged successfully into its base, and the base
+had stopped being a path to `main` between the child being opened and the child being merged.
+
+- **Not merge order** — merging #188 first would have worked, but that is luck, not a rule.
+- **Not squash** — this repo uses merge commits; the same failure occurs either way.
+- **Not a silent no-op** — the diff was real and it landed; it landed somewhere unreachable.
+
+**The rule that follows.** Never stack a PR whose base is about to merge. If you must, verify
+the base is still the path to `main` **at the moment the child merges**, not when it was
+opened.
+
+**The check.** `scripts/verify-merged.mjs` (ported from `vellar-facilitator`, which hit this
+class five times) asserts by CONTENT that a merged PR's added lines are present in `main`.
+`.github/workflows/verify-merged.yml` runs it after every push to `main`, so it fires on merge
+rather than when someone remembers to ask. Its self-test pins **#188** as a known-bad case: if
+that ever reports `LANDED`, the check has regressed and every other pass is worthless.
+
+One refinement was needed before it could be trusted: #186 initially reported `NOT LANDED` on
+14 README lines that had genuinely landed and were later rewritten by #187. The script now
+treats "no lines present, but the file was rewritten on main after this merge" as supersession
+rather than loss. **A verification tool that reports false failures is worse than none**, because
+it trains the reader to ignore it — the exact outcome it exists to prevent.
+
 ## Closing state — 2026-08-15
 
 **All 13 findings closed.** Nothing is open. What remains is not a fix but a review, and two
@@ -808,6 +848,44 @@ this document was reasoned about and executed in Node.
   separately. The single largest unverified element of this package's supply chain.
 - **Browser and extension exposure** — this package runs in both; it was audited as a Node
   library. Bundling, CSP interaction and extension isolation are unreviewed.
+
+### Rebuilding the verification stack
+
+The live testnet stack used throughout this audit — the fee measurements, the layer-2
+demonstration, the hostile-RPC fixture, the settle-latency timings — is not preserved. It costs
+about ten minutes to rebuild:
+
+1. **Facilitator.** Clone `Vellar-Wallet/vellar-facilitator` at branch
+   `fix/buyer-official-client-and-catalog-guard` (PR #52 — has the USDC provisioning and the
+   rewritten `buyer-classic.mjs`), then `npm install`.
+2. **Sponsor.** Generate a keypair and fund it via `https://friendbot.stellar.org?addr=…`.
+   Without this, settle fails with *"Account not found"*, which reads like a code bug and is
+   not one.
+3. **Run it.** `mkdir -p data` first — libSQL will not create the directory and fails with
+   `ConnectionFailed(… "14")`. Then
+   `SPONSOR_SECRET_KEY=$(cat .sponsor.key) PORT=4100 CATALOG_DB_URL=file:./data/catalog.db npm start`.
+   Sanity check: `curl localhost:4100/supported` should show `stellar:testnet`,
+   `areFeesSponsored: true`, `extensions: ["bazaar"]`.
+4. **Provision.** `cd examples && npm install && USE_USDC=1 node provision-testnet.mjs` — buys
+   canonical testnet USDC on the DEX with friendbot XLM. Prints `PAYTO`, `ASSET`,
+   `PAYER_SECRET`.
+5. **Sellers.** Use the facilitator's own `examples/seller.mjs`, not one written here — it
+   declares the bazaar extension, emits `extra.areFeesSponsored`, and refuses to boot without a
+   payee trustline, which keeps our wire format out of what is under test. One under the policy
+   cap (`PRICE_ATOMIC=1000000`, port 4031) and, for the layer-2 refusal demonstration, one above
+   it (`PRICE_ATOMIC=6000000`, port 4032).
+6. **Smart account.** The layer-2 tests need a policy-governed wallet: a spending-limit policy,
+   token-scoped, with an ed25519 agent key whose `SignerLimits` require that policy. The one
+   used here burns **2026-09-15**. `VELLAR_X402_POLICIES` must name every policy in the key's
+   limits, or the wallet rejects the entry before the policy is consulted and the error reads
+   as a broken signer.
+
+**Never point any of this at the shared hosted facilitator.** The first settlement for a URL
+writes a permanent public catalog entry nobody can delete. The harness enforces this in code
+(`test/integration/local-only.ts`), and that guard is unit-tested in the hermetic suite so it is
+checked on every run.
+
+Integration tests are excluded from `npm test`; run them with `npm run test:integration`.
 
 ### Prior audits
 
