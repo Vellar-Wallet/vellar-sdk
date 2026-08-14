@@ -1,0 +1,38 @@
+{
+  "name": "@vellar/mcp-x402-payer",
+  "version": "0.1.0",
+  "description": "MCP server that lets an AI agent pay for x402 resources on Stellar. Holds exactly one key, runs locally over stdio.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "vellar-mcp-x402-payer": "./dist/bin.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@stellar/stellar-sdk": "^16.0.1",
+    "@x402/core": "^2.22.0",
+    "@x402/stellar": "^2.22.0",
+    "vellar-sdk": "file:../..",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.0"
+  }
+}

@@ -34,18 +34,26 @@ import type { SmartAccountX402Signer } from "./x402-types";
 //   Signature::Ed25519(sig)     = scvVec([sym "Ed25519", bytes(sig64)])
 //   Signature::Secp256r1(sig)   = scvVec([sym "Secp256r1", <Secp256r1Signature struct>])
 
-// stellar-sdk's scvBytes accepts a Uint8Array directly, so no Buffer is needed
-// (this package targets browsers/bundlers and does not depend on @types/node).
+// stellar-sdk's scvBytes accepts a Uint8Array at runtime, but its declaration
+// names a Node `Buffer`. This package targets browsers/bundlers and must never
+// depend on Buffer existing — and whether the `Buffer` TYPE is even in scope
+// depends on whether anything else in the workspace pulled in @types/node, which
+// is ambient and global. Going through the declared parameter type keeps this
+// file compiling either way, with no runtime change.
+type ScvBytesInput = Parameters<typeof xdr.ScVal.scvBytes>[0];
+const scvBytes = (value: Uint8Array): xdr.ScVal =>
+  xdr.ScVal.scvBytes(value as unknown as ScvBytesInput);
+
 function ed25519SignerKey(rawPk: Uint8Array): xdr.ScVal {
-  return xdr.ScVal.scvVec([xdr.ScVal.scvSymbol("Ed25519"), xdr.ScVal.scvBytes(rawPk)]);
+  return xdr.ScVal.scvVec([xdr.ScVal.scvSymbol("Ed25519"), scvBytes(rawPk)]);
 }
 
 function ed25519Signature(sig: Uint8Array): xdr.ScVal {
-  return xdr.ScVal.scvVec([xdr.ScVal.scvSymbol("Ed25519"), xdr.ScVal.scvBytes(sig)]);
+  return xdr.ScVal.scvVec([xdr.ScVal.scvSymbol("Ed25519"), scvBytes(sig)]);
 }
 
 function secp256r1SignerKey(keyId: Uint8Array): xdr.ScVal {
-  return xdr.ScVal.scvVec([xdr.ScVal.scvSymbol("Secp256r1"), xdr.ScVal.scvBytes(keyId)]);
+  return xdr.ScVal.scvVec([xdr.ScVal.scvSymbol("Secp256r1"), scvBytes(keyId)]);
 }
 
 /**
@@ -58,9 +66,9 @@ function secp256r1Signature(a: WebAuthnAssertion): xdr.ScVal {
   const entry = (name: string, val: xdr.ScVal) =>
     new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol(name), val });
   const structVal = xdr.ScVal.scvMap([
-    entry("authenticator_data", xdr.ScVal.scvBytes(a.authenticatorData)),
-    entry("client_data_json", xdr.ScVal.scvBytes(a.clientDataJSON)),
-    entry("signature", xdr.ScVal.scvBytes(a.signature)),
+    entry("authenticator_data", scvBytes(a.authenticatorData)),
+    entry("client_data_json", scvBytes(a.clientDataJSON)),
+    entry("signature", scvBytes(a.signature)),
   ]);
   return xdr.ScVal.scvVec([xdr.ScVal.scvSymbol("Secp256r1"), structVal]);
 }

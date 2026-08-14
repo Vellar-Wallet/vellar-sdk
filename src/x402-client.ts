@@ -1,28 +1,35 @@
-// x402 client — the fetch wrapper + payment builder.
+// x402 client — the fetch wrapper + payment builder (smart-account path).
 //
 // Flow (proven in scripts/x402-spike/): request → 402 → decode requirements →
 // build SEP-41 transfer(from=C-address, to=payTo, amount) → sign the wallet auth
 // entry as V1 (via the injected signer) → retry with the `PAYMENT-SIGNATURE`
 // header → return the unlocked response + on-chain settlement.
 //
+// The PURE decision layer (decode / select / validate) lives in ./x402-guards so
+// payers that don't share this signing path can reuse it — see that file. It is
+// re-exported here so this module's public API is unchanged.
+//
 // Structural deps (rpc, an AssembledTransaction builder, fetch) keep this
 // unit-testable without a network. The signer is injected (ed25519 or passkey).
 
-import {
-  Address,
-  nativeToScVal,
-  rpc,
-  xdr,
-} from "@stellar/stellar-sdk";
+import { Address, nativeToScVal, rpc, xdr } from "@stellar/stellar-sdk";
 import { AssembledTransaction } from "@stellar/stellar-sdk/contract";
 import type { Network } from "./types";
 import {
+  CAIP2_BY_NETWORK,
+  NETWORKS,
+  decodePaymentRequired,
+  decodeSettlementHeader,
+  extractRejectionReason,
+  parseAmount,
+  selectRequirements,
+  utf8ToBase64,
+} from "./x402-guards";
+import {
   DisallowedAssetError,
-  InvalidRequirementsError,
   MaxAmountExceededError,
   NoUsablePaymentOptionError,
   PaymentRejectedError,
-  type PaymentRequired,
   type PaymentRequirements,
   type SignedPayment,
   type SmartAccountX402Signer,
@@ -32,43 +39,8 @@ import {
   type X402Response,
 } from "./x402-types";
 
-/** Parse a requirement's `amount` (decimal string, base units) as a non-negative
- * i128. Throws a typed error rather than letting `BigInt(...)` throw a raw
- * SyntaxError on malformed server input. */
-function parseAmount(amount: string): bigint {
-  if (typeof amount !== "string" || !/^\d+$/.test(amount)) {
-    throw new InvalidRequirementsError(
-      `x402 requirement has a non-integer amount ${JSON.stringify(amount)}.`,
-    );
-  }
-  return BigInt(amount);
-}
-
-// Browser-safe base64 (this package targets bundlers/browsers; no Buffer/@types/node).
-function utf8ToBase64(s: string): string {
-  const bytes = new TextEncoder().encode(s);
-  let bin = "";
-  for (const b of bytes) bin += String.fromCharCode(b);
-  return btoa(bin);
-}
-function base64ToUtf8(b64: string): string {
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return new TextDecoder().decode(bytes);
-}
-
-/** CAIP-2 → the network passphrase + our Network label. */
-const NETWORKS: Record<string, { passphrase: string; network: Network }> = {
-  "stellar:testnet": {
-    passphrase: "Test SDF Network ; September 2015",
-    network: "testnet",
-  },
-  "stellar:pubnet": {
-    passphrase: "Public Global Stellar Network ; September 2015",
-    network: "mainnet",
-  },
-};
+// The pure guard layer is part of this module's published surface.
+export * from "./x402-guards";
 
 /** Minimal fetch surface (injectable for tests). */
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
@@ -88,11 +60,6 @@ export interface X402ClientDeps {
   /** Signature-expiration window in ledgers (default 12 ≈ 60s at 5s ledgers). */
   expirationLedgerOffset?: number;
 }
-
-const CAIP2_BY_NETWORK: Record<Network, string> = {
-  testnet: "stellar:testnet",
-  mainnet: "stellar:pubnet",
-};
 
 // Estimated ledger close time (seconds). The facilitator fetches its own estimate
 // from Horizon (~5s on testnet/pubnet); we use the same constant so our derived
@@ -124,59 +91,6 @@ export function expirationOffsetFor(
   let offset = windowLedgers - EXPIRATION_SAFETY_MARGIN;
   if (ceiling !== undefined) offset = Math.min(offset, ceiling);
   return Math.max(offset, MIN_EXPIRATION_LEDGERS);
-}
-
-/**
- * Pick the one payment option this client can satisfy, applying guards. Pure
- * (no network) — exported for direct testing. Filters by scheme/network, then
- * sponsored-fees, then allowedAssets (WHILE selecting, so a disallowed option
- * never shadows a later allowed one), then picks the cheapest allowed option and
- * enforces maxAmount.
- */
-export function selectRequirements(
-  decoded: PaymentRequired,
-  opts: X402PayOptions,
-  ourCaip2: string,
-): PaymentRequirements {
-  const options = decoded.accepts ?? [];
-  const onNetwork = options.filter((a) => a.scheme === "exact" && a.network === ourCaip2);
-  if (onNetwork.length === 0) {
-    throw new NoUsablePaymentOptionError(
-      `No exact/${ourCaip2} payment option offered. Server offered: ${options
-        .map((a) => `${a.scheme}/${a.network}`)
-        .join(", ") || "(none)"}`,
-    );
-  }
-  // The smart-account exact flow requires sponsored fees (the facilitator
-  // rebuilds + pays). Distinct message so a caller can tell this apart from a
-  // wrong-network/scheme miss.
-  const candidates = onNetwork.filter((a) => !(a.extra && a.extra.areFeesSponsored === false));
-  if (candidates.length === 0) {
-    throw new NoUsablePaymentOptionError(
-      "Payment option(s) do not sponsor fees (areFeesSponsored=false); the smart-account exact flow requires sponsored fees.",
-    );
-  }
-
-  const allowed = opts.allowedAssets
-    ? candidates.filter((a) => opts.allowedAssets!.includes(a.asset))
-    : candidates;
-  if (allowed.length === 0) {
-    // Every payable candidate was disallowed by allowedAssets.
-    throw new DisallowedAssetError(candidates[0]!.asset, opts.allowedAssets!);
-  }
-
-  // Prefer the cheapest allowed option (avoids overpaying when a server offers
-  // the same resource in multiple assets/amounts). parseAmount validates each,
-  // so a malformed amount throws a typed error rather than mis-sorting.
-  const usable = allowed.reduce((cheapest, a) =>
-    parseAmount(a.amount) < parseAmount(cheapest.amount) ? a : cheapest,
-  );
-
-  const required = parseAmount(usable.amount);
-  if (required > opts.maxAmount) {
-    throw new MaxAmountExceededError(required, opts.maxAmount, usable.asset);
-  }
-  return usable;
 }
 
 export function createX402Client(deps: X402ClientDeps): X402Client {
@@ -212,7 +126,9 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
       latest.sequence + expirationOffsetFor(requirements.maxTimeoutSeconds, expirationCeiling);
 
     if (!tx.built) {
-      throw new Error("x402: failed to build the transfer transaction (simulation returned nothing).");
+      throw new Error(
+        "x402: failed to build the transfer transaction (simulation returned nothing).",
+      );
     }
     const built = tx.built;
 
@@ -313,67 +229,19 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
   return { fetch: x402Fetch, createPayment };
 }
 
-// ── 402 decode / settlement read ───────────────────────────────────────────────
-
-/** Decode the 402's payment requirements. x402 v2 carries them in the
- * `PAYMENT-REQUIRED` header (base64 JSON); some servers also mirror them in the
- * body. Header wins. */
-export function decodePaymentRequired(res: Response): PaymentRequired {
-  const header =
-    res.headers.get("PAYMENT-REQUIRED") ?? res.headers.get("payment-required");
-  if (header) {
-    try {
-      return JSON.parse(base64ToUtf8(header)) as PaymentRequired;
-    } catch (err) {
-      throw new NoUsablePaymentOptionError(
-        `Malformed PAYMENT-REQUIRED header: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
-  throw new NoUsablePaymentOptionError(
-    "402 response carried no PAYMENT-REQUIRED header.",
-  );
-}
-
-function extractRejectionReason(res: Response): string | undefined {
-  const header =
-    res.headers.get("PAYMENT-REQUIRED") ?? res.headers.get("payment-required");
-  if (!header) return undefined;
-  try {
-    const decoded = JSON.parse(base64ToUtf8(header)) as {
-      error?: string;
-    };
-    return decoded.error;
-  } catch {
-    return undefined;
-  }
-}
-
 function readSettlement(
   res: Response,
   requirements: PaymentRequirements,
   amount: bigint,
   network: Network,
 ): X402Response["settlement"] {
-  const header =
-    res.headers.get("X-PAYMENT-RESPONSE") ??
-    res.headers.get("PAYMENT-RESPONSE") ??
-    res.headers.get("x-payment-response");
-  if (!header) return undefined;
-  try {
-    const decoded = JSON.parse(base64ToUtf8(header)) as {
-      transaction?: string;
-      payer?: string;
-    };
-    if (!decoded.transaction) return undefined;
-    return {
-      transaction: decoded.transaction,
-      payer: decoded.payer ?? requirements.payTo,
-      asset: requirements.asset,
-      amount,
-      network,
-    };
-  } catch {
-    return undefined;
-  }
+  const decoded = decodeSettlementHeader(res);
+  if (!decoded) return undefined;
+  return {
+    transaction: decoded.transaction,
+    payer: decoded.payer ?? requirements.payTo,
+    asset: requirements.asset,
+    amount,
+    network,
+  };
 }

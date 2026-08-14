@@ -9,6 +9,14 @@ export default defineConfig({
     index: "src/index.ts",
     balances: "src/balances.ts",
     rpc: "src/rpc.ts",
+    // The pure x402 decision layer, published separately so payers that don't
+    // share the smart-account signing path (e.g. the MCP payer) can import the
+    // guards without pulling in the wallet plumbing.
+    "x402-guards": "src/x402-guards.ts",
+    // The untrusted-data fence + its conformance vectors. Shared with the
+    // facilitator so one format has one implementation.
+    "x402-untrusted": "src/x402-untrusted.ts",
+    "x402-untrusted-vectors": "src/x402-untrusted-vectors.ts",
   },
   format: ["esm", "cjs"],
   dts: true,

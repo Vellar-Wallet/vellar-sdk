@@ -40,6 +40,24 @@
       "types": "./dist/rpc.d.ts",
       "import": "./dist/rpc.js",
       "require": "./dist/rpc.cjs"
+    },
+    "./x402-guards": {
+      "source": "./src/x402-guards.ts",
+      "types": "./dist/x402-guards.d.ts",
+      "import": "./dist/x402-guards.js",
+      "require": "./dist/x402-guards.cjs"
+    },
+    "./x402-untrusted": {
+      "source": "./src/x402-untrusted.ts",
+      "types": "./dist/x402-untrusted.d.ts",
+      "import": "./dist/x402-untrusted.js",
+      "require": "./dist/x402-untrusted.cjs"
+    },
+    "./x402-untrusted-vectors": {
+      "source": "./src/x402-untrusted-vectors.ts",
+      "types": "./dist/x402-untrusted-vectors.d.ts",
+      "import": "./dist/x402-untrusted-vectors.js",
+      "require": "./dist/x402-untrusted-vectors.cjs"
     }
   },
   "main": "./dist/index.cjs",
@@ -50,10 +68,14 @@
     "README.md",
     "LICENSE"
   ],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:integration": "npm run test:integration --workspace @vellar/mcp-x402-payer"
   },
   "peerDependencies": {
     "@stellar/stellar-sdk": "^16.0.0"

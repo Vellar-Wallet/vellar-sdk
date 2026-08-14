@@ -10,7 +10,14 @@
     "skipLibCheck": true,
     "declaration": true,
     "verbatimModuleSyntax": true,
-    "noEmit": true
+    "noEmit": true,
+    // The SDK targets browsers/bundlers and must compile with NO Node types —
+    // that's why it hand-rolls base64 instead of using Buffer. Ambient @types
+    // are global, so once any workspace package depends on @types/node it gets
+    // hoisted here and silently changes what this code typechecks against
+    // (stellar-sdk's byte APIs start demanding Buffer over Uint8Array). Pinning
+    // an empty list keeps the browser-safety invariant enforced, not incidental.
+    "types": []
   },
   "include": ["src"]
 }
