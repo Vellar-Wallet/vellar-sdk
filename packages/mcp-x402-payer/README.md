@@ -6,10 +6,17 @@ exactly one key.
 
 > ### ⚠️ Which spending limit you get depends on how you configure it
 >
-> **Set `VELLAR_X402_WALLET` and the limit is enforced on-chain** by a Vellar
-> smart account's spending-limit policy, inside `__check_auth`. The model cannot
-> exceed it whatever it emits, and neither can this server. Verified live — see
+> **Set `VELLAR_X402_WALLET` and the SPENDING LIMIT is enforced on-chain** by a
+> Vellar smart account's policy, inside `__check_auth`. The model cannot exceed
+> it whatever it emits, and neither can this server. Verified live — see
 > [the demonstration](#the-demonstration).
+>
+> **What that policy does and does not cover.** It validates the **token** and
+> the **amount**. It has **no opinion on the recipient**. So *"the agent cannot
+> exceed its budget"* is true; *"the agent's funds are protected"* is **not** —
+> a payment redirected to another address, within the cap, satisfies the policy
+> completely. Guarding the recipient is this client's job, not the chain's (see
+> [security audit V-1](../../docs/security-audit.md)).
 >
 > **Leave it unset and the key is a hot wallet.** The ceiling is then ordinary
 > code in the same process the agent is talking to — stronger than a prompt,

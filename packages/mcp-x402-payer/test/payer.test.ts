@@ -30,6 +30,7 @@ import {
   responseVerifyRejected,
   scriptedFetch,
   stubSigner,
+  txHash,
   testConfig,
   testLedger,
 } from "./helpers.js";
@@ -167,7 +168,7 @@ describe("pay — settlement accounting", () => {
     const result = await payer.pay(URL, "1000000");
 
     expect(result.paid).toBe(true);
-    expect(result.settlement?.transaction).toBe("tx-hash-1");
+    expect(result.settlement?.transaction).toBe(txHash("tx-hash-1"));
     expect(result.attempts).toBe(1);
     expect(ledger.remainingFor(ASSET_A)).toBe(1_000_000n - 1_000n);
     expect(result.sessionRemaining).toBe((1_000_000n - 1_000n).toString());
@@ -237,7 +238,7 @@ describe("pay — settle-failure retry", () => {
 
     const result = await payer.pay(URL, "1000000");
 
-    expect(result.settlement?.transaction).toBe("tx-after-retry");
+    expect(result.settlement?.transaction).toBe(txHash("tx-after-retry"));
     expect(result.attempts).toBe(2);
     // Two signed attempts...
     expect(signer.calls).toHaveLength(2);
@@ -310,7 +311,7 @@ describe("pay — settle-failure taxonomy (captured live, not inferred)", () => 
 
     const result = await payer.pay(URL, "1000000");
 
-    expect(result.settlement?.transaction).toBe("tx-recovered");
+    expect(result.settlement?.transaction).toBe(txHash("tx-recovered"));
     expect(result.attempts).toBe(2);
     expect(signer.calls).toHaveLength(2); // signed fresh each time
     // Nothing was spent on the failed attempt, so exactly one debit.
@@ -328,7 +329,7 @@ describe("pay — settle-failure taxonomy (captured live, not inferred)", () => 
 
     const result = await payer.pay(URL, "1000000");
 
-    expect(result.settlement?.transaction).toBe("tx-third-time");
+    expect(result.settlement?.transaction).toBe(txHash("tx-third-time"));
     expect(result.attempts).toBe(3);
     expect(signer.calls).toHaveLength(3);
   });
@@ -458,7 +459,7 @@ describe("pay — content handling", () => {
       status: 200,
       headers: {
         "content-type": "text/plain",
-        "X-PAYMENT-RESPONSE": b64({ transaction: "tx-1" }),
+        "X-PAYMENT-RESPONSE": b64({ success: true, transaction: txHash("tx-1") }),
       },
     });
     const { payer } = makePayer([response402(), paid], stubSigner(), config);
@@ -475,7 +476,7 @@ describe("pay — content handling", () => {
       status: 200,
       headers: {
         "content-type": "image/png",
-        "X-PAYMENT-RESPONSE": b64({ transaction: "tx-1" }),
+        "X-PAYMENT-RESPONSE": b64({ success: true, transaction: txHash("tx-1") }),
       },
     });
     const { payer } = makePayer([response402(), paid], stubSigner());
@@ -484,7 +485,7 @@ describe("pay — content handling", () => {
 
     expect(result.content.binaryOmitted).toBe(true);
     expect(result.content.text).toBeUndefined();
-    expect(result.settlement?.transaction).toBe("tx-1");
+    expect(result.settlement?.transaction).toBe(txHash("tx-1"));
   });
 });
 

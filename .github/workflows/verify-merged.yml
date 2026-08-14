@@ -1,0 +1,51 @@
+name: Verify merged content is on main
+
+# Runs after every push to main and asserts, BY CONTENT, that each PR merged in
+# that push actually landed. Merge status is not evidence: on 2026-08-14 two PRs
+# both reported MERGED and one of them (#188 — an audit plus thirteen security
+# fixes) was unreachable from main, because it was stacked on a base that had
+# merged 19 seconds earlier. See scripts/verify-merged.mjs for the mechanism.
+#
+# This is deliberately a post-merge check rather than a pre-merge one: the
+# failure it catches only exists after the merge happens.
+on:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history: the check compares content against main and inspects
+          # commits after a merge, neither of which works on a shallow clone.
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Find the PRs merged in this push
+        id: prs
+        run: |
+          # Merge commits name their PR; squash commits carry (#N).
+          NUMS=$(git log --format=%s "${{ github.event.before }}..${{ github.sha }}" 2>/dev/null \
+            | grep -oE '#[0-9]+' | tr -d '#' | sort -u | tr '\n' ' ')
+          echo "numbers=$NUMS" >> "$GITHUB_OUTPUT"
+          echo "PRs in this push: ${NUMS:-none}"
+
+      - name: Verify each landed by content
+        if: steps.prs.outputs.numbers != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/verify-merged.mjs ${{ steps.prs.outputs.numbers }}
+
+      - name: Self-test — the known-bad case must still fail
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # If this ever reports LANDED, the check has regressed and every pass
+        # above is worthless.
+        run: node scripts/verify-merged.mjs --selftest

@@ -125,3 +125,43 @@ describe("createPolicyClient", () => {
     await expect(client.listTemplates()).rejects.toMatchObject({ status: 0 });
   });
 });
+
+describe("V-10 (RA-11-E) — retryable and terminal failures are distinguishable", () => {
+  // /policies/deploy has two failure modes with OPPOSITE correct responses:
+  //   503 attach_unconfirmed — chain pending, record NOT stamped -> RETRY
+  //   422 attach_mismatch    — a lie,        record NOT stamped -> DO NOT RETRY
+  // Both used to surface as an identical PolicyApiError.
+  const err = (status: number) => new PolicyApiError("x", status);
+
+  it("marks 503 attach_unconfirmed retryable", () => {
+    expect(err(503).retryable).toBe(true);
+  });
+
+  it("marks 422 attach_mismatch TERMINAL — retrying repeats the lie", () => {
+    expect(err(422).retryable).toBe(false);
+  });
+
+  it("treats a transport failure as retryable — nothing was decided", () => {
+    expect(err(0).retryable).toBe(true);
+  });
+
+  it("treats ordinary 4xx as terminal", () => {
+    for (const s of [400, 401, 403, 404]) expect(err(s).retryable).toBe(false);
+  });
+
+  it("excepts 408 and 429 — those say 'not now', not 'not ever'", () => {
+    expect(err(408).retryable).toBe(true);
+    expect(err(429).retryable).toBe(true);
+  });
+
+  it("treats other 5xx as retryable", () => {
+    for (const s of [500, 502, 504]) expect(err(s).retryable).toBe(true);
+  });
+
+  it("still carries status and errors, so existing callers are unaffected", () => {
+    const e = new PolicyApiError("boom", 422, ["bad"]);
+    expect(e.status).toBe(422);
+    expect(e.errors).toEqual(["bad"]);
+    expect(e.name).toBe("PolicyApiError");
+  });
+});

@@ -105,7 +105,9 @@
     "build": "tsup",
     "typecheck": "tsc --noEmit && tsc --noEmit -p packages/mcp-x402-payer/tsconfig.json",
     "test": "vitest run",
-    "test:integration": "npm run test:integration --workspace @vellar/mcp-x402-payer"
+    "test:integration": "npm run test:integration --workspace @vellar/mcp-x402-payer",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build",
+    "verify:merged": "node scripts/verify-merged.mjs"
   },
   "peerDependencies": {
     "@stellar/stellar-sdk": "^16.0.0"

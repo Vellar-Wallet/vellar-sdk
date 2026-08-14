@@ -19,7 +19,12 @@
 
 import { Address, rpc, nativeToScVal, xdr } from "@stellar/stellar-sdk";
 import { AssembledTransaction } from "@stellar/stellar-sdk/contract";
-import type { SmartAccountX402Signer } from "vellar-sdk";
+import {
+  assertAuthEntryInvocation,
+  type ExpectedInvocation,
+  type SmartAccountX402Signer,
+} from "vellar-sdk";
+import { log } from "./output.js";
 import type { X402Requirement } from "./protocol.js";
 
 /** Ledger close time used to turn the server's timeout into a ledger window. */
@@ -28,6 +33,36 @@ const ESTIMATED_LEDGER_SECONDS = 5;
  * beat after we read ours, so its "current" is ≥ ours. */
 const EXPIRATION_SAFETY_MARGIN = 2;
 const MIN_EXPIRATION_LEDGERS = 3;
+/**
+ * Upper bound on the signature validity a seller can ask for (security audit
+ * V-7). `maxTimeoutSeconds` arrives in the 402 challenge — attacker-controlled —
+ * and previously had a floor but no ceiling, so a seller advertising 86,400
+ * bought a signature valid ~17,000 ledgers. Anyone who then obtained that
+ * payload could choose when it settled.
+ *
+ * 300s is set from measurement, not taste. A signature must survive exactly ONE
+ * attempt, because every retry re-signs (see `payer.ts`) and there is no
+ * backoff. Measured against a live local facilitator, the worst sign-to-settled
+ * window was 12.0s (~3 ledgers), typical 8s. 300s is ~25x that worst case, so no
+ * legitimate settlement is affected, while a hostile seller's window shrinks
+ * from 24 hours to 5 minutes — roughly 288x less exposure.
+ */
+const MAX_EXPIRATION_SECONDS = 300;
+/**
+ * Smallest signature window we will accept (security audit V-13).
+ *
+ * The measured worst sign-to-settled window is 12.0s; `MIN_EXPIRATION_LEDGERS`
+ * (3 ≈ 15s) leaves only ~3s of headroom, so a seller advertising a very short
+ * `maxTimeoutSeconds` gets a signature that can expire mid-settle. Nothing is
+ * spent when that happens — the facilitator rejects at verify — but the caller
+ * sees an opaque failure rather than "the seller's window was too short".
+ *
+ * We cannot fix it by signing for longer: the facilitator derives its own
+ * `maxLedger` from the same `maxTimeoutSeconds` and rejects anything beyond it
+ * as `expiration_too_far`. So the honest response is to refuse up front and say
+ * why. 5 ledgers (~25s) is ~2x the measured worst case.
+ */
+const MIN_VIABLE_EXPIRATION_LEDGERS = 5;
 
 const NETWORK_PASSPHRASE: Record<string, string> = {
   "stellar:testnet": "Test SDF Network ; September 2015",
@@ -38,6 +73,13 @@ export interface SmartAccountSchemeDeps {
   /** Produces V1 auth-entry signatures the wallet's `__check_auth` accepts. */
   signer: SmartAccountX402Signer;
   rpcUrl: string;
+  /**
+   * Permit a plaintext `http://` RPC. Default false, and deliberately NOT
+   * exposed as an environment variable — a plaintext RPC is exactly the
+   * position an attacker needs for V-1, so enabling it must be a code decision,
+   * not a deployment typo. Used by the hostile-RPC test.
+   */
+  allowHttp?: boolean;
 }
 
 /** The subset of `SchemeNetworkClient` @x402/core actually calls on a client. */
@@ -51,8 +93,31 @@ export interface SchemeClientLike {
 }
 
 function expirationLedgersFor(maxTimeoutSeconds: number): number {
-  const window = Math.ceil(maxTimeoutSeconds / ESTIMATED_LEDGER_SECONDS);
-  return Math.max(window - EXPIRATION_SAFETY_MARGIN, MIN_EXPIRATION_LEDGERS);
+  // CLAMP, don't reject. A merchant with a generous timeout is not attacking
+  // anyone, and refusing would break legitimate sellers for no security gain —
+  // we are never obliged to honour the full window they ask for. The clamp
+  // neutralises the risk on its own, so the payment proceeds and the operator is
+  // told on stderr rather than the payment failing.
+  const requested = Math.min(maxTimeoutSeconds, MAX_EXPIRATION_SECONDS);
+  if (maxTimeoutSeconds > MAX_EXPIRATION_SECONDS) {
+    log("warn", "clamped the seller's requested signature lifetime", {
+      requestedSeconds: maxTimeoutSeconds,
+      clampedToSeconds: MAX_EXPIRATION_SECONDS,
+      reason:
+        "a signature valid far beyond one settlement attempt can be held and settled later",
+    });
+  }
+  const window = Math.ceil(requested / ESTIMATED_LEDGER_SECONDS);
+  const offset = Math.max(window - EXPIRATION_SAFETY_MARGIN, MIN_EXPIRATION_LEDGERS);
+
+  if (offset < MIN_VIABLE_EXPIRATION_LEDGERS) {
+    // Refuse rather than sign something likely to expire in flight. Nothing is
+    // at risk either way — an expired signature is rejected at verify and
+    // nothing is spent — but an up-front refusal names the cause instead of
+    // surfacing an opaque settlement failure.
+    throw new UnworkableTimeoutError(maxTimeoutSeconds, offset);
+  }
+  return offset;
 }
 
 /**
@@ -64,7 +129,7 @@ function expirationLedgersFor(maxTimeoutSeconds: number): number {
  * exceed it, and neither can anything that drives this client.
  */
 export function createSmartAccountScheme(deps: SmartAccountSchemeDeps): SchemeClientLike {
-  const server = new rpc.Server(deps.rpcUrl);
+  const server = new rpc.Server(deps.rpcUrl, { allowHttp: deps.allowHttp ?? false });
 
   return {
     scheme: "exact",
@@ -91,6 +156,7 @@ export function createSmartAccountScheme(deps: SmartAccountSchemeDeps): SchemeCl
         ],
         networkPassphrase: passphrase,
         rpcUrl: deps.rpcUrl,
+        allowHttp: deps.allowHttp ?? false,
         parseResultXdr: (r: unknown) => r,
       });
 
@@ -105,6 +171,16 @@ export function createSmartAccountScheme(deps: SmartAccountSchemeDeps): SchemeCl
       // Sign every auth entry belonging to the wallet. Fresh every call —
       // signatures expire in ledgers (~5s each), so a cached payload is a
       // payload that will be rejected.
+      // What we intend to authorise. The entries below arrived from the RPC's
+      // simulation, so they are untrusted input until compared against this.
+      const expected: ExpectedInvocation = {
+        contract: requirements.asset,
+        functionName: "transfer",
+        from: deps.signer.address,
+        to: requirements.payTo,
+        amount: BigInt(requirements.amount),
+      };
+
       const op = tx.built.operations[0] as { auth?: xdr.SorobanAuthorizationEntry[] };
       const auth = op.auth ?? [];
       let signed = 0;
@@ -113,6 +189,14 @@ export function createSmartAccountScheme(deps: SmartAccountSchemeDeps): SchemeCl
         if (entry.credentials().switch().name !== "sorobanCredentialsAddress") continue;
         const addr = Address.fromScAddress(entry.credentials().address().address()).toString();
         if (addr !== deps.signer.address) continue;
+
+        // The credential address only says "this is mine to sign". This says
+        // WHAT it is. Security audit V-1 — the on-chain policy validates token
+        // and amount and has no opinion on the recipient, so a redirected
+        // payment within the cap would satisfy it completely. This is the only
+        // check standing between a hostile RPC and a signature over an
+        // attacker-chosen recipient.
+        assertAuthEntryInvocation(entry, expected);
 
         const signedXdr = await deps.signer.signAuthEntry(entry.toXDR("base64"), {
           networkPassphrase: passphrase,
@@ -179,5 +263,27 @@ export class SmartAccountAuthError extends Error {
     );
     this.name = "SmartAccountAuthError";
     this.policyRejected = policyRejected;
+  }
+}
+
+/**
+ * The seller's `maxTimeoutSeconds` is too short for a payment to complete.
+ *
+ * Security audit V-13. Refused before signing: the window it allows is below
+ * what a settlement has been measured to need, and signing anyway would produce
+ * a signature that expires mid-flight and fails opaquely. Nothing was spent.
+ */
+export class UnworkableTimeoutError extends Error {
+  constructor(
+    readonly maxTimeoutSeconds: number,
+    readonly ledgers: number,
+  ) {
+    super(
+      `The resource server allows only ${maxTimeoutSeconds}s to settle, which is about ` +
+        `${ledgers} ledgers — below the ~25s a settlement has been measured to need. ` +
+        `Refusing before signing rather than producing a signature that expires mid-payment. ` +
+        `Nothing was spent. This is the seller's configuration, not a fault in the payment.`,
+    );
+    this.name = "UnworkableTimeoutError";
   }
 }

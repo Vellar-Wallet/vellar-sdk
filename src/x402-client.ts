@@ -14,6 +14,7 @@
 
 import { Address, nativeToScVal, rpc, xdr } from "@stellar/stellar-sdk";
 import { AssembledTransaction } from "@stellar/stellar-sdk/contract";
+import { assertAuthEntryInvocation, type ExpectedInvocation } from "./x402-auth-entry";
 import type { Network } from "./types";
 import {
   CAIP2_BY_NETWORK,
@@ -73,6 +74,13 @@ const EXPIRATION_SAFETY_MARGIN = 2;
 // Never sign an expiration less than this many ledgers out, even for a tiny
 // server timeout — below this the payment can't realistically round-trip.
 const MIN_EXPIRATION_LEDGERS = 3;
+/**
+ * Default ceiling on seller-requested signature lifetime (security audit V-7).
+ * `maxTimeoutSeconds` is attacker-controlled and previously had no upper bound
+ * here unless a caller passed `expirationLedgerOffset`. 300s / 5s = 60 ledgers,
+ * less the safety margin. See the scheme client for the measurement behind 300s.
+ */
+const DEFAULT_MAX_EXPIRATION_LEDGERS = 58;
 
 /**
  * Ledgers-from-now to set as the signature expiration. Derived from the server's
@@ -89,7 +97,9 @@ export function expirationOffsetFor(
 ): number {
   const windowLedgers = Math.ceil((maxTimeoutSeconds ?? 120) / ESTIMATED_LEDGER_SECONDS);
   let offset = windowLedgers - EXPIRATION_SAFETY_MARGIN;
-  if (ceiling !== undefined) offset = Math.min(offset, ceiling);
+  // An explicit ceiling still wins; absent one, fall back to the default bound
+  // rather than honouring whatever the seller asked for.
+  offset = Math.min(offset, ceiling ?? DEFAULT_MAX_EXPIRATION_LEDGERS);
   return Math.max(offset, MIN_EXPIRATION_LEDGERS);
 }
 
@@ -132,6 +142,16 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
     }
     const built = tx.built;
 
+    // What we intend to authorise. `built` came back from the RPC's simulation,
+    // so its auth entries are untrusted input until compared against this.
+    const expected: ExpectedInvocation = {
+      contract: requirements.asset,
+      functionName: "transfer",
+      from: deps.signer.address,
+      to: requirements.payTo,
+      amount: parseAmount(requirements.amount),
+    };
+
     // Sign every wallet auth entry (V1) via the injected signer.
     const op = built.operations[0] as { auth?: xdr.SorobanAuthorizationEntry[] };
     const auth = op.auth ?? [];
@@ -141,6 +161,12 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
       if (entry.credentials().switch().name !== "sorobanCredentialsAddress") continue;
       const addr = Address.fromScAddress(entry.credentials().address().address()).toString();
       if (addr !== deps.signer.address) continue;
+
+      // Security audit V-1. The credential address only establishes that the
+      // entry is ours to sign; this establishes WHAT it does. Predates the
+      // smart-account work — the classic path has always had this gap.
+      assertAuthEntryInvocation(entry, expected);
+
       const signedXdr = await deps.signer.signAuthEntry(entry.toXDR("base64"), {
         networkPassphrase: net.passphrase,
         expirationLedger,
