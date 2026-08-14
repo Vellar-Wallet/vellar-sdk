@@ -4,6 +4,27 @@ An MCP server that lets an AI agent **pay** for [x402](https://x402.org) (HTTP-4
 resources on Stellar. It runs locally beside the agent over stdio and holds
 exactly one key.
 
+> ### ⚠️ The key is a hot wallet. The spending limit is enforced by this process, not the chain.
+>
+> The appeal of an agent budget is that the limit lives somewhere the model
+> cannot reach. **That is not what this ships today.** The ceiling here is
+> ordinary code in the same process the agent is talking to — stronger than a
+> prompt, weaker than a contract.
+>
+> Concretely, on this path:
+>
+> - The limit is **not** enforced on-chain. Nothing in a ledger stops a payment.
+> - It **resets when the process restarts**.
+> - It protects nothing if the key is exfiltrated — an attacker just doesn't run
+>   this server.
+>
+> So it is a guard against **mistakes** — a typo, a runaway loop, a resource that
+> costs more than expected — and not against a compromised or manipulated agent.
+>
+> **Fund the key with only what you are willing to lose.** The chain-enforced
+> version needs a Vellar smart account, which is
+> [blocked upstream](#smart-accounts-are-blocked-upstream).
+
 This is the **payer** side. Discovery is a separate concern, handled by the
 [vellar-facilitator](https://github.com/Vellar-Wallet/vellar-facilitator)'s own
 MCP server, which deliberately holds no keys — the facilitator is neutral
