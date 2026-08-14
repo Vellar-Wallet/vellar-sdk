@@ -92,16 +92,64 @@ function payloadHashForEntry(
   return hash(preimage.toXDR());
 }
 
-/** Set the entry's signature to the smart-wallet map `Vec[Map[key → sig]]`. */
+/**
+ * `SignerKey::Policy(address)` — a policy contract acting as a co-signer.
+ *
+ * When a signer's `SignerLimits` require a policy, the wallet's `__check_auth`
+ * looks for that policy in the signature map and invokes it. Omitting it does
+ * NOT fall back to the signer alone: the wallet rejects the entry outright.
+ * Verified on testnet — an ed25519-only map against a policy-governed wallet
+ * fails with `Error(Contract, #110)`, while the same payment carrying the policy
+ * entry reaches the policy and is judged on its merits.
+ */
+function policySignerKey(policyAddress: string): xdr.ScVal {
+  return xdr.ScVal.scvVec([
+    xdr.ScVal.scvSymbol("Policy"),
+    new Address(policyAddress).toScVal(),
+  ]);
+}
+
+/** `Signature::Policy` — a unit variant. The policy authorises by running, not
+ * by producing bytes, so there is nothing to carry. */
+function policySignature(): xdr.ScVal {
+  return xdr.ScVal.scvVec([xdr.ScVal.scvSymbol("Policy")]);
+}
+
+/**
+ * Set the entry's signature to the smart-wallet map `Vec[Map[key → sig]]`.
+ *
+ * Soroban requires map keys in ScVal order. Both key variants are `scvVec`
+ * beginning with a symbol, so ordering is decided by that symbol first —
+ * `"Ed25519"` sorts before `"Policy"` (`E` < `P`) — and among policies by their
+ * contract-id bytes.
+ */
 function setSignatureMap(
   entry: xdr.SorobanAuthorizationEntry,
-  scKey: xdr.ScVal,
-  scSig: xdr.ScVal,
+  signerKey: xdr.ScVal,
+  signature: xdr.ScVal,
+  policyAddresses: readonly string[] = [],
 ): void {
+  const entries = [new xdr.ScMapEntry({ key: signerKey, val: signature })];
+
+  for (const policy of [...policyAddresses].sort(comparePolicyAddresses)) {
+    entries.push(new xdr.ScMapEntry({ key: policySignerKey(policy), val: policySignature() }));
+  }
+
   entry
     .credentials()
     .address()
-    .signature(xdr.ScVal.scvVec([xdr.ScVal.scvMap([new xdr.ScMapEntry({ key: scKey, val: scSig })])]));
+    .signature(xdr.ScVal.scvVec([xdr.ScVal.scvMap(entries)]));
+}
+
+/** Order two policy contract ids by their raw address bytes, as ScVal ordering does. */
+function comparePolicyAddresses(a: string, b: string): number {
+  const ab = new Address(a).toBuffer();
+  const bb = new Address(b).toBuffer();
+  for (let i = 0; i < Math.min(ab.length, bb.length); i++) {
+    const diff = (ab[i] ?? 0) - (bb[i] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return ab.length - bb.length;
 }
 
 // ── agent (ed25519) signer ─────────────────────────────────────────────────────
@@ -111,6 +159,16 @@ export interface SessionKeySignerConfig {
   address: string;
   /** The ed25519 session key secret (`S…`) attached to that wallet. */
   secretKey: string;
+  /**
+   * Policy contracts this key's `SignerLimits` require, which must appear in the
+   * signature map alongside the ed25519 entry.
+   *
+   * REQUIRED when the key is policy-governed. A policy-governed key that signs
+   * without them is rejected by the wallet before the policy is ever consulted
+   * (`Error(Contract, #110)` on testnet), which reads as a broken signer rather
+   * than a missing co-signer. Omit only for an unrestricted key.
+   */
+  policies?: readonly string[];
 }
 
 /**
@@ -125,6 +183,13 @@ export function createSessionKeySigner(config: SessionKeySignerConfig): SmartAcc
     throw new Error(`session-key signer address must be a contract (C…): got ${config.address}`);
   }
 
+  const policies = config.policies ?? [];
+  for (const policy of policies) {
+    if (!isContractAddress(policy)) {
+      throw new Error(`policy address must be a contract (C…): got ${policy}`);
+    }
+  }
+
   return {
     address: config.address,
     async signAuthEntry(entryXdr, { networkPassphrase, expirationLedger }) {
@@ -132,7 +197,7 @@ export function createSessionKeySigner(config: SessionKeySignerConfig): SmartAcc
       assertEntryAddress(entry, config.address);
       const payload = payloadHashForEntry(entry, networkPassphrase, expirationLedger);
       const signature = keypair.sign(payload);
-      setSignatureMap(entry, ed25519SignerKey(rawPk), ed25519Signature(signature));
+      setSignatureMap(entry, ed25519SignerKey(rawPk), ed25519Signature(signature), policies);
       return entry.toXDR("base64");
     },
   };
@@ -162,6 +227,9 @@ export interface PasskeyX402SignerConfig {
   address: string;
   /** The WebAuthn ceremony (host-wired; runs the passkey prompt). */
   webAuthn: WebAuthnAssertionSigner;
+  /** Policy contracts this signer's `SignerLimits` require — see
+   * {@link SessionKeySignerConfig.policies}. Same trap applies here. */
+  policies?: readonly string[];
 }
 
 /**
@@ -187,6 +255,7 @@ export function createPasskeyX402Signer(config: PasskeyX402SignerConfig): SmartA
         entry,
         secp256r1SignerKey(assertion.keyId),
         secp256r1Signature(assertion),
+        config.policies ?? [],
       );
       return entry.toXDR("base64");
     },

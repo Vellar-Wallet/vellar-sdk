@@ -4,26 +4,25 @@ An MCP server that lets an AI agent **pay** for [x402](https://x402.org) (HTTP-4
 resources on Stellar. It runs locally beside the agent over stdio and holds
 exactly one key.
 
-> ### ⚠️ The key is a hot wallet. The spending limit is enforced by this process, not the chain.
+> ### ⚠️ Which spending limit you get depends on how you configure it
 >
-> The appeal of an agent budget is that the limit lives somewhere the model
-> cannot reach. **That is not what this ships today.** The ceiling here is
-> ordinary code in the same process the agent is talking to — stronger than a
-> prompt, weaker than a contract.
+> **Set `VELLAR_X402_WALLET` and the limit is enforced on-chain** by a Vellar
+> smart account's spending-limit policy, inside `__check_auth`. The model cannot
+> exceed it whatever it emits, and neither can this server. Verified live — see
+> [the demonstration](#the-demonstration).
 >
-> Concretely, on this path:
+> **Leave it unset and the key is a hot wallet.** The ceiling is then ordinary
+> code in the same process the agent is talking to — stronger than a prompt,
+> weaker than a contract. On that path the limit is *not* on-chain, it **resets
+> when the process restarts**, and it protects nothing if the key is exfiltrated,
+> because an attacker simply doesn't run this server. It guards against
+> **mistakes** — a typo, a runaway loop, a resource that costs more than expected
+> — not against a compromised agent. Fund such a key with only what you are
+> willing to lose.
 >
-> - The limit is **not** enforced on-chain. Nothing in a ledger stops a payment.
-> - It **resets when the process restarts**.
-> - It protects nothing if the key is exfiltrated — an attacker just doesn't run
->   this server.
->
-> So it is a guard against **mistakes** — a typo, a runaway loop, a resource that
-> costs more than expected — and not against a compromised or manipulated agent.
->
-> **Fund the key with only what you are willing to lose.** The chain-enforced
-> version needs a Vellar smart account, which is
-> [blocked upstream](#smart-accounts-are-blocked-upstream).
+> The server states which mode it is in at startup (`spendLimit:
+> chain-enforced` or `process-only`), and `x402_session_budget` says so on every
+> call. Do not describe the process-only ceiling to a user as an on-chain limit.
 
 This is the **payer** side. Discovery is a separate concern, handled by the
 [vellar-facilitator](https://github.com/Vellar-Wallet/vellar-facilitator)'s own
@@ -55,9 +54,14 @@ amount of prompt injection changes it.
 > agent's key is exfiltrated, layer 1 protects nothing — the attacker simply
 > doesn't run this server.
 
-**Today this server ships the keypair path, which has no layer 2.** See
-[Smart accounts](#smart-accounts-are-blocked-upstream) — treat the key it holds as
-a hot wallet and fund it with only what you are willing to lose.
+Layer 1 is always on. **Layer 2 requires `VELLAR_X402_WALLET`** — a Vellar smart
+account whose signing key carries a spending-limit policy. Without it you get
+layer 1 only, and the key is a hot wallet.
+
+Both layers apply together when configured, and they refuse at different points:
+layer 1 refuses *before signing*, layer 2 refuses *at settlement inside the
+wallet contract*. A refusal from layer 2 is visible as a policy rejection and
+tells the model that retrying with a larger `max_amount` will not help.
 
 ## Install
 
@@ -76,12 +80,22 @@ one prompt injection away from being echoed back out.
 | `VELLAR_X402_SECRET` | yes¹ | The payer's `S…` ed25519 secret |
 | `VELLAR_X402_SECRET_FILE` | yes¹ | Path to a file containing it instead |
 | `VELLAR_X402_ASSETS` | yes | `<assetContractId>:<sessionCeiling>` pairs, comma-separated |
+| `VELLAR_X402_WALLET` | no² | The paying smart account (`C…`) — **enables layer 2** |
+| `VELLAR_X402_POLICIES` | no² | Policy contracts in the key's `SignerLimits`, comma-separated |
 | `VELLAR_X402_NETWORK` | no | `testnet` (default) or `mainnet` |
 | `VELLAR_X402_RPC_URL` | no | Soroban RPC; defaults per network |
 | `VELLAR_X402_MAX_RESPONSE_BYTES` | no | Inline-content cap, default `262144` |
 
 ¹ Set exactly one of the two. `VELLAR_X402_SECRET_FILE` keeps the secret out of
 the process environment, where it is visible to child processes.
+
+² Together these select the chain-enforced path. With `VELLAR_X402_WALLET` set,
+`VELLAR_X402_SECRET` is the wallet's **agent session key**, not a standalone
+account. `VELLAR_X402_POLICIES` must name **every** policy in that key's
+`SignerLimits` — a missing one is rejected by the wallet before the policy is
+consulted, and the error looks like a broken signer rather than a missing
+co-signer. Setting policies without a wallet is refused at startup rather than
+ignored, so a half-configured layer 2 cannot look like a working one.
 
 `VELLAR_X402_ASSETS` is **both** the asset allowlist and the per-asset ceilings,
 because they are the same thing: an asset with no ceiling is not payable at all.
@@ -288,10 +302,50 @@ Payments are **serialised**. One key, one budget, one payment at a time:
 concurrent calls would otherwise each pass the ceiling check before either
 recorded a spend, and together exceed it.
 
-## Smart accounts are blocked upstream
+## The demonstration
 
-This server signs with a **plain ed25519 keypair**. It cannot yet pay from a
-Vellar smart account, and that is an upstream limitation, not a design choice:
+Two payments through the MCP protocol against a policy-governed smart account
+with a **0.5 USDC on-chain cap**. The server's own limits were set deliberately
+*above* the cap for both — `max_amount` 1.0 USDC, session ceiling 10 USDC — so no
+process-level guard could be what refused the second one.
+
+| | payment | outcome | evidence |
+| --- | --- | --- | --- |
+| **A** | 0.1 USDC (under cap) | **settled** | [`9e1f3acf…a0eb9d2a`](https://horizon-testnet.stellar.org/transactions/9e1f3acf3681d8a418b7619d480eefce855f7ff9a62b5546255c52cea0eb9d2a) — `successful: true`, ledger 4141211 |
+| **B** | 0.6 USDC (over cap) | **refused by the chain** | `__check_auth` → `policy__` → `Error(Contract, #1)`; no transaction, session ledger untouched |
+
+The wallet's USDC balance moved by exactly the settled amount and no more, so B
+spent nothing — confirmed by arithmetic on-chain, not by trusting the error.
+
+Reproducible as `test/integration/layer2.integration.test.ts`.
+
+### Reading the refusal
+
+The wallet wraps **every** auth failure in its own `Error(Contract, #110)`, so
+the top-level code says only *"auth failed"*, not why. The cause is nested:
+
+```
+[wallet] "contract try_call failed", policy__, [ …transfer args, 6000000… ]
+[policy] "VM call trapped with HostError", policy__, Error(Contract, #1)
+```
+
+A failed `policy__` call is the signal that a **policy** refused — layer 2 doing
+its job — as opposed to a malformed signature map, which produces the same `#110`
+with no policy invocation. Classifying on the top-level code alone gets this
+backwards; an earlier revision here did exactly that.
+
+### What it costs
+
+A policy-governed settle costs **28,678–116,202 stroops** actually charged
+on-chain (0.003–0.012 XLM), against a simulated estimate of 140,331 and a
+facilitator ceiling of 500,000. It fits with room to spare, and it is roughly the
+same as a plain keypair settle — running a policy inside `__check_auth` adds
+~6,900 stroops, about 5%.
+
+## Smart accounts: shipped here, still blocked in the official client
+
+Layer 2 works — but **not** through `@x402/stellar`'s `ExactStellarScheme`, which
+still cannot sign for a `C…` credential address:
 
 `AssembledTransaction.signAuthEntries` narrows any signer result to a naked
 buffer, which routes `authorizeEntry` down its ed25519 branch and calls
@@ -300,12 +354,26 @@ buffer, which routes `authorizeEntry` down its ed25519 branch and calls
 escape hatch exists for exactly this case, but `signAuthEntries` closes it off.
 Reproduced live against a deployed smart account.
 
-So the keypair version ships first, behind the `PaymentSigner` interface in
-[`src/signer.ts`](src/signer.ts). When upstream threads `authorizeEntry` through
-the client scheme, a smart-account implementation drops in there and nothing else
-in this package changes. **We do not fork the SDK to get there.**
+Filed upstream as
+[x402-foundation/x402#3159](https://github.com/x402-foundation/x402/issues/3159).
 
-Until then there is no layer 2 on this path. Fund the key accordingly.
+**We are not waiting on it.** `x402Client.register()` accepts any
+`SchemeNetworkClient`, so this package registers its own
+([`src/smart-account-scheme.ts`](src/smart-account-scheme.ts)) which signs the
+auth entries directly and never calls `signAuthEntries` — the narrowing that
+blocks the official path simply never happens. That is a documented extension
+point, not a fork.
+
+Everything above the `PaymentSigner` seam is identical on both paths: guards,
+option narrowing, the selection tripwire, retry, the session ledger. Swapping
+signers is the whole difference, which is what that interface was for.
+
+One thing the wallet requires that the official client would not have told you:
+a policy-governed key must carry its policies in the signature map as
+`SignerKey::Policy` entries alongside the ed25519 one. Omit them and the wallet
+rejects the entry **before consulting the policy**, with the same opaque `#110`
+— which reads as a broken signer rather than a missing co-signer. Set
+`VELLAR_X402_POLICIES` to every policy in the key's `SignerLimits`.
 
 ## Development
 

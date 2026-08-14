@@ -43,6 +43,19 @@ export interface PayerConfig {
   readonly allowedAssets: readonly string[];
   /** Inlined resource text is truncated past this many bytes, with a marker. */
   readonly maxResponseBytes: number;
+  /**
+   * The paying smart account (`C…`). Present ⇒ LAYER 2: payments are signed for
+   * this wallet and its on-chain spending-limit policy is the real bound.
+   * Absent ⇒ layer 1 only, paying from the bare keypair as a hot wallet.
+   */
+  readonly walletAddress?: string;
+  /**
+   * Policy contracts the signing key's `SignerLimits` require. These must appear
+   * in the signature map or the WALLET rejects the entry before the policy is
+   * consulted — `Error(Contract, #110)`, which reads as a broken signer rather
+   * than a missing co-signer.
+   */
+  readonly policies: readonly string[];
   /** The payer secret. Non-enumerable — see the module comment. */
   readonly secret: string;
 }
@@ -160,6 +173,26 @@ function parseAssets(raw: string): Map<string, bigint> {
   return ceilings;
 }
 
+/** Parse `VELLAR_X402_POLICIES`: comma-separated policy contract ids. */
+function parsePolicies(raw: string | undefined): readonly string[] {
+  if (raw === undefined || raw.trim() === "") return Object.freeze([]);
+  const out: string[] = [];
+  for (const entry of raw.split(",")) {
+    const policy = entry.trim();
+    if (policy === "") continue;
+    if (!StrKey.isValidContract(policy)) {
+      throw new ConfigError(
+        `VELLAR_X402_POLICIES names ${JSON.stringify(policy)}, which is not a Soroban contract id (C…).`,
+      );
+    }
+    if (out.includes(policy)) {
+      throw new ConfigError(`VELLAR_X402_POLICIES lists ${policy} more than once.`);
+    }
+    out.push(policy);
+  }
+  return Object.freeze(out);
+}
+
 function parseNetwork(raw: string | undefined): PayerNetwork {
   const value = (raw ?? "testnet").trim();
   if (value !== "testnet" && value !== "mainnet") {
@@ -196,6 +229,23 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PayerConfig {
   const rpcUrl = env.VELLAR_X402_RPC_URL?.trim() || undefined;
   const maxResponseBytes = parseMaxResponseBytes(env.VELLAR_X402_MAX_RESPONSE_BYTES);
 
+  const walletAddress = env.VELLAR_X402_WALLET?.trim() || undefined;
+  if (walletAddress !== undefined && !StrKey.isValidContract(walletAddress)) {
+    throw new ConfigError(
+      `VELLAR_X402_WALLET must be a Soroban contract id (C…), got ${JSON.stringify(walletAddress)}.`,
+    );
+  }
+
+  const policies = parsePolicies(env.VELLAR_X402_POLICIES);
+  if (policies.length > 0 && walletAddress === undefined) {
+    // Policies only mean something for a smart account. Silently ignoring them
+    // would look like layer 2 is configured when it is not.
+    throw new ConfigError(
+      "VELLAR_X402_POLICIES is set but VELLAR_X402_WALLET is not. Policies apply to a " +
+        "smart account's signer; without a wallet there is no on-chain budget to enforce.",
+    );
+  }
+
   const config = {
     network,
     caip2: CAIP2_BY_NETWORK[network],
@@ -203,6 +253,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PayerConfig {
     ceilings,
     allowedAssets: Object.freeze([...ceilings.keys()]),
     maxResponseBytes,
+    ...(walletAddress !== undefined ? { walletAddress } : {}),
+    policies,
   };
 
   // Non-enumerable: absent from JSON.stringify, {...spread}, Object.keys, and
