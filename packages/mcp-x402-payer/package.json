@@ -1,6 +1,8 @@
 {
   "name": "@vellar/mcp-x402-payer",
   "version": "0.1.0",
+  "//private": "NOT publishable: `vellar-sdk` below is a `file:../..` workspace link, which installs broken from a registry. Publishing this needs that swapped for a real version range first. Until then `private` stops a stray `npm publish --workspaces` from shipping it.",
+  "private": true,
   "description": "MCP server that lets an AI agent pay for x402 resources on Stellar. Holds exactly one key, runs locally over stdio.",
   "license": "Apache-2.0",
   "type": "module",
