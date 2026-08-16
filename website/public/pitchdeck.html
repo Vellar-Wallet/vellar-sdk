@@ -665,8 +665,9 @@ document.querySelectorAll('img[data-img]').forEach(el=>el.src=IMG[el.dataset.img
 const slides=[...document.querySelectorAll('.slide')];let i=0,gm=false;
 const cE=document.getElementById('count');
 const gridBtn=document.getElementById('grid');
-function enterSingle(n){gm=false;gridBtn.classList.remove('on');i=Math.max(0,Math.min(slides.length-1,n));slides.forEach((s,k)=>{s.style.display=k===i?'flex':'none';s.classList.remove('active')});void slides[i].offsetWidth;slides[i].classList.add('active');cE.textContent=(i+1)+' / '+slides.length;window.scrollTo(0,0)}
-function enterGrid(){gm=true;gridBtn.classList.add('on');slides.forEach(s=>{s.style.display='flex';s.classList.remove('active')});cE.textContent='GRID'}
+const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('active');io.unobserve(e.target)}}),{threshold:0.25});
+function enterSingle(n){gm=false;gridBtn.classList.remove('on');io.disconnect();i=Math.max(0,Math.min(slides.length-1,n));slides.forEach((s,k)=>{s.style.display=k===i?'flex':'none';s.classList.remove('active')});void slides[i].offsetWidth;slides[i].classList.add('active');cE.textContent=(i+1)+' / '+slides.length;window.scrollTo(0,0)}
+function enterGrid(){gm=true;gridBtn.classList.add('on');slides.forEach(s=>{s.style.display='flex';s.classList.remove('active');io.observe(s)});cE.textContent='GRID'}
 function show(n){if(gm)return;enterSingle(n)}
 function tg(){if(gm)enterSingle(i);else enterGrid()}
 document.getElementById('prev').onclick=()=>show(i-1);
