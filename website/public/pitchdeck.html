@@ -295,7 +295,7 @@ table.cmp td.us{background:var(--tint-green)}
         <div class="ch">Bazaar Discovery</div>
         <ul class="b">
           <li>Every settled payment <b>auto-catalogs</b> its resource, no separate registration.</li>
-          <li>Agents search in plain language over HTTP or an <b>MCP server</b>.</li>
+          <li>Agents search in keyword search over HTTP or an <b>MCP server</b>.</li>
           <li>Each result carries the exact asset, amount, and payTo to pay.</li>
           <li>The RFP's highest-value deliverable, already live.</li>
         </ul>
@@ -362,8 +362,9 @@ table.cmp td.us{background:var(--tint-green)}
       <tr><td>Bazaar discovery (agents find services)</td><td class="us c yes">&#10003;</td><td class="c no">&#10007;</td></tr>
       <tr><td>MCP server for agents</td><td class="us c yes">&#10003;</td><td class="c no">&#10007;</td></tr>
       <tr><td>Policy-governed payments accepted</td><td class="us c yes">&#10003;</td><td class="c no">&#10007;</td></tr>
-      <tr><td>Provenance-gated spending (verified-only)</td><td class="us c yes">&#10003;</td><td class="c no">&#10007;</td></tr>
+      <tr><td>Provenance-gated spending (on-chain wallet policy)</td><td class="us c yes">&#10003;</td><td class="c no">&#10007;</td></tr>
       <tr><td>Raised fee ceiling for smart-account auth</td><td class="us c yes">&#10003;</td><td class="c no">&#10007;</td></tr>
+      <tr><td>Listing ownership verified at the origin (anti-squat: the resource&rsquo;s own 402 must name its payee)</td><td class="us c yes">&#10003;</td><td class="c no">&#10007;</td></tr>
     </tbody>
   </table>
   <p class="src">Our differentiation is discovery and on-chain governance, the layers the reference facilitator does not have, plus a fee ceiling raised so policy-governed payments actually settle instead of being rejected. We are not trying to be the only facilitator on Stellar; healthy competition is good for the ecosystem.</p>
@@ -437,7 +438,7 @@ table.cmp td.us{background:var(--tint-green)}
         <li><b>Settle</b> — submits the SEP-41 transfer, sponsors the fee.</li>
         <li><b>Fee ceiling raised</b> so smart-account auth payments settle.</li>
         <li><b>Discovery API</b> — /discovery/resources, /discovery/search.</li>
-        <li><b>MCP server</b> — x402_list_resources, x402_search_resources.</li>
+        <li><b>MCP server</b> — x402_list_resources, x402_search_resources; a payer-side MCP server (x402_pay, x402_quote, x402_session_budget) ships in vellar-sdk, budget-enforced, key never in tool schemas.</li>
       </ul>
     </div>
     <div class="pcard grey">
@@ -454,7 +455,7 @@ table.cmp td.us{background:var(--tint-green)}
       <ul class="b">
         <li><b>vellar-sdk</b> on npm (650+ downloads) — passkey wallet, policies, x402 client.</li>
         <li><b>wallet.agents</b> — mint / revoke scoped session keys.</li>
-        <li><b>Attestor worker</b> — mirrors verification into the registry.</li>
+        <li><b>Attestor worker (built; deliberately undeployed pending attestor governance — verdicts honestly read “unknown” until then)</b> — mirrors verification into the registry.</li>
         <li><b>Docs</b> — facilitator, x402, policies, agent-keys guides.</li>
       </ul>
     </div>
@@ -520,7 +521,7 @@ table.cmp td.us{background:var(--tint-green)}
     </div>
     <div class="rcard blue">
       <h4>2. Spec conformance &amp; uptime</h4>
-      <p>Kept current as x402 evolves, with two fixes contributed upstream. Monitoring, uptime, and security patching are ongoing operating commitments, not one-off deliverables.</p>
+      <p>Kept current as x402 evolves, with two upstream defects found, reproduced, and filed with fixes offered (x402 #3125, #3158). Monitoring, uptime, and security patching are ongoing operating commitments, not one-off deliverables.</p>
     </div>
   </div>
   <div class="g2">
@@ -542,7 +543,7 @@ table.cmp td.us{background:var(--tint-green)}
       <div class="n">1</div>
       <h4>Production Hardening</h4>
       <ul class="b">
-        <li>Database-backed Bazaar catalog, multi-instance</li>
+        <li>Durable catalog delivered ahead of funding (libSQL/Turso, live since Aug 2026) — M1 funds the remaining hardening: multi-instance readiness</li>
         <li>Telemetry, metrics, public status dashboard</li>
         <li>Load-hardened settlement, no sequence collisions</li>
         <li>Deploy runbook + graceful shutdown</li>
@@ -598,7 +599,7 @@ table.cmp td.us{background:var(--tint-green)}
   <div class="g3" style="gap:16px">
     <div class="pcard green" style="position:relative"><div class="bnum" style="position:absolute;right:16px;top:10px;font-size:56px">1</div>
       <div class="ch" style="font-size:18.5px;max-width:76%">Done · Foundation</div>
-      <ul class="b"><li>Passkey smart wallet + SDK on npm (650+ downloads)</li><li>Spending-limit + verified-recipient policies</li><li>Facilitator + Bazaar + MCP, live on testnet</li><li>Provenance loop proven end to end</li></ul>
+      <ul class="b"><li>Passkey smart wallet + SDK on npm (650+ downloads)</li><li>Pre-mainnet security audit completed, every finding tracked to closure; 379 tests; self-funding public reliability probe in CI</li><li>Spending-limit + verified-recipient policies</li><li>Facilitator + Bazaar + MCP, live on testnet</li><li>Provenance loop proven end to end</li></ul>
     </div>
     <div class="pcard green" style="position:relative"><div class="bnum" style="position:absolute;right:16px;top:10px;font-size:56px">2</div>
       <div class="ch" style="font-size:18.5px;max-width:76%">Grant · Hardened Mainnet</div>
@@ -647,7 +648,7 @@ table.cmp td.us{background:var(--tint-green)}
   <div style="position:relative;z-index:2;height:100%;display:flex;flex-direction:column;justify-content:center;align-items:flex-end;text-align:right">
     <div class="lockup" style="justify-content:flex-end;margin-bottom:20px"><img data-img="logo" alt="Vellar" style="height:60px;width:auto"/></div>
     <div style="font-family:'Clash Display',sans-serif;font-size:70px;font-weight:700;letter-spacing:-.02em;color:var(--ink)">Thank You!!</div>
-    <p class="cp" style="max-width:420px;margin-top:14px;font-size:18px">The payment layer for the agent economy on Stellar, live today, ready for mainnet. Let's build the discovery and provenance layer the ecosystem is asking for.</p>
+    <p class="cp" style="max-width:420px;margin-top:14px;font-size:18px">The payment layer for the agent economy on Stellar, live today, with a documented, audited path to mainnet. Let's build the discovery and provenance layer the ecosystem is asking for.</p>
     <div class="mono" style="font-size:15.5px;color:var(--ink3);margin-top:18px">docs.vellar.xyz · github.com/Vellar-Wallet</div>
   </div>
 </section>
