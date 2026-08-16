@@ -364,7 +364,7 @@ table.cmp td.us{background:var(--tint-green)}
       <tr><td>Policy-governed payments accepted</td><td class="us c yes">&#10003;</td><td class="c no">&#10007;</td></tr>
       <tr><td>Provenance-gated spending (on-chain wallet policy)</td><td class="us c yes">&#10003;</td><td class="c no">&#10007;</td></tr>
       <tr><td>Raised fee ceiling for smart-account auth</td><td class="us c yes">&#10003;</td><td class="c no">&#10007;</td></tr>
-      <tr><td>Listing ownership verified at the origin (anti-squat: the resource&rsquo;s own 402 must name its payee)</td><td class="us c yes">&#10003;</td><td class="c no">&#10007;</td></tr>
+      <tr><td>Origin-verified listing ownership (anti-squat)</td><td class="us c yes">&#10003;</td><td class="c no">&#10007;</td></tr>
     </tbody>
   </table>
   <p class="src">Our differentiation is discovery and on-chain governance, the layers the reference facilitator does not have, plus a fee ceiling raised so policy-governed payments actually settle instead of being rejected. We are not trying to be the only facilitator on Stellar; healthy competition is good for the ecosystem.</p>
@@ -438,7 +438,7 @@ table.cmp td.us{background:var(--tint-green)}
         <li><b>Settle</b> — submits the SEP-41 transfer, sponsors the fee.</li>
         <li><b>Fee ceiling raised</b> so smart-account auth payments settle.</li>
         <li><b>Discovery API</b> — /discovery/resources, /discovery/search.</li>
-        <li><b>MCP server</b> — x402_list_resources, x402_search_resources; a payer-side MCP server (x402_pay, x402_quote, x402_session_budget) ships in vellar-sdk, budget-enforced, key never in tool schemas.</li>
+        <li><b>MCP server</b> — discovery tools, plus a payer-side server (x402_pay) in vellar-sdk — budget-enforced.</li>
       </ul>
     </div>
     <div class="pcard grey">
@@ -599,7 +599,7 @@ table.cmp td.us{background:var(--tint-green)}
   <div class="g3" style="gap:16px">
     <div class="pcard green" style="position:relative"><div class="bnum" style="position:absolute;right:16px;top:10px;font-size:56px">1</div>
       <div class="ch" style="font-size:18.5px;max-width:76%">Done · Foundation</div>
-      <ul class="b"><li>Passkey smart wallet + SDK on npm (650+ downloads)</li><li>Pre-mainnet security audit completed, every finding tracked to closure; 379 tests; self-funding public reliability probe in CI</li><li>Spending-limit + verified-recipient policies</li><li>Facilitator + Bazaar + MCP, live on testnet</li><li>Provenance loop proven end to end</li></ul>
+      <ul class="b"><li>Passkey smart wallet + SDK on npm (650+ downloads)</li><li>Security audit complete; 379 tests; public reliability probe</li><li>Spending-limit + verified-recipient policies</li><li>Facilitator + Bazaar + MCP, live on testnet</li><li>Provenance loop proven end to end</li></ul>
     </div>
     <div class="pcard green" style="position:relative"><div class="bnum" style="position:absolute;right:16px;top:10px;font-size:56px">2</div>
       <div class="ch" style="font-size:18.5px;max-width:76%">Grant · Hardened Mainnet</div>
