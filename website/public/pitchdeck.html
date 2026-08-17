@@ -290,33 +290,39 @@ table.cmp td.us{background:var(--tint-green)}
 <section class="slide">
   <div style="display:grid;grid-template-columns:200px 1fr;gap:24px;align-items:start">
     <div class="sidelabel">Our<br/>Solutions:</div>
-    <div class="g3">
-      <div class="pcard green">
-        <div class="ch">Bazaar Discovery</div>
-        <ul class="b">
-          <li>Every settled payment <b>auto-catalogs</b> its resource, no separate registration.</li>
-          <li>Agents search in keyword search over HTTP or an <b>MCP server</b>.</li>
-          <li>Each result carries the exact asset, amount, and payTo to pay.</li>
-          <li>The RFP's highest-value deliverable, already live.</li>
-        </ul>
+    <div>
+      <div class="g3">
+        <div class="pcard green">
+          <div class="ch">Bazaar Discovery</div>
+          <ul class="b">
+            <li>Every settled payment <b>auto-catalogs</b> its resource, no separate registration.</li>
+            <li>Agents search in keyword search over HTTP or an <b>MCP server</b>.</li>
+            <li>Each result carries the exact asset, amount, and payTo to pay.</li>
+            <li>The RFP's highest-value deliverable, already live.</li>
+          </ul>
+        </div>
+        <div class="pcard green">
+          <div class="ch">x402 Facilitator</div>
+          <ul class="b">
+            <li><b>Re-simulates</b> each payment against the chain before settling.</li>
+            <li>Settles the SEP-41 transfer and <b>sponsors the fee</b>.</li>
+            <li>Buyers hold no XLM; sellers charge per request.</li>
+            <li>No need to touch Soroban RPC or auth entries.</li>
+          </ul>
+        </div>
+        <div class="pcard green">
+          <div class="ch">On-chain Governance</div>
+          <ul class="b">
+            <li>A <b>spending-limit</b> policy caps how much.</li>
+            <li>A <b>verified-recipient</b> policy restricts what code.</li>
+            <li>Both run inside <b>__check_auth</b>, enforced by consensus.</li>
+            <li>Over-budget or unverified payments are rejected on-chain.</li>
+          </ul>
+        </div>
       </div>
-      <div class="pcard green">
-        <div class="ch">x402 Facilitator</div>
-        <ul class="b">
-          <li><b>Re-simulates</b> each payment against the chain before settling.</li>
-          <li>Settles the SEP-41 transfer and <b>sponsors the fee</b>.</li>
-          <li>Buyers hold no XLM; sellers charge per request.</li>
-          <li>No need to touch Soroban RPC or auth entries.</li>
-        </ul>
-      </div>
-      <div class="pcard green">
-        <div class="ch">On-chain Governance</div>
-        <ul class="b">
-          <li>A <b>spending-limit</b> policy caps how much.</li>
-          <li>A <b>verified-recipient</b> policy restricts what code.</li>
-          <li>Both run inside <b>__check_auth</b>, enforced by consensus.</li>
-          <li>Over-budget or unverified payments are rejected on-chain.</li>
-        </ul>
+      <div class="pcard blue" style="margin-top:16px;padding:18px 24px">
+        <div class="ch" style="margin-bottom:6px">Plus: A Passkey Wallet, Ready to Ship</div>
+        <p class="cp"><b>vellar-sdk</b> ships a ready-to-use passkey smart account &mdash; no seed phrase, no extension &mdash; so developers inherit the whole wallet-to-Bazaar stack, not just one piece of it.</p>
       </div>
     </div>
   </div>
