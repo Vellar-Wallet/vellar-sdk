@@ -16,6 +16,14 @@ export default function DocsLayout({ children }: { children: ReactNode }) {
         </Link>
         <div className="docs-topbar-spacer" />
         <a
+          href="https://explorer.vellar.xyz"
+          className="docs-toplink"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Explorer
+        </a>
+        <a
           href="https://github.com/Vellar-Wallet/vellar-sdk"
           className="docs-toplink"
           target="_blank"
