@@ -34,6 +34,8 @@ export const DOC_PAGES: DocPage[] = [
     description: "Pay HTTP-402 resources from a smart account with wallet.x402.fetch() — the give-your-agent-a-budget-not-your-keys flow." },
   { slug: "facilitator", title: "x402 Facilitator & Bazaar", nav: "Facilitator & Bazaar", section: "x402 Payments",
     description: "The hosted Stellar x402 facilitator: verify/settle endpoints, Bazaar discovery and search, trust signals, and operational limits." },
+  { slug: "upto", title: "upto — Metered Payments", nav: "Upto (metered)", section: "x402 Payments",
+    description: "The experimental upto scheme: authorize a spending ceiling with one signature, settle for the actual metered amount, enforced on-ledger by a Soroban contract." },
 
   // Agents & Provenance
   { slug: "agent-keys", title: "Agent Keys", nav: "Agent keys", section: "Agents & Provenance",
