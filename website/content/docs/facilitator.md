@@ -75,6 +75,14 @@ Soroban smart accounts are supported.
 Wire-compatible with the canonical x402 clients — `HTTPFacilitatorClient`
 and the `withBazaar` extension work unmodified.
 
+`/verify` and `/settle` accept two schemes: `exact` (price known and signed
+upfront — what everything on this page assumes) and the experimental
+`upto` (buyer signs a ceiling, facilitator settles the metered actual,
+enforced on-ledger) — see [`upto` — Metered Payments](./upto.md).
+
+Want to see real settlements instead of trusting this page? [explorer.vellar.xyz](https://explorer.vellar.xyz)
+is a public transaction explorer for this facilitator.
+
 ## For sellers
 
 Point your resource server's facilitator client at the URL and your API
@@ -172,9 +180,11 @@ node provision-testnet.mjs
 # 2. Start a seller advertising it, with the PAYTO/ASSET it just printed
 PAYTO=G... ASSET=C... PRICE_ATOMIC=1000000 node seller.mjs
 
-# 3. Pay it — classic keypair, no extra dependencies
+# 3. Pay it — classic keypair, no extra dependencies. No second funded
+#    account needed: the official client simulates from the SDK's own null
+#    account, so the payer is never the transaction source.
 RESOURCE_URL=http://127.0.0.1:4031/quote \
-PAYER_SECRET=S... SIM_SOURCE_ACCOUNT=G... \
+PAYER_SECRET=S... \
 node buyer-classic.mjs
 
 # (or buyer.mjs, for a Vellar smart-account payer with an on-chain budget —
@@ -216,7 +226,11 @@ a resource before paying:
   deployment.** These read from an external attestation service that is
   deployed nowhere — that's architectural, not an outage, and it will not
   change on its own. **Don't filter on `?verified_only=true`** — it filters
-  on this field, so it always returns an empty list.
+  on this field, and since the field can never be anything but `"unknown"`
+  here, the facilitator refuses the filter outright rather than silently
+  hand back an empty list: `400 { "error": "verified_only_unavailable",
+  "reason": "no_verdict_source_configured" }`, with `ownerVerified` named in
+  the response as the signal that does work.
 - `ownerVerified` — a **different, working** field, computed by the
   facilitator itself with no external dependency. `true` only when the
   facilitator fetched your resource's own URL and found your `payTo` in its
@@ -246,19 +260,30 @@ on `…/quote` fails verification against the URL it's actually checked at.
 
 Things a developer building against the hosted instance should know up front:
 
-- **Expect roughly one settle in three to fail on testnet — retry, don't
-  debug.** `/settle` sometimes returns an empty `transaction` field with one
-  of two reason codes: `settle_exact_stellar_transaction_submission_failed`
-  or `settle_exact_stellar_transaction_failed`. Both mean the same thing —
-  the transaction was **never submitted**, so nothing was spent and a retry
+- **Settlement can still fail on testnet — retry, don't debug.** `/settle`
+  occasionally returns an empty `transaction` field with one of two reason
+  codes: `settle_exact_stellar_transaction_submission_failed` or
+  `settle_exact_stellar_transaction_failed`. Both mean the same thing — the
+  transaction was **never submitted**, so nothing was spent and a retry
   cannot double-pay. Sign a fresh payload and retry (signatures expire in
-  ledgers, not wall-clock, so a cached one won't work anyway). This is
-  measured, not assumed: 13 attempts, 6 failures in one session, and the
-  merchant's on-chain balance afterward was exactly successes × price, with
-  no partial or duplicate transfers. The rate isn't stable — earlier
-  sessions saw 3/11 and 3/9 — so treat retry as mandatory, not a rare edge
-  case. This looks like testnet RPC instability, not a facilitator defect;
-  self-hosting doesn't fix it.
+  ledgers, not wall-clock, so a cached one won't work anyway). Root cause:
+  the underlying Soroban RPC occasionally answers `TRY_AGAIN_LATER` to a
+  perfectly valid transaction, for reasons it doesn't state (not sponsor
+  contention, not sequence numbers — see
+  [`diagnosis-settle-failures.md`](https://github.com/Vellar-Wallet/vellar-facilitator/blob/main/docs/diagnosis-settle-failures.md)
+  in the repo for the ruled-out list). **Since 2026-08-15 the facilitator
+  retries this itself** before giving up (two attempts, 6s apart, plus a
+  separate one-retry guard for a related ledger-skew failure on `/verify`
+  and `/settle`) — so you should see this less often than earlier sessions
+  did, though not never: an automated probe that ships with the retry,
+  running a controlled comparison (identical conditions, with and without
+  the retry) every few hours, has recorded **zero settlement failures in
+  either arm across its full run history so far** — meaning the RPC hasn't
+  been misbehaving during that window in a way this measurement caught, not
+  that the underlying issue is confirmed gone. Earlier, pre-retry sessions
+  saw failure rates as high as 1-in-3. Keep "sign fresh, retry once" as the
+  correct client-side handling regardless — it costs nothing when nothing
+  fails.
 - **The catalog is ephemeral.** The free tier has no persistent disk, so
   catalog entries and URL ownership bindings vanish on every restart or idle
   sleep — cold start doesn't just mean latency, it means data loss. A
@@ -284,10 +309,21 @@ Things a developer building against the hosted instance should know up front:
   healthy catalog doesn't carry the key at all — check for its presence,
   not its value, or "no such field" reads as "the endpoint doesn't report
   this" when it actually means everything is fine.
-- **No reliable warm window, at any hour.** Send a warming `GET /health`
-  (rate-limit-exempt) with a ~120s timeout ahead of a real request, rather
-  than let a user's first call eat the cold start. It then stays warm for
-  15 minutes past your last call.
+- **`/health` also reports `reverifyPending`** — the count of ownership
+  re-verification checks still in flight after a restart (see
+  `ownerVerified` above: it's rebuilt on the next settlement after any
+  restart, not stored). `0` means the catalog's trust state is settled;
+  anything higher means check back shortly rather than treat what you just
+  read as final.
+- **No guaranteed warm window, but the odds are better on weekdays.** A
+  best-effort keep-warm job pings the facilitator and demo seller every 10
+  minutes, **07:00–21:00 UTC on weekdays** — that narrows how often you'll
+  hit a cold instance during that window, but GitHub Actions scheduling is
+  best-effort and can slip past the 15-minute idle timeout, so it is not a
+  promise. Outside that window, or if a ping slips, assume cold. Send a
+  warming `GET /health` (rate-limit-exempt) with a ~120s timeout ahead of a
+  real request rather than let a user's first call eat the cold start. It
+  then stays warm for 15 minutes past your last call.
 
 ## Proven end to end
 
@@ -299,4 +335,5 @@ and runnable seller/buyer examples:
 [`docs/decisions.md`](https://github.com/Vellar-Wallet/vellar-facilitator/blob/main/docs/decisions.md)
 and
 [`examples/`](https://github.com/Vellar-Wallet/vellar-facilitator/tree/main/examples)
-in the repo.
+in the repo — or skip the hashes and browse real settlements yourself at
+[explorer.vellar.xyz](https://explorer.vellar.xyz), including `upto` ones.
