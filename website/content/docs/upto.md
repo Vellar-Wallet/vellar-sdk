@@ -178,6 +178,26 @@ in the facilitator repo.
 ## Watch it settle
 
 [explorer.vellar.xyz](https://explorer.vellar.xyz) is a public transaction
-explorer for this facilitator's settlements, `upto` included — the actual
-metered amount on a real settlement is easier to see there than to reconstruct
-from a signed ceiling.
+explorer — a separately built and operated service, not this facilitator
+describing itself — that classifies real settlements straight off the
+Stellar ledger. It shows `upto` settlements correctly today, verified rather
+than assumed: three settlements against the hosted facilitator each appear on
+[the feed](https://explorer.vellar.xyz) with `scheme: upto`,
+`settled by: vellar`, and the metered actual amount displayed, not the
+signed ceiling — `be728773…` (0.0555 USDC of a 0.15 ceiling), `f558307e…`
+(0.0312 of 0.08), and `12f0fa5c…` (0.0417 of 0.12); full tx hashes and the
+Horizon-confirmed record in the facilitator repo's
+[`docs/upto-deployment.md`](https://github.com/Vellar-Wallet/vellar-facilitator/blob/main/docs/upto-deployment.md).
+Per the explorer's own attribution breakdown at time of writing, 6 of 4,799 payments
+indexed across the visible testnet ecosystem carry a known facilitator, and
+all six are ours — a small, testnet-scale number stated as one, not a
+market-share claim.
+
+One thing worth knowing rather than discovering: the first settlement
+attempted through this path didn't show up at all when this was verified —
+not lag, a genuine gap in the explorer's classifier, which only recognized
+`exact`-scheme's direct-transfer shape and never looked at an `upto`
+settlement's contract invocation. Fixed in that repo (it now reads the
+actual amount from the token's own emitted transfer event, not from the
+envelope's signed-ceiling or facilitator-supplied args) — the three
+settlements above are the proof the fix holds, not the discovery of the bug.
