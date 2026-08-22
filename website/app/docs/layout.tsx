@@ -12,8 +12,7 @@ export default function DocsLayout({ children }: { children: ReactNode }) {
       <header className="docs-topbar">
         <Link href="/" className="docs-brand">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className="docs-wordmark" src="/logo-mark.png" alt="Vellar" />
-          <span className="docs-eyebrow mono">SDK</span>
+          <img className="docs-wordmark" src="/logo-mark.png" alt="Vellar SDK" />
         </Link>
         <div className="docs-topbar-spacer" />
         <a
