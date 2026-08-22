@@ -27,7 +27,10 @@ export function DocsNav() {
         <nav>
           {DOC_SECTIONS.map((group) => (
             <div key={group.section} className="docs-nav-group">
-              <p className="docs-nav-label mono">{group.section}</p>
+              {/* A group that is just one self-titled page needs no label */}
+              {(group.pages.length > 1 || group.pages[0]?.nav !== group.section) && (
+                <p className="docs-nav-label mono">{group.section}</p>
+              )}
               {group.pages.map((p) => {
                 const href = `/docs/${p.slug}`;
                 const active = pathname === href;
