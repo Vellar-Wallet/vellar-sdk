@@ -1,17 +1,72 @@
 /* ============================================================
-   Vellar SDK docs — self-contained design tokens + docs UI.
-   (Mirrors the Vellar brand palette; no dependency on the wallet app.)
+   Vellar SDK docs — "paper & signals" docs UI, self-contained.
+   Token values are a copy of the system source of truth
+   (vellar-dapp: apps/web/app/landing/landing.css .lp block) — keep in
+   sync; a shared token sheet is the eventual home.
+
+   Same rules as every Vellar surface: white paper ground, forest ink,
+   zero border-radius with 45° cut corners (two-layer clip borders), no
+   elevation shadows, Cabinet Grotesk display, mono only for genuinely
+   monospaced content. Code blocks invert to ink panels — the docs'
+   section-level dark moment.
+   Security/status text on white (AA-checked): ok #0d7a55 · bad #c2372b.
    ============================================================ */
+
 :root {
-  --neo-bg: #0a0f0d;
-  --neo-surface: #0e1512;
-  --line: rgba(255, 255, 255, 0.09);
-  --signal: #3ee6ad;
-  --ink: #eff5f2;
-  --muted: rgba(239, 245, 242, 0.74);
-  --muted2: rgba(239, 245, 242, 0.56);
-  --neo-inset: inset 4px 4px 10px rgba(0, 0, 0, 0.66),
-    inset -4px -4px 10px rgba(62, 230, 173, 0.06);
+  --paper: #ffffff;
+  --paper-tint: #f5f9f6;
+  --ink: #0c3b31;
+  --ink-soft: rgba(12, 59, 49, 0.74);
+  --ink-faint: rgba(12, 59, 49, 0.55);
+  --line: rgba(12, 59, 49, 0.16);
+  --line-strong: rgba(12, 59, 49, 0.32);
+  --mint: #3ee6ad;
+  --mint-soft: #dcf8ec;
+  --sun: #ffc94a;
+  --sun-soft: #ffefc9;
+  --ok: #0d7a55;
+  --bad: #c2372b;
+  --on-dark: #ffffff;
+  --on-dark-soft: rgba(255, 255, 255, 0.78);
+  --line-dark: rgba(255, 255, 255, 0.16);
+
+  --display: "Cabinet Grotesk", "Plus Jakarta Sans", system-ui, sans-serif;
+  --body: "Plus Jakarta Sans", system-ui, sans-serif;
+  --mono-stack: "Space Mono", ui-monospace, monospace;
+
+  /* Cut shapes + 1px-inset inner shapes (the two-layer border) */
+  --clip-card: polygon(0 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%);
+  --clip-card-in: polygon(
+    1px 1px,
+    calc(100% - 1px) 1px,
+    calc(100% - 1px) calc(100% - 16.41px),
+    calc(100% - 16.41px) calc(100% - 1px),
+    1px calc(100% - 1px)
+  );
+  --clip-sm: polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%);
+  --clip-sm-in: polygon(
+    1px 1px,
+    calc(100% - 1px) 1px,
+    calc(100% - 1px) calc(100% - 10.41px),
+    calc(100% - 10.41px) calc(100% - 1px),
+    1px calc(100% - 1px)
+  );
+  --side-clip: polygon(
+    0 0,
+    calc(100% - 20px) 0,
+    100% 20px,
+    100% calc(100% - 20px),
+    calc(100% - 20px) 100%,
+    0 100%
+  );
+  --side-clip-in: polygon(
+    1px 1px,
+    calc(100% - 20.41px) 1px,
+    calc(100% - 1px) 20.41px,
+    calc(100% - 1px) calc(100% - 20.41px),
+    calc(100% - 20.41px) calc(100% - 1px),
+    1px calc(100% - 1px)
+  );
 }
 
 * {
@@ -23,17 +78,25 @@ body {
   padding: 0;
 }
 body {
-  background: var(--neo-bg);
+  background: var(--paper);
   color: var(--ink);
-  font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+  font-family: var(--body);
   -webkit-font-smoothing: antialiased;
 }
 .mono {
-  font-family: "Space Mono", monospace;
+  font-family: var(--mono-stack);
 }
 a {
   color: inherit;
   text-decoration: none;
+}
+::selection {
+  background: var(--mint);
+  color: var(--ink);
+}
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
 }
 
 .docs-root {
@@ -50,27 +113,28 @@ a {
   gap: 16px;
   height: 64px;
   padding: 0 24px;
-  background: color-mix(in srgb, var(--neo-bg) 88%, transparent);
-  backdrop-filter: blur(12px);
+  background: var(--paper);
   border-bottom: 1px solid var(--line);
 }
 .docs-brand {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  align-items: center;
+  gap: 10px;
 }
 .docs-wordmark {
-  font-family: "Clash Display", sans-serif;
-  font-weight: 600;
-  font-size: 20px;
-  letter-spacing: 0.02em;
-  color: var(--ink);
+  /* asset is 2000×989 (~2.02:1); pin both dims so it can't squish */
+  display: block;
+  height: 26px;
+  width: 53px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 .docs-eyebrow {
   font-size: 11px;
+  font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--signal);
+  color: var(--ink-faint);
 }
 .docs-topbar-spacer {
   flex: 1;
@@ -78,19 +142,29 @@ a {
 .docs-toplink {
   font-size: 14px;
   font-weight: 600;
-  color: var(--muted);
+  color: var(--ink-soft);
+  padding-bottom: 2px;
+  border-bottom: 3px solid transparent;
+  transition: border-color 0.2s ease;
 }
 .docs-toplink:hover {
-  color: var(--ink);
+  border-bottom-color: var(--sun);
 }
 .docs-launch {
   font-size: 14px;
   font-weight: 700;
-  color: #04120c;
-  background: var(--signal);
-  padding: 8px 16px;
-  border-radius: 999px;
+  color: var(--ink);
+  background: var(--sun);
+  padding: 9px 16px;
+  clip-path: var(--clip-sm);
   white-space: nowrap;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease;
+}
+.docs-launch:hover {
+  background: var(--ink);
+  color: var(--sun);
 }
 
 /* Body: sidebar + content */
@@ -102,42 +176,70 @@ a {
 }
 .docs-sidebar {
   position: sticky;
-  top: 64px;
+  top: 76px;
   flex-shrink: 0;
   width: 250px;
-  height: calc(100vh - 64px);
+  height: calc(100vh - 64px - 24px);
+  margin: 12px 0 12px 12px;
   overflow-y: auto;
-  padding: 28px 16px;
-  border-right: 1px solid var(--line);
+  padding: 24px 14px;
+  background: var(--line-strong); /* the 1px border */
+  clip-path: var(--side-clip);
+}
+.docs-sidebar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--paper);
+  clip-path: var(--side-clip-in);
 }
 .docs-nav-group {
   margin-bottom: 22px;
 }
 .docs-nav-label {
   font-size: 10px;
+  font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--muted2);
+  color: var(--ink-faint);
   margin: 0 0 10px 12px;
 }
 .docs-nav-link {
   display: block;
   padding: 8px 12px;
-  border-radius: 10px;
   font-size: 14px;
   font-weight: 500;
-  color: var(--muted);
-  transition: color 0.15s, background 0.15s;
+  color: var(--ink-soft);
+  clip-path: var(--clip-sm);
+  transition:
+    color 0.2s ease,
+    background 0.2s ease;
 }
 .docs-nav-link:hover {
   color: var(--ink);
-  background: color-mix(in srgb, var(--neo-surface) 60%, transparent);
+  background: var(--paper-tint);
 }
+/* Active: mint fill inside a sharp ink border, cut corner included
+   (two-layer clip — the element paints the border, ::before the fill) */
 .docs-nav-link.active {
-  color: var(--signal);
-  background: var(--neo-bg);
-  box-shadow: var(--neo-inset);
+  position: relative;
+  color: var(--ink);
+  background: var(--ink); /* the 1px border */
   font-weight: 700;
+}
+.docs-nav-link.active::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--mint-soft);
+  clip-path: var(--clip-sm-in);
+}
+/* the clip would cut an outer focus ring — draw it inset */
+.docs-nav-link:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--ink);
 }
 
 /* Content */
@@ -150,9 +252,9 @@ a {
   max-width: 760px;
 }
 .docs-title {
-  font-family: "Clash Display", sans-serif;
+  font-family: var(--display);
   font-size: clamp(2rem, 4vw, 2.8rem);
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: -0.02em;
   margin: 6px 0 28px;
 }
@@ -163,15 +265,16 @@ a {
   line-height: 1.72;
 }
 .docs-prose h2 {
-  font-family: "Clash Display", sans-serif;
+  font-family: var(--display);
   font-size: 1.5rem;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  font-weight: 700;
+  letter-spacing: -0.015em;
   margin: 44px 0 14px;
   padding-top: 14px;
   border-top: 1px solid var(--line);
 }
 .docs-prose h3 {
+  font-family: var(--display);
   font-size: 1.15rem;
   font-weight: 700;
   margin: 30px 0 10px;
@@ -183,54 +286,60 @@ a {
 }
 .docs-prose p {
   margin: 14px 0;
-  color: var(--muted);
+  color: var(--ink-soft);
 }
 .docs-prose strong {
   color: var(--ink);
   font-weight: 700;
 }
 .docs-prose a {
-  color: var(--signal);
-  border-bottom: 1px solid color-mix(in srgb, var(--signal) 40%, transparent);
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: var(--mint);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  transition: text-decoration-color 0.2s ease;
 }
 .docs-prose a:hover {
-  border-bottom-color: var(--signal);
+  text-decoration-color: var(--ink);
 }
 .docs-prose ul,
 .docs-prose ol {
   margin: 14px 0;
   padding-left: 22px;
-  color: var(--muted);
+  color: var(--ink-soft);
 }
 .docs-prose li {
   margin: 6px 0;
 }
 .docs-prose li::marker {
-  color: var(--muted2);
+  color: var(--ink-faint);
 }
 .docs-prose code {
-  font-family: "Space Mono", monospace;
+  font-family: var(--mono-stack);
   font-size: 0.86em;
-  background: var(--neo-bg);
+  background: var(--paper-tint);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 0;
   padding: 1px 6px;
-  color: var(--signal);
+  color: var(--ink);
 }
+/* Code blocks: the docs' inverted ink moment (cut corner on a solid fill) */
 .docs-prose pre {
-  background: var(--neo-bg);
-  border: 1px solid var(--line);
-  border-radius: 14px;
+  background: var(--ink);
+  border: 0;
+  border-radius: 0;
+  clip-path: var(--clip-card);
   padding: 18px 20px;
   overflow-x: auto;
   margin: 18px 0;
-  box-shadow: var(--neo-inset);
 }
 .docs-prose pre code {
   background: none;
   border: none;
   padding: 0;
-  color: var(--ink);
+  color: var(--on-dark);
   font-size: 13px;
   line-height: 1.6;
 }
@@ -250,20 +359,20 @@ a {
   vertical-align: top;
 }
 .docs-prose th {
-  background: var(--neo-surface);
+  background: var(--paper-tint);
   font-weight: 700;
   color: var(--ink);
   white-space: nowrap;
 }
 .docs-prose td {
-  color: var(--muted);
+  color: var(--ink-soft);
 }
 .docs-prose blockquote {
   margin: 18px 0;
   padding: 12px 18px;
-  border-left: 3px solid var(--signal);
-  background: color-mix(in srgb, var(--signal) 7%, transparent);
-  border-radius: 0 12px 12px 0;
+  border-left: 3px solid var(--sun);
+  background: var(--sun-soft);
+  border-radius: 0;
 }
 .docs-prose blockquote p {
   margin: 6px 0;
@@ -275,7 +384,7 @@ a {
   margin: 36px 0;
 }
 
-/* Pager */
+/* Pager — cut-corner two-layer cards */
 .docs-pager {
   display: flex;
   justify-content: space-between;
@@ -283,19 +392,26 @@ a {
   margin-top: 56px;
 }
 .docs-pager-link {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 4px;
   padding: 16px 20px;
-  border-radius: 16px;
   min-width: 180px;
-  border: 1px solid var(--line);
-  background: var(--neo-surface);
-  transition: transform 0.12s, border-color 0.2s;
+  background: var(--line-strong); /* the 1px border */
+  clip-path: var(--clip-card);
+  transition: translate 0.2s ease;
+}
+.docs-pager-link::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--paper);
+  clip-path: var(--clip-card-in);
 }
 .docs-pager-link:hover {
-  transform: translateY(-2px);
-  border-color: color-mix(in srgb, var(--signal) 40%, var(--line));
+  translate: 0 -2px;
 }
 .docs-pager-next {
   text-align: right;
@@ -303,7 +419,7 @@ a {
 }
 .docs-pager-dir {
   font-size: 12px;
-  color: var(--muted2);
+  color: var(--ink-faint);
 }
 .docs-pager-title {
   font-weight: 700;
@@ -323,9 +439,9 @@ a {
     font-size: 13px;
     font-weight: 700;
     color: var(--ink);
-    background: var(--neo-surface);
-    border: 1px solid var(--line);
-    border-radius: 999px;
+    background: var(--sun);
+    border: none;
+    clip-path: var(--clip-sm);
     position: fixed;
     right: 16px;
     bottom: 16px;
@@ -339,9 +455,15 @@ a {
     z-index: 55;
     height: calc(100vh - 64px);
     width: 260px;
+    margin: 0;
+    clip-path: none;
     transform: translateX(-100%);
     transition: transform 0.2s ease;
-    background: var(--neo-surface);
+    background: var(--paper);
+    border-right: 1px solid var(--line-strong);
+  }
+  .docs-sidebar::before {
+    display: none;
   }
   .docs-sidebar.open {
     transform: translateX(0);
@@ -373,25 +495,26 @@ a {
   font: inherit;
   font-size: 13px;
   font-weight: 600;
-  color: var(--muted);
-  background: var(--neo-surface);
-  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  background: var(--paper);
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
   padding: 8px 14px;
   cursor: pointer;
-  transition: color 0.2s, border-color 0.2s;
+  transition:
+    color 0.2s ease,
+    background 0.2s ease;
 }
 .docs-copy-main {
-  border-radius: 10px 0 0 10px;
   border-right: none;
 }
 .docs-copy-caret {
-  border-radius: 0 10px 10px 0;
   padding: 8px 10px;
 }
 .docs-copy-main:hover,
 .docs-copy-caret:hover {
   color: var(--ink);
-  border-color: color-mix(in srgb, var(--signal) 40%, var(--line));
+  background: var(--paper-tint);
 }
 .docs-copy-menu {
   position: absolute;
@@ -401,11 +524,10 @@ a {
   display: flex;
   flex-direction: column;
   min-width: 190px;
-  background: var(--neo-surface);
-  border: 1px solid var(--line);
-  border-radius: 12px;
+  background: var(--paper);
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
   overflow: hidden;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
 }
 .docs-copy-menu button,
 .docs-copy-menu a {
@@ -413,7 +535,7 @@ a {
   font-size: 13px;
   font-weight: 600;
   text-align: left;
-  color: var(--muted);
+  color: var(--ink-soft);
   background: none;
   border: none;
   padding: 10px 14px;
@@ -423,5 +545,5 @@ a {
 .docs-copy-menu button:hover,
 .docs-copy-menu a:hover {
   color: var(--ink);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--paper-tint);
 }
