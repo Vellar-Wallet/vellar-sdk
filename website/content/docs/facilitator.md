@@ -42,11 +42,73 @@ smart-account wallet for the buyer side — see [Agent keys](./agent-keys.md)
 for generating that keypair without the secret ever touching a command line
 or a file.
 
-**The demo seller's `X402TST` (`CDYCX4PE…`) cannot be acquired by anyone.**
-Its issuer keypair was generated in-process by a throwaway script, and the
-secret no longer exists — nobody can mint more of it, including us. If you
-find that contract id in `/discovery/resources`, don't spend time trying to
-get a balance of it; point your own buyer at your own seller instead.
+**One old Bazaar entry, `X402TST` (`CDYCX4PE…`), cannot be acquired by
+anyone.** Its issuer keypair was generated in-process by a throwaway script,
+and the secret no longer exists — nobody can mint more of it, including us.
+If you find that contract id in `/discovery/resources`, don't spend time
+trying to get a balance of it. This warning is about **that entry only** —
+the deployed demo seller itself now charges real testnet USDC and is payable
+by anyone; see the next section.
+
+## Paying the deployed demo seller
+
+Want to test against a live seller without running your own?
+`https://vellar-seller-demo.onrender.com/quote` charges **0.1 real testnet
+USDC** (`USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5`,
+Circle's official testnet issuer) with sponsored fees. Testnet USDC is
+freely obtainable with no faucet form: Friendbot an account, then buy USDC
+on the testnet DEX with the Friendbot XLM — the same two steps the
+[playground](https://playground.vellar.xyz) performs when it funds a
+session wallet:
+
+```ts
+import {
+  Asset,
+  Horizon,
+  Keypair,
+  Networks,
+  Operation,
+  TransactionBuilder,
+} from "@stellar/stellar-sdk";
+
+const USDC = new Asset("USDC", "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5");
+const horizon = new Horizon.Server("https://horizon-testnet.stellar.org");
+
+const payer = Keypair.random();
+await fetch(`https://friendbot.stellar.org?addr=${payer.publicKey()}`);
+
+const account = await horizon.loadAccount(payer.publicKey());
+const tx = new TransactionBuilder(account, { fee: "1000", networkPassphrase: Networks.TESTNET })
+  .addOperation(Operation.changeTrust({ asset: USDC }))
+  .addOperation(
+    Operation.pathPaymentStrictReceive({
+      sendAsset: Asset.native(),
+      sendMax: "1000", // XLM you are willing to spend
+      destination: payer.publicKey(),
+      destAsset: USDC,
+      destAmount: "0.5", // USDC you receive
+    }),
+  )
+  .setTimeout(60)
+  .build();
+tx.sign(payer);
+await horizon.submitTransaction(tx);
+console.log("payer:", payer.publicKey(), "secret:", payer.secret());
+```
+
+Then pay the seller with that keypair (classic flow, from `examples/`):
+
+```sh
+RESOURCE_URL="https://vellar-seller-demo.onrender.com/quote?topic=perseverance" \
+PAYER_SECRET=S...   # the secret the script printed
+node buyer-classic.mjs
+```
+
+Both steps are verified working end to end. Note the demo seller is a free
+Render instance — from deep sleep the first request can take a minute or
+more to answer. For the **smart-account/agent** flow you still provision
+your own seller (below): a fresh smart account holds no USDC, and the
+budget-policy story needs an asset your policies are scoped to.
 
 ## Why it exists
 
