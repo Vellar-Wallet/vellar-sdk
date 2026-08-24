@@ -43,6 +43,14 @@ These forward to your server, which holds the OpenZeppelin Relayer / sponsor
 credentials and submits to the network. See [How It Works](./how-it-works.md)
 for why submission is server-side.
 
+> **You don't have to build this backend to get started.** A hosted testnet
+> gateway runs at `https://vellar-backend.onrender.com` — point
+> `createHttpWalletBackend` at it and skip the server work entirely (this is
+> what [hackathon](./hackathon.md#getting-started) projects should do). It
+> also serves the policy API for `apiUrl`. Free instance: the first request
+> after idle can take 30–60 seconds to wake. Run your own backend when you
+> ship to production.
+
 ## Requirements
 
 - **A secure context** — WebAuthn (passkeys) only works over HTTPS or

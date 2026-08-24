@@ -20,5 +20,8 @@ jobs:
       # change is reported and decided, not forced through by CI.
       - run: npm audit --audit-level=high
       - run: npm run typecheck
+      # Docs snippets typecheck against the current source — a quickstart that
+      # drifts from the real API fails the PR that introduces the drift.
+      - run: npm run check:docs
       - run: npm test
       - run: npm run build

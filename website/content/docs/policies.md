@@ -34,7 +34,10 @@ const vellar = createVellarWallet({
   sac,
   backend,
   isValidAddress,
-  apiUrl: "https://api.myapp.com", // your policy API gateway
+  // The hosted testnet policy gateway (same host as the wallet backend).
+  // Production: your own gateway. Free instance — the first request after a
+  // quiet spell can take 30-60s while it wakes.
+  apiUrl: "https://vellar-backend.onrender.com",
   policyAttach: {
     // build kit.addPolicy(contractId) → passkey-sign → submit via your backend
     async attachPolicy(policyContractId) {
@@ -52,6 +55,28 @@ const vellar = createVellarWallet({
 
 Without `apiUrl`, `wallet.policies` throws. Without `policyAttach`, read /
 generate / simulate still work but `deploy()` throws a clear error.
+
+### Zero-context smoke test
+
+Nothing here needs a wallet or a passkey — paste this anywhere (browser console,
+a Node script) to confirm the gateway is live and see the real templates,
+including their honest enforcement labels:
+
+```ts
+import { createPolicyClient } from "vellar-sdk";
+
+const policyClient = createPolicyClient({
+  apiUrl: "https://vellar-backend.onrender.com",
+  network: "testnet",
+});
+
+const templates = await policyClient.listTemplates();
+console.log(templates.map((t) => `${t.type} — ${t.title} (${t.enforcement.kind})`));
+// e.g. "spending_limit — Spending limit (policy-contract)"
+```
+
+If that prints templates, your config is right — everything after this is the
+same client with a wallet session attached (`wallet.policies`).
 
 ## The flow
 

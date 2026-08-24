@@ -27,8 +27,12 @@ API reference, wallet methods, policies, and the security model.
 ## Install
 
 ```sh
-npm install vellar-sdk @stellar/stellar-sdk
+npm install vellar-sdk @stellar/stellar-sdk passkey-kit
 ```
+
+`@stellar/stellar-sdk` is a required peer; `passkey-kit` is the passkey engine
+you construct and pass in as `kit` (an optional peer of this package — the SDK
+never imports it itself).
 
 ## Quick start
 
@@ -58,8 +62,10 @@ const vellar = createVellarWallet({
     rpcUrl: TESTNET.rpcUrl,
     networkPassphrase: TESTNET.networkPassphrase,
   }),
-  // Point this at YOUR backend (see "Your backend" below). It holds the
-  // relayer/sponsor secrets — the SDK never sees them.
+  // Your backend (see "Your backend" below) — it holds the relayer/sponsor
+  // secrets, the SDK never sees them. For testnet prototyping you can point at
+  // the hosted gateway: https://vellar-backend.onrender.com (free instance,
+  // first request after idle takes 30-60s to wake).
   backend: createHttpWalletBackend("https://api.myapp.com"),
   isValidAddress: (a) =>
     StrKey.isValidEd25519PublicKey(a) || StrKey.isValidContract(a),

@@ -54,6 +54,10 @@ us.
 **Key SDK surface:** `createVellarWallet`, `.create()`, `.connect()`, `.pay()`.
 See [Quickstart](./quickstart.md).
 
+**Config you need:** point `backend` at the hosted testnet gateway,
+`createHttpWalletBackend("https://vellar-backend.onrender.com")` — the
+[Quickstart](./quickstart.md#1-create-the-client) shows the full client setup.
+
 ### Track 2, Policy Builder
 
 Programmable on-chain spending controls, built on `wallet.policies`. Vellar
@@ -69,6 +73,11 @@ surprise us.
 **Key SDK surface:** `wallet.policies` (templates, generate, simulate, deploy).
 See [Policies](./policies.md).
 
+**Config you need:** `apiUrl: "https://vellar-backend.onrender.com"` in
+`createVellarWallet` (the same host as the wallet backend) — see
+[Enabling policies](./policies.md#enabling-policies), which includes a
+zero-context smoke test you can paste before writing any wallet code.
+
 ### Track 3, x402 Agent Payments
 
 **"Give your agent a budget, not your keys."** An autonomous agent holds a
@@ -83,6 +92,13 @@ starting points, not the ceiling, the strongest submissions will surprise us.
 
 **Key SDK surface:** `wallet.x402.fetch()`, `createSessionKeySigner`. See
 [x402 Agentic Payments](./x402.md).
+
+**Config you need:** the `x402` block in `createVellarWallet` — a session-key
+signer, a Friendbot-funded `G...` account as `simulationSourceAccount`, and
+`rpcUrl: "https://soroban-testnet.stellar.org"` — copy it from
+[Enabling x402](./x402.md#enabling-x402). Mint the session key per
+[Agent Keys](./agent-keys.md), and discover payable resources through the
+[facilitator's Bazaar](./facilitator.md).
 
 > **Scope note:** this track is specifically about **agent (session-key)
 > payments**, the proven, working path. Human passkey-signed x402 payments
