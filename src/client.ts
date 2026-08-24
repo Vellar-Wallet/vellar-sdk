@@ -12,7 +12,12 @@ import { createPolicyFacade, type PolicyAttachRuntime, type PolicyFacade } from 
 import { createAgentsFacade, type AgentKeyRuntime, type AgentsFacade } from "./agents-facade";
 import { createX402Facade } from "./x402-facade";
 import type { FetchLike } from "./x402-client";
-import { X402NotConfiguredError, type SmartAccountX402Signer, type X402Client } from "./x402-types";
+import {
+  assertValidX402RpcUrl,
+  X402NotConfiguredError,
+  type SmartAccountX402Signer,
+  type X402Client,
+} from "./x402-types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Vellar Wallet SDK — public client facade.
@@ -173,10 +178,17 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
 
   let session: WalletSession | null = null;
 
+  // Validate at construction so a missing/malformed RPC URL fails here, next to
+  // the config that caused it — not later inside wallet.x402.fetch(). (The
+  // facade re-validates on every call via createX402Client, in case the config
+  // object is mutated after construction.)
+  const x402RpcUrl = config.x402 ? (config.x402.rpcUrl ?? config.rpcUrl) : undefined;
+  if (config.x402) assertValidX402RpcUrl(x402RpcUrl);
+
   const x402 = createX402Facade({
     config: config.x402
       ? {
-          rpcUrl: config.x402.rpcUrl ?? config.rpcUrl ?? "",
+          rpcUrl: x402RpcUrl as string,
           network: config.network,
           simulationSourceAccount: config.x402.simulationSourceAccount,
           fetchImpl: config.x402.fetchImpl,

@@ -27,6 +27,7 @@ import {
   utf8ToBase64,
 } from "./x402-guards";
 import {
+  assertValidX402RpcUrl,
   DisallowedAssetError,
   MaxAmountExceededError,
   NoUsablePaymentOptionError,
@@ -104,6 +105,8 @@ export function expirationOffsetFor(
 }
 
 export function createX402Client(deps: X402ClientDeps): X402Client {
+  // Fail here, with the actionable error, not inside rpc.Server's URL parse.
+  assertValidX402RpcUrl(deps.rpcUrl);
   const server = new rpc.Server(deps.rpcUrl);
   const doFetch: FetchLike = deps.fetchImpl ?? ((url, init) => fetch(url, init));
   // A hard ceiling on the derived expiration offset (undefined ⇒ no ceiling).

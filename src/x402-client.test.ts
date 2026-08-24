@@ -12,9 +12,36 @@ import {
   InvalidRequirementsError,
   MaxAmountExceededError,
   NoUsablePaymentOptionError,
+  X402NotConfiguredError,
   type SmartAccountX402Signer,
 } from "./x402-types";
 import { C_ADDRESS, SIM_SOURCE, requirements, response402 } from "./x402-test-fixtures";
+
+describe("createX402Client — rpcUrl validation", () => {
+  function withRpcUrl(rpcUrl: string) {
+    return () =>
+      createX402Client({
+        signer: stubSigner,
+        rpcUrl,
+        network: "testnet",
+        simulationSourceAccount: SIM_SOURCE,
+      });
+  }
+
+  it("an empty rpcUrl throws X402NotConfiguredError, never rpc.Server's raw TypeError", () => {
+    expect(withRpcUrl("")).toThrow(X402NotConfiguredError);
+    expect(withRpcUrl("")).not.toThrow(TypeError);
+  });
+
+  it("non-URL garbage throws X402NotConfiguredError with the example value", () => {
+    expect(withRpcUrl("not a url")).toThrow(X402NotConfiguredError);
+    expect(withRpcUrl("not a url")).toThrow(/soroban-testnet\.stellar\.org/);
+  });
+
+  it("a valid URL constructs the client", () => {
+    expect(withRpcUrl("https://soroban-testnet.stellar.org")).not.toThrow();
+  });
+});
 
 /** A signer stub that never actually signs (guards should reject before signing). */
 const stubSigner: SmartAccountX402Signer = {
