@@ -104,6 +104,7 @@
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit && tsc --noEmit -p packages/mcp-x402-payer/tsconfig.json",
+    "check:docs": "node scripts/check-doc-snippets.mjs",
     "test": "vitest run",
     "test:integration": "npm run test:integration --workspace @vellar/mcp-x402-payer",
     "prepublishOnly": "npm run typecheck && npm test && npm run build",
@@ -117,6 +118,7 @@
   },
   "devDependencies": {
     "@stellar/stellar-sdk": "^16.0.1",
+    "passkey-kit": "^0.16.5",
     "tsup": "^8.5.1",
     "typescript": "^5.9.2",
     "vitest": "^3.2.0"
