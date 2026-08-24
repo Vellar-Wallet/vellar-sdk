@@ -83,6 +83,33 @@ export class WalletNetworkMismatchError extends Error {
   }
 }
 
+/** A passkey (WebAuthn) ceremony was attempted outside a browser. */
+export class PasskeyBrowserRequiredError extends Error {
+  constructor(operation: string) {
+    super(
+      `${operation} runs a passkey (WebAuthn) ceremony, which needs a browser — this ` +
+        "environment has no WebAuthn credentials API (typical for a Node script or SSR). " +
+        "For headless, CLI, or agent flows: mint an agent session key from a browser " +
+        "session (wallet.agents.mint), then sign with createSessionKeySigner and pay " +
+        "via wallet.x402.",
+    );
+    this.name = "PasskeyBrowserRequiredError";
+  }
+}
+
+/**
+ * Passkey ceremonies die deep inside the kit with a raw WebAuthnError when run
+ * outside a browser; this guard fails first, with the actionable message.
+ * Checked per ceremony (not at construction) so SSR apps can still construct
+ * the client on the server and only ceremony calls demand the browser.
+ */
+function assertBrowserWebAuthnContext(operation: string): void {
+  const g = globalThis as { window?: unknown; navigator?: { credentials?: unknown } };
+  if (g.window === undefined || !g.navigator?.credentials) {
+    throw new PasskeyBrowserRequiredError(operation);
+  }
+}
+
 export function createPasskeyKitConnector(options: PasskeyKitConnectorOptions): WalletConnector {
   const { kit, backend, network, appName } = options;
   const now = options.now ?? (() => new Date());
@@ -112,6 +139,7 @@ export function createPasskeyKitConnector(options: PasskeyKitConnectorOptions): 
 
   return {
     async createWallet(input: CreateWalletInput): Promise<WalletSession> {
+      assertBrowserWebAuthnContext("createWallet() (vellar.create())");
       assertNetwork(input.network);
       const username = input.username?.trim() || "Vellar user";
       const { keyIdBase64, contractId, signedTx } = await kit.createWallet(appName, username);
@@ -127,6 +155,7 @@ export function createPasskeyKitConnector(options: PasskeyKitConnectorOptions): 
     },
 
     async connectWallet(requested: Network): Promise<WalletSession> {
+      assertBrowserWebAuthnContext("connectWallet() (vellar.connect())");
       assertNetwork(requested);
       // The lookup that resolves the wallet also opens the server session
       // record; capture its id for device management.

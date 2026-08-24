@@ -1,6 +1,18 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createVellarWallet, WalletNotReadyError } from "./client";
+import { PasskeyBrowserRequiredError } from "./passkeykit-connector";
+import { X402NotConfiguredError, type SmartAccountX402Signer } from "./x402-types";
 import type { TokenInfo } from "./balances";
+
+// create()/connect() guard on a browser WebAuthn context; these unit tests run
+// in Node with a mock kit, so simulate the browser globals.
+beforeEach(() => {
+  vi.stubGlobal("window", {});
+  vi.stubGlobal("navigator", { credentials: {} });
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 // The facade composes the connector + payment client. We feed it fakes for the
 // three host-supplied pieces (kit, backend, sac) and assert it wires create /
@@ -114,5 +126,59 @@ describe("createVellarWallet", () => {
     const { wallet } = build();
     expect(typeof wallet.connector.signTransaction).toBe("function");
     expect(typeof wallet.payments.preparePayment).toBe("function");
+  });
+
+  it("create() in a non-browser environment fails with the clear passkey error", async () => {
+    vi.unstubAllGlobals(); // plain Node: no window, no navigator.credentials
+    const { wallet, kit } = build();
+    await expect(wallet.create({ username: "alice" })).rejects.toBeInstanceOf(
+      PasskeyBrowserRequiredError,
+    );
+    expect(kit.createWallet).not.toHaveBeenCalled();
+  });
+});
+
+describe("x402 rpcUrl validation at construction", () => {
+  const signer: SmartAccountX402Signer = {
+    address: "CWALLET",
+    async signAuthEntry() {
+      throw new Error("signer should not be called in these tests");
+    },
+  };
+
+  function x402Config(rpcUrl?: string) {
+    return { signer, simulationSourceAccount: "GSOURCE", ...(rpcUrl !== undefined && { rpcUrl }) };
+  }
+
+  it("an empty-string rpcUrl throws X402NotConfiguredError, not a raw TypeError", () => {
+    expect(() => build({ x402: x402Config(""), rpcUrl: "" })).toThrow(X402NotConfiguredError);
+  });
+
+  it("a missing rpcUrl (neither x402.rpcUrl nor top-level) throws at construction", () => {
+    expect(() => build({ x402: x402Config() })).toThrow(X402NotConfiguredError);
+  });
+
+  it("non-URL garbage throws, and the message names the fix with an example", () => {
+    expect(() => build({ x402: x402Config("not a url") })).toThrow(
+      /soroban-testnet\.stellar\.org/,
+    );
+  });
+
+  it("a valid x402.rpcUrl passes construction", () => {
+    const { wallet } = build({ x402: x402Config("https://soroban-testnet.stellar.org") });
+    expect(wallet.x402).toBeDefined();
+  });
+
+  it("a valid top-level rpcUrl also satisfies x402", () => {
+    const { wallet } = build({
+      x402: x402Config(),
+      rpcUrl: "https://soroban-testnet.stellar.org",
+    });
+    expect(wallet.x402).toBeDefined();
+  });
+
+  it("no x402 config at all still constructs (x402 stays lazily unconfigured)", () => {
+    const { wallet } = build();
+    expect(wallet.x402).toBeDefined();
   });
 });

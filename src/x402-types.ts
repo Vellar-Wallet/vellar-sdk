@@ -140,6 +140,34 @@ export class X402NotConfiguredError extends Error {
   }
 }
 
+/**
+ * Guard: x402 needs a parseable RPC URL. Without this, an empty or malformed
+ * `rpcUrl` slipped through construction and only failed later, deep inside
+ * `@stellar/stellar-sdk` (`new rpc.Server("")` → raw `TypeError: Invalid URL`)
+ * — far from the misconfiguration that caused it. Runs at `createVellarWallet`
+ * construction AND on every `createX402Client` call, so a config object
+ * mutated after construction still fails with the clear error.
+ */
+export function assertValidX402RpcUrl(rpcUrl: string | undefined): asserts rpcUrl is string {
+  let valid = false;
+  if (typeof rpcUrl === "string" && rpcUrl.length > 0) {
+    try {
+      new URL(rpcUrl);
+      valid = true;
+    } catch {
+      valid = false;
+    }
+  }
+  if (!valid) {
+    const got = rpcUrl === undefined ? "undefined" : JSON.stringify(rpcUrl);
+    throw new X402NotConfiguredError(
+      `wallet.x402 requires a valid \`rpcUrl\` (got ${got}). Pass it as \`x402.rpcUrl\` ` +
+        "(or top-level `rpcUrl`) in createVellarWallet, e.g. " +
+        '"https://soroban-testnet.stellar.org" for testnet.',
+    );
+  }
+}
+
 /** The server asked for more than the caller's `maxAmount`. No payment was signed. */
 export class MaxAmountExceededError extends Error {
   constructor(

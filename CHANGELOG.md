@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.6.1 — 2026-08-24
+
+Developer-experience patch ahead of the hackathon. Everything is additive; no
+public API was removed or changed in shape. Three first-hour failure modes now
+fail fast with actionable errors instead of raw stack traces:
+
+- **`passkey-kit` is declared as an optional peer dependency** (`>=0.13.0
+  <0.17.0`, the range the structural `PasskeyKitLike` seam is written against).
+  The SDK still never imports it — hosts construct the real `PasskeyKit` and
+  pass it in — but package managers now surface the relationship instead of the
+  Quick Start's `import { PasskeyKit } from "passkey-kit"` failing with a bare
+  `Cannot find module`.
+
+- **A missing or malformed x402 `rpcUrl` now throws `X402NotConfiguredError` at
+  `createVellarWallet` construction** (and defensively on every
+  `createX402Client` call), naming the field and giving the testnet example
+  value. Previously an empty `rpcUrl` slipped through and `wallet.x402.fetch()`
+  later failed deep inside `@stellar/stellar-sdk` with a raw
+  `TypeError: Invalid URL`. New export: `assertValidX402RpcUrl`.
+
+- **Passkey ceremonies outside a browser now throw
+  `PasskeyBrowserRequiredError` before any WebAuthn call.** `vellar.create()` /
+  `vellar.connect()` in a Node script used to die inside the kit with a raw
+  `WebAuthnError`; the new error explains that WebAuthn needs a browser and
+  points headless/CLI/agent users at the session-key path
+  (`wallet.agents.mint` + `createSessionKeySigner` + `wallet.x402`). The check
+  runs per ceremony, so SSR apps can still construct the client server-side.
+
 ## 0.6.0 — 2026-08-15
 
 **If you are on 0.5.0, upgrade.** It contains a Critical vulnerability: the client
