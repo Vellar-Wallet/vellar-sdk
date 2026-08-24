@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createPasskeyKitConnector,
   defaultSignedToXdr,
+  PasskeyBrowserRequiredError,
   resumeKitConnection,
   WalletNetworkMismatchError,
   type PasskeyKitLike,
@@ -9,6 +10,16 @@ import {
 } from "./passkeykit-connector";
 
 const FIXED_NOW = new Date("2026-07-16T15:00:00.000Z");
+
+// The ceremony entry points guard on a browser WebAuthn context; these unit
+// tests run in Node with a mock kit, so simulate the browser globals.
+beforeEach(() => {
+  vi.stubGlobal("window", {});
+  vi.stubGlobal("navigator", { credentials: {} });
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 function fakeKit(overrides: Partial<PasskeyKitLike> = {}): PasskeyKitLike {
   return {
@@ -105,6 +116,38 @@ describe("createWallet", () => {
       WalletNetworkMismatchError,
     );
     expect(kit.createWallet).not.toHaveBeenCalled();
+  });
+});
+
+describe("browser WebAuthn context guard", () => {
+  it("createWallet outside a browser fails clearly, before any WebAuthn call", async () => {
+    vi.unstubAllGlobals(); // plain Node: no window, no navigator.credentials
+    const kit = fakeKit();
+    await expect(connector(kit).createWallet({ network: "testnet" })).rejects.toBeInstanceOf(
+      PasskeyBrowserRequiredError,
+    );
+    await expect(connector(kit).createWallet({ network: "testnet" })).rejects.toThrow(
+      /createSessionKeySigner/,
+    );
+    expect(kit.createWallet).not.toHaveBeenCalled();
+  });
+
+  it("connectWallet outside a browser fails clearly, before any WebAuthn call", async () => {
+    vi.unstubAllGlobals();
+    const kit = fakeKit();
+    await expect(connector(kit).connectWallet("testnet")).rejects.toBeInstanceOf(
+      PasskeyBrowserRequiredError,
+    );
+    expect(kit.connectWallet).not.toHaveBeenCalled();
+  });
+
+  it("a window without a credentials API (e.g. bare jsdom) is also refused", async () => {
+    vi.unstubAllGlobals();
+    vi.stubGlobal("window", {});
+    vi.stubGlobal("navigator", {}); // navigator exists but has no credentials
+    await expect(connector().createWallet({ network: "testnet" })).rejects.toBeInstanceOf(
+      PasskeyBrowserRequiredError,
+    );
   });
 });
 
