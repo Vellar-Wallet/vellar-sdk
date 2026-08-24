@@ -36,7 +36,7 @@ const vellar = createVellarWallet({
   isValidAddress,
   // The hosted testnet policy gateway (same host as the wallet backend).
   // Production: your own gateway. Free instance — the first request after a
-  // quiet spell can take 30-60s while it wakes.
+  // quiet spell can take 30-90s (occasionally ~2min) while it wakes.
   apiUrl: "https://vellar-backend.onrender.com",
   policyAttach: {
     // build kit.addPolicy(contractId) → passkey-sign → submit via your backend

@@ -177,7 +177,12 @@ discoverable," using this page alone:
 # 1. Provision an asset + funded accounts (~40s–3min)
 node provision-testnet.mjs
 
-# 2. Start a seller advertising it, with the PAYTO/ASSET it just printed
+# 2. Start a seller advertising it, with the PAYTO/ASSET it just printed.
+#    Heads up: with a localhost URL and the SHARED facilitator, seller.mjs
+#    REFUSES to start (a localhost resource would enter the public Bazaar
+#    permanently, unverifiable). For local testing add
+#    ALLOW_UNVERIFIABLE_ON_SHARED=1, or run your own facilitator and set
+#    FACILITATOR_URL — the refusal message walks through both.
 PAYTO=G... ASSET=C... PRICE_ATOMIC=1000000 node seller.mjs
 
 # 3. Pay it — classic keypair, no extra dependencies. No second funded
