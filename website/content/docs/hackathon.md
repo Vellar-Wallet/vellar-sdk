@@ -98,7 +98,9 @@ signer, a Friendbot-funded `G...` account as `simulationSourceAccount`, and
 `rpcUrl: "https://soroban-testnet.stellar.org"` — copy it from
 [Enabling x402](./x402.md#enabling-x402). Mint the session key per
 [Agent Keys](./agent-keys.md), and discover payable resources through the
-[facilitator's Bazaar](./facilitator.md).
+[facilitator's Bazaar](./facilitator.md). Want to test against a live seller
+without running your own? The demo seller accepts testnet USDC — see
+[Paying the deployed demo seller](./facilitator.md#paying-the-deployed-demo-seller).
 
 > **Scope note:** this track is specifically about **agent (session-key)
 > payments**, the proven, working path. Human passkey-signed x402 payments
@@ -341,6 +343,47 @@ npm run dev
 - [ ] Submission **Issue** opened with the correct title and template filled in
 - [ ] Submitted **before the deadline**
 
+
+## FAQ
+
+The canonical answers for the pinned channel FAQ — if these ever disagree
+with a pinned message, this page wins.
+
+**The first request is hanging / everything seems down.** The hosted backend
+and facilitator sleep when idle (free instances). The first request after a
+quiet spell can take 30–90 seconds, occasionally ~2 minutes, while they
+wake. Retry — after that everything is fast. Not a bug in your code.
+
+**How do I get a funded testnet account?** Friendbot, free:
+`curl "https://friendbot.stellar.org?addr=G...YOURKEY"`. You only need it
+for x402's `simulationSourceAccount` (never charged) — wallet creation and
+payments are fee-sponsored. See the [Quickstart](./quickstart.md#0-install).
+
+**`vellar.create()` crashes in my Node script.** Passkeys are WebAuthn,
+browser-only. For Node, CLIs, and agents use the session-key path: mint an
+agent key (browser session, or `provision-testnet.mjs`), then
+`createSessionKeySigner` + `wallet.x402`. The `PasskeyBrowserRequiredError`
+you'll see says exactly this. See [Agent Keys](./agent-keys.md).
+
+**Can I build on passkey-signed x402?** No — it does not settle on any
+deployed facilitator. Build on the session-key (agent) path. See
+[x402](./x402.md).
+
+**I got `X402NotConfiguredError`.** Your x402 config is missing a valid
+`rpcUrl`. Add `rpcUrl: "https://soroban-testnet.stellar.org"` to the `x402`
+block of `createVellarWallet`. Seeing a raw `TypeError: Invalid URL`
+instead? Upgrade to `vellar-sdk` 0.6.1.
+
+**Can I pay the demo seller from the Bazaar?** Yes — it charges real
+testnet USDC. Easiest: the [playground](https://playground.vellar.xyz)
+funds a session wallet with USDC automatically and pays with one click.
+Headless: Friendbot an account, then buy USDC on the testnet DEX — the
+exact recipe is in
+[Paying the deployed demo seller](./facilitator.md#paying-the-deployed-demo-seller).
+For the smart-account/agent flow, run your own seller via
+`provision-testnet.mjs` instead. One asset in the Bazaar genuinely can't be
+obtained (`X402TST` — its issuer key was destroyed); that warning is about
+that entry only, not the demo seller.
 
 ## Getting Started
 

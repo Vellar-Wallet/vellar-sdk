@@ -63,7 +63,8 @@ hash, and native-token id — no more digging for magic values. And
 > hosted testnet gateway (the same one the [hackathon](./hackathon.md#getting-started)
 > uses) — fine for the hackathon and prototyping. It runs on a free Render
 > instance that sleeps when idle, so the **first request after a quiet spell can
-> take 30–60 seconds** while it wakes; retry once rather than assuming a bug.
+> take 30–90 seconds — occasionally up to ~2 minutes** while it wakes; retry
+> rather than assuming a bug.
 > For production you run your own backend — it's three routes holding your
 > relayer/sponsor secrets; see [Installation](./installation.md#what-you-supply)
 > and [How It Works](./how-it-works.md).
