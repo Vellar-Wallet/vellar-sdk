@@ -1,0 +1,40 @@
+# Hackathon keepalive — keeps the free-tier Render services warm so
+# participants never hit a cold start mid-tutorial.
+#
+# Measured wake-from-sleep times (2026-08-24): backend ~89s to first response,
+# facilitator ~32s, demo seller several minutes. The docs promise "30-60s", so
+# without this, the first participant of every quiet hour eats a worse wait
+# than we advertise.
+#
+# ENABLE THIS THE DAY BEFORE THE HACKATHON and DISABLE IT AFTER:
+#   - enable:  uncomment the `schedule:` block below and merge.
+#   - disable: comment the block back out (or delete this file).
+# It is shipped commented out on purpose, so merging this PR alone starts
+# nothing. `workflow_dispatch` stays available for a manual warm-up anytime.
+#
+# Render free instances sleep after ~15 idle minutes; a 10-minute cadence
+# keeps them continuously warm (~4.3k requests/month per service — free).
+
+name: Hackathon keepalive
+
+on:
+  workflow_dispatch:
+  # schedule:
+  #   - cron: "*/10 * * * *"
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping hosted services
+        # Never fail the run: a slow wake is exactly the situation this exists
+        # to absorb, and a red X every 10 minutes would just be noise. The log
+        # records each service's status and response time instead.
+        run: |
+          for url in \
+            "https://vellar-backend.onrender.com/health" \
+            "https://vellar-facilitator.onrender.com/health" \
+            "https://vellar-seller-demo.onrender.com/quote"; do
+            code=$(curl -s -o /dev/null -m 120 -w "%{http_code} in %{time_total}s" "$url" || echo "unreachable")
+            echo "$url -> $code"
+          done
