@@ -1,4 +1,9 @@
-name: Close PRs targeting main
+name: Redirect PRs from main to dev
+
+# Contributions are not accepted on `main`. Any PR opened against `main` by
+# someone other than the maintainer (davedumto) is automatically retargeted to
+# the `dev` branch and a comment (tagging the author) explains what happened.
+# The contributor does NOT have to reopen anything — their PR is preserved.
 
 on:
   pull_request_target:
@@ -9,7 +14,7 @@ permissions:
   pull-requests: write
 
 jobs:
-  close:
+  redirect-to-dev:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/github-script@v7
@@ -17,24 +22,37 @@ jobs:
           script: |
             const pr = context.payload.pull_request;
             if (pr.state === "closed") return;
+
+            // The maintainer is allowed to open PRs directly to main.
+            const MAINTAINER = "davedumto";
+            if (pr.user.login === MAINTAINER) return;
+
             // Maintainers (owner, org members, collaborators) may PR to main.
             if (["OWNER", "MEMBER", "COLLABORATOR"].includes(pr.author_association)) return;
-            const repoUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}`;
+
+            // Safety: only act while the base is still main (avoid loops).
+            if (pr.base.ref !== "main") return;
+
+            const author = pr.user.login;
+
+            // Retarget the PR from main -> dev. The contributor's work is kept.
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              base: "dev",
+            });
+
+            // Explain what happened.
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: pr.number,
               body: [
-                "Thanks for the contribution — but pull requests to `main` are reserved for maintainers.",
+                `Hi @${author} — thanks for the contribution!`,
                 "",
-                "All contributions must target the **`drips`** branch. Please open your PR again with `drips` as the base branch (or use the *Edit* button next to the PR title to change the base).",
+                "We do **not** accept pull requests to the `main` branch. All contributions go to the **`dev`** branch, so I've automatically **retargeted this PR from `main` to `dev`** for you.",
                 "",
-                `See [CONTRIBUTING.md](${repoUrl}/blob/main/CONTRIBUTING.md) for the contribution rules. Questions? Ask in the [Telegram group](https://t.me/+RWPCKXXJTj45Njk0).`,
+                "You don't need to reopen anything — your work is preserved and this PR now targets `dev`. Going forward, please set the base branch to `dev` when you open a PR. 🙏",
               ].join("\n"),
-            });
-            await github.rest.pulls.update({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: pr.number,
-              state: "closed",
             });
