@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createVellarWallet, WalletNotReadyError } from "./client";
+import {
+  createVellarWallet,
+  formatClientError,
+  VellarClientError,
+  WalletNotReadyError,
+} from "./client";
 import { PasskeyBrowserRequiredError } from "./passkeykit-connector";
 import { X402NotConfiguredError, type SmartAccountX402Signer } from "./x402-types";
 import type { TokenInfo } from "./balances";
@@ -135,6 +140,51 @@ describe("createVellarWallet", () => {
       PasskeyBrowserRequiredError,
     );
     expect(kit.createWallet).not.toHaveBeenCalled();
+  });
+});
+
+describe("VellarClientError shape", () => {
+  it("pay() before connect exposes code, message, and details", async () => {
+    const { wallet } = build();
+    try {
+      await wallet.pay({ to: "CDEST", amount: 5n, token });
+      expect.unreachable("pay() should throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(VellarClientError);
+      const error = err as VellarClientError;
+      expect(error.code).toBe("WALLET_NOT_READY");
+      expect(error.message).toMatch(/create\(\) or connect\(\)/);
+      expect(error.details).toEqual({ method: "pay" });
+      expect(formatClientError(error)).toBe(
+        '[WALLET_NOT_READY] Call create() or connect() before pay() — {"method":"pay"}',
+      );
+    }
+  });
+
+  it("policies without apiUrl exposes POLICIES_NOT_CONFIGURED with details", () => {
+    const { wallet } = build();
+    try {
+      void wallet.policies;
+      expect.unreachable("policies getter should throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(VellarClientError);
+      const error = err as VellarClientError;
+      expect(error.code).toBe("POLICIES_NOT_CONFIGURED");
+      expect(error.details).toEqual({ missing: "apiUrl" });
+      expect(formatClientError(error)).toMatch(/^\[POLICIES_NOT_CONFIGURED\]/);
+    }
+  });
+
+  it("agents before connect exposes WALLET_NOT_READY with method details", async () => {
+    const { wallet } = build({ agentKeys: {} as never });
+    try {
+      await wallet.agents.mint({ publicKey: "GTEST", grants: [] } as never);
+      expect.unreachable("agents.mint() should throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(VellarClientError);
+      expect((err as VellarClientError).code).toBe("WALLET_NOT_READY");
+      expect((err as VellarClientError).details).toEqual({ method: "agents" });
+    }
   });
 });
 

@@ -18,6 +18,12 @@ import {
   type SmartAccountX402Signer,
   type X402Client,
 } from "./x402-types";
+import {
+  VellarClientError,
+  WalletNotReadyError,
+} from "./client-errors";
+
+export { formatClientError, VellarClientError, WalletNotReadyError } from "./client-errors";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Vellar Wallet SDK — public client facade.
@@ -215,7 +221,9 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
   const agents = createAgentsFacade({
     requireSession: () => {
       if (!session) {
-        throw new WalletNotReadyError("Call create() or connect() before using agents");
+        throw new WalletNotReadyError("Call create() or connect() before using agents", {
+          method: "agents",
+        });
       }
       return { accountId: session.accountId, keyId: session.keyId };
     },
@@ -229,7 +237,9 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
     network: config.network,
     requireSession: () => {
       if (!session) {
-        throw new WalletNotReadyError("Call create() or connect() before using policies");
+        throw new WalletNotReadyError("Call create() or connect() before using policies", {
+          method: "policies",
+        });
       }
       return { accountId: session.accountId, keyId: session.keyId };
     },
@@ -245,8 +255,10 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
     },
     get policies() {
       if (!config.apiUrl) {
-        throw new WalletNotReadyError(
+        throw new VellarClientError(
+          "POLICIES_NOT_CONFIGURED",
           "wallet.policies requires `apiUrl` in createVellarWallet config (the policy API gateway).",
+          { missing: "apiUrl" },
         );
       }
       return policies;
@@ -276,7 +288,7 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
 
     async pay({ to, amount, token }) {
       if (!session) {
-        throw new WalletNotReadyError("Call create() or connect() before pay()");
+        throw new WalletNotReadyError("Call create() or connect() before pay()", { method: "pay" });
       }
       const prepared = await payments.preparePayment({
         from: session.accountId,
@@ -287,11 +299,4 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
       return prepared.confirm();
     },
   };
-}
-
-export class WalletNotReadyError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "WalletNotReadyError";
-  }
 }
