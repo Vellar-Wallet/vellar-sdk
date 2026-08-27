@@ -17,6 +17,16 @@ const session: WalletSession = {
   lastActiveAt: "2026-07-16T10:00:00.000Z",
 };
 
+function fakeStorage() {
+  const map = new Map<string, string>();
+  return {
+    getItem: (k: string) => map.get(k) ?? null,
+    setItem: (k: string, v: string) => void map.set(k, v),
+    removeItem: (k: string) => void map.delete(k),
+    map,
+  };
+}
+
 describe("createSessionStore", () => {
   it("starts in loading state", () => {
     const store = createSessionStore(createMemoryStorageAdapter());
@@ -68,6 +78,27 @@ describe("createSessionStore", () => {
     expect(store.getState().status).toBe("disconnected");
   });
 
+  it("restore() rejects unversioned legacy cache entries", async () => {
+    const backing = fakeStorage();
+    backing.setItem("vellar.session", JSON.stringify(session));
+    const store = createSessionStore(createWebStorageAdapter(backing));
+    await store.getState().restore();
+    expect(store.getState().status).toBe("disconnected");
+    expect(store.getState().session).toBeNull();
+  });
+
+  it("restore() rejects mismatched schemaVersion", async () => {
+    const backing = fakeStorage();
+    backing.setItem(
+      "vellar.session",
+      JSON.stringify({ schemaVersion: 999, session }),
+    );
+    const store = createSessionStore(createWebStorageAdapter(backing));
+    await store.getState().restore();
+    expect(store.getState().status).toBe("disconnected");
+    expect(store.getState().session).toBeNull();
+  });
+
   it("touch() updates lastActiveAt and persists it", async () => {
     const storage = createMemoryStorageAdapter();
     const store = createSessionStore(storage);
@@ -110,23 +141,22 @@ describe("createSessionStore", () => {
 });
 
 describe("createWebStorageAdapter", () => {
-  function fakeStorage() {
-    const map = new Map<string, string>();
-    return {
-      getItem: (k: string) => map.get(k) ?? null,
-      setItem: (k: string, v: string) => void map.set(k, v),
-      removeItem: (k: string) => void map.delete(k),
-      map,
-    };
-  }
-
   it("round-trips a session under the given key", async () => {
     const backing = fakeStorage();
     const adapter = createWebStorageAdapter(backing, "test.key");
     await adapter.save(session);
     expect(backing.map.has("test.key")).toBe(true);
+    const raw = JSON.parse(backing.map.get("test.key")!);
+    expect(raw.schemaVersion).toBe(1);
     expect(await adapter.load()).toEqual(session);
     await adapter.clear();
+    expect(await adapter.load()).toBeNull();
+  });
+
+  it("returns null for unversioned legacy persisted sessions", async () => {
+    const backing = fakeStorage();
+    backing.setItem("vellar.session", JSON.stringify(session));
+    const adapter = createWebStorageAdapter(backing);
     expect(await adapter.load()).toBeNull();
   });
 

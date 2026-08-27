@@ -6,6 +6,43 @@ import type { WalletSession } from "./types";
 // worker + popup) can share it; each surface supplies its own storage adapter
 // (localStorage vs browser.storage), keeping the logic itself DRY.
 
+/**
+ * Persisted session envelope version. Bump when WalletSession fields or semantics
+ * change; reads with a different version are rejected (safe fallback to
+ * disconnected) rather than silently misinterpreted.
+ */
+export const SESSION_SCHEMA_VERSION = 1;
+
+interface PersistedSessionEnvelope {
+  schemaVersion: number;
+  session: WalletSession;
+}
+
+function isPersistedSessionEnvelope(value: unknown): value is PersistedSessionEnvelope {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    v.schemaVersion === SESSION_SCHEMA_VERSION &&
+    isWalletSession(v.session)
+  );
+}
+
+function wrapSession(session: WalletSession): PersistedSessionEnvelope {
+  return { schemaVersion: SESSION_SCHEMA_VERSION, session };
+}
+
+function unwrapSession(value: unknown): WalletSession | null {
+  // Versioned envelope written by current SDK.
+  if (isPersistedSessionEnvelope(value)) {
+    return value.session;
+  }
+  // Legacy unversioned writes are rejected — format may predate a breaking change.
+  if (isWalletSession(value)) {
+    return null;
+  }
+  return null;
+}
+
 export interface SessionStorageAdapter {
   load(): Promise<WalletSession | null>;
   save(session: WalletSession): Promise<void>;
@@ -92,10 +129,10 @@ export function createWebStorageAdapter(
       const raw = storage.getItem(key);
       if (raw === null) return null;
       const parsed: unknown = JSON.parse(raw);
-      return isWalletSession(parsed) ? parsed : null;
+      return unwrapSession(parsed);
     },
     async save(session) {
-      storage.setItem(key, JSON.stringify(session));
+      storage.setItem(key, JSON.stringify(wrapSession(session)));
     },
     async clear() {
       storage.removeItem(key);
@@ -105,13 +142,13 @@ export function createWebStorageAdapter(
 
 /** In-memory adapter for tests and ephemeral contexts. */
 export function createMemoryStorageAdapter(): SessionStorageAdapter {
-  let stored: WalletSession | null = null;
+  let stored: PersistedSessionEnvelope | null = null;
   return {
     async load() {
-      return stored;
+      return stored ? unwrapSession(stored) : null;
     },
     async save(session) {
-      stored = session;
+      stored = wrapSession(session);
     },
     async clear() {
       stored = null;
