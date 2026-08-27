@@ -1,5 +1,5 @@
 import { rpc, StrKey } from "@stellar/stellar-sdk";
-import type { TxStatus, TxStatusReader } from "./tx-status";
+import { createCachedTxStatusReader, type TxStatus, type TxStatusReader } from "./tx-status";
 
 // RPC-backed pieces of the payment flow (subpath export — see rpc.ts).
 
@@ -8,9 +8,13 @@ export function isValidStellarAddress(address: string): boolean {
   return StrKey.isValidEd25519PublicKey(address) || StrKey.isValidContract(address);
 }
 
-export function createRpcTxStatusReader(options: { rpcUrl: string }): TxStatusReader {
+export function createRpcTxStatusReader(options: {
+  rpcUrl: string;
+  /** TTL for cached final tx statuses. See createCachedTxStatusReader. Default: 2_000. */
+  cacheTtlMs?: number;
+}): TxStatusReader {
   const server = new rpc.Server(options.rpcUrl);
-  return {
+  const reader: TxStatusReader = {
     async getStatus(hash): Promise<TxStatus> {
       const res = await server.getTransaction(hash);
       switch (res.status) {
@@ -24,4 +28,5 @@ export function createRpcTxStatusReader(options: { rpcUrl: string }): TxStatusRe
       }
     },
   };
+  return createCachedTxStatusReader(reader, { cacheTtlMs: options.cacheTtlMs });
 }

@@ -294,6 +294,13 @@ signers (`createSessionKeySigner`, `createPasskeyX402Signer`), the
 RPC-backed readers (`vellar-sdk/rpc`, imported separately so
 `@stellar/stellar-sdk` stays out of bundles that don't read balances).
 
+Transaction status polling is available via `waitForTransaction(reader, hash, options?)`
+and `createRpcTxStatusReader({ rpcUrl, cacheTtlMs? })` from `vellar-sdk/rpc`.
+`WaitOptions` accepts `timeoutMs` (default 60_000), `intervalMs` (default 2_000),
+and `cacheTtlMs` (default 2_000, range 0–60_000) — how long finalized
+success/failed results are cached; pending is never cached so poll loops stay fresh.
+Set `cacheTtlMs` to `0` to disable caching.
+
 ## License
 
 Apache-2.0
