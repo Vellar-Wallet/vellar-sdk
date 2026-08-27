@@ -56,6 +56,13 @@ passkey's credential id (`keyId`). Persisting the `keyId` lets a returning user
 reconnect without the WebAuthn discovery ceremony — the passkey prompt then only
 appears at signing time.
 
+The session store's `refresh()` method re-reads the persisted session from
+storage and resolves to a documented `{ session, status }` result — use it when
+the tab regains focus or another tab may have updated the session. It never
+rejects; empty, malformed, or unreadable storage resolves to
+`{ session: null, status: "disconnected" }`. See
+[Advanced Usage](./advanced.md#session-store-refresh) for the example.
+
 ## Programmable policies
 
 Because accounts are smart contracts, Vellar wallets can carry on-chain policies

@@ -294,6 +294,33 @@ signers (`createSessionKeySigner`, `createPasskeyX402Signer`), the
 RPC-backed readers (`vellar-sdk/rpc`, imported separately so
 `@stellar/stellar-sdk` stays out of bundles that don't read balances).
 
+#### Session store refresh
+
+`createSessionStore`'s `refresh()` re-reads the persisted session from storage
+and resolves to a documented `SessionRefreshResult` — `{ session, status }` — so
+you can switch on the outcome instead of guessing:
+
+```ts
+import { createSessionStore, createWebStorageAdapter } from "vellar-sdk";
+
+const store = createSessionStore(createWebStorageAdapter(localStorage));
+
+// Re-read the persisted session, e.g. when the tab regains focus or after
+// another tab updated it:
+const { session, status } = await store.getState().refresh();
+
+if (status === "connected" && session) {
+  console.log("resumed", session.accountId); // C... smart-account address
+} else {
+  console.log("no usable session");
+}
+```
+
+`refresh()` never rejects: empty, malformed, or unreadable storage resolves to
+`{ session: null, status: "disconnected" }`. See the
+[session lifecycle](https://docs.vellar.xyz/docs/how-it-works#sessions--reconnect)
+for where refresh fits in.
+
 ## License
 
 Apache-2.0

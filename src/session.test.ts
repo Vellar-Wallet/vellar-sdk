@@ -1,10 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import type { WalletSession } from "./types";
 import {
   createMemoryStorageAdapter,
   createSessionStore,
   createWebStorageAdapter,
   isWalletSession,
+  type SessionRefreshResult,
+  type SessionStatus,
   type SessionStorageAdapter,
 } from "./session";
 
@@ -106,6 +108,76 @@ describe("createSessionStore", () => {
     const store = createSessionStore(broken);
     await expect(store.getState().start(session)).rejects.toThrow("quota exceeded");
     expect(store.getState().status).toBe("loading");
+  });
+});
+
+describe("refresh() return shape (type-level)", () => {
+  it("is documented as Promise<SessionRefreshResult>", () => {
+    const store = createSessionStore(createMemoryStorageAdapter());
+    // Type-level: the method resolves to the documented SessionRefreshResult.
+    expectTypeOf(store.getState().refresh).returns.resolves.toEqualTypeOf<SessionRefreshResult>();
+    // …and that shape is exactly `{ session, status }`.
+    expectTypeOf(store.getState().refresh).returns.resolves.toEqualTypeOf<{
+      session: WalletSession | null;
+      status: SessionStatus;
+    }>();
+  });
+
+  it("SessionRefreshResult exposes the documented session and status fields", () => {
+    type Result = SessionRefreshResult;
+    expectTypeOf<Result>().toHaveProperty("session").toEqualTypeOf<WalletSession | null>();
+    expectTypeOf<Result>().toHaveProperty("status").toEqualTypeOf<SessionStatus>();
+  });
+});
+
+describe("createSessionStore refresh()", () => {
+  it("resolves the connected shape when a valid session is persisted", async () => {
+    const storage = createMemoryStorageAdapter();
+    await storage.save(session);
+    const store = createSessionStore(storage);
+    const result = await store.getState().refresh();
+    expect(result).toEqual({ session, status: "connected" });
+    expect(store.getState().status).toBe("connected");
+  });
+
+  it("resolves the disconnected shape when nothing is persisted", async () => {
+    const store = createSessionStore(createMemoryStorageAdapter());
+    const result = await store.getState().refresh();
+    expect(result).toEqual({ session: null, status: "disconnected" });
+    expect(store.getState().status).toBe("disconnected");
+  });
+
+  it("resolves disconnected instead of throwing when storage is unreadable", async () => {
+    const broken: SessionStorageAdapter = {
+      load: vi.fn().mockRejectedValue(new Error("corrupt")),
+      save: vi.fn(),
+      clear: vi.fn(),
+    };
+    const store = createSessionStore(broken);
+    const result = await store.getState().refresh();
+    expect(result).toEqual({ session: null, status: "disconnected" });
+    expect(store.getState().status).toBe("disconnected");
+  });
+
+  it("resolves disconnected for malformed persisted data", async () => {
+    const storage = createMemoryStorageAdapter();
+    await storage.save({ nonsense: true } as unknown as WalletSession);
+    const store = createSessionStore(storage);
+    const result = await store.getState().refresh();
+    expect(result).toEqual({ session: null, status: "disconnected" });
+    expect(store.getState().status).toBe("disconnected");
+  });
+
+  it("re-loads the latest persisted session (e.g. written by another tab)", async () => {
+    const storage = createMemoryStorageAdapter();
+    const store = createSessionStore(storage);
+    await store.getState().start(session);
+    // Persist a fresh session behind the store's back, as another tab would.
+    const fresh = { ...session, accountId: "CACCOUNT456" };
+    await storage.save(fresh);
+    const result = await store.getState().refresh();
+    expect(result).toEqual({ session: fresh, status: "connected" });
+    expect(store.getState().session?.accountId).toBe("CACCOUNT456");
   });
 });
 

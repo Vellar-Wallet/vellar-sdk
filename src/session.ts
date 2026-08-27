@@ -14,6 +14,22 @@ export interface SessionStorageAdapter {
 
 export type SessionStatus = "loading" | "connected" | "disconnected";
 
+/**
+ * Return shape of {@link SessionState.refresh}.
+ *
+ * The refresh method resolves to the post-refresh session and status so
+ * consumers can switch on the outcome instead of guessing:
+ *
+ * - `{ session, status: "connected" }` — a valid session was loaded from
+ *   storage;
+ * - `{ session: null, status: "disconnected" }` — nothing usable was
+ *   persisted (empty, malformed, or unreadable storage).
+ */
+export interface SessionRefreshResult {
+  session: WalletSession | null;
+  status: SessionStatus;
+}
+
 export interface SessionState {
   session: WalletSession | null;
   status: SessionStatus;
@@ -25,6 +41,17 @@ export interface SessionState {
   end(): Promise<void>;
   /** Restore a persisted session on startup. Corrupt/unreadable storage means disconnected, never a crash. */
   restore(): Promise<void>;
+  /**
+   * Re-read the persisted session from storage and reflect it in store state.
+   *
+   * Use this to refresh the session after the app regains focus, after another
+   * tab updated it, or whenever the stored session may have changed since
+   * `start`/`restore`. Corrupt or unreadable storage resolves to
+   * `{ session: null, status: "disconnected" }`, never a rejected promise.
+   *
+   * @returns the post-refresh session and status (see {@link SessionRefreshResult}).
+   */
+  refresh(): Promise<SessionRefreshResult>;
 }
 
 export type SessionStore = StoreApi<SessionState>;
@@ -44,42 +71,55 @@ export function isWalletSession(value: unknown): value is WalletSession {
 }
 
 export function createSessionStore(storage: SessionStorageAdapter): SessionStore {
-  return createStore<SessionState>((set, get) => ({
-    session: null,
-    status: "loading",
-
-    async start(session) {
-      await storage.save(session);
-      set({ session, status: "connected" });
-    },
-
-    async touch(now = new Date()) {
-      const { session } = get();
-      if (!session) return;
-      const updated: WalletSession = { ...session, lastActiveAt: now.toISOString() };
-      await storage.save(updated);
-      set({ session: updated });
-    },
-
-    async end() {
-      await storage.clear();
-      set({ session: null, status: "disconnected" });
-    },
-
-    async restore() {
+  return createStore<SessionState>((set, get) => {
+    /** Shared by restore() and refresh(): load, validate, and settle state. */
+    async function loadFromStorage(): Promise<SessionRefreshResult> {
       try {
         const stored = await storage.load();
         if (stored && isWalletSession(stored)) {
           set({ session: stored, status: "connected" });
-        } else {
-          set({ session: null, status: "disconnected" });
+          return { session: stored, status: "connected" };
         }
+        set({ session: null, status: "disconnected" });
+        return { session: null, status: "disconnected" };
       } catch {
         // Unreadable storage must not brick the app on startup.
         set({ session: null, status: "disconnected" });
+        return { session: null, status: "disconnected" };
       }
-    },
-  }));
+    }
+
+    return {
+      session: null,
+      status: "loading",
+
+      async start(session) {
+        await storage.save(session);
+        set({ session, status: "connected" });
+      },
+
+      async touch(now = new Date()) {
+        const { session } = get();
+        if (!session) return;
+        const updated: WalletSession = { ...session, lastActiveAt: now.toISOString() };
+        await storage.save(updated);
+        set({ session: updated });
+      },
+
+      async end() {
+        await storage.clear();
+        set({ session: null, status: "disconnected" });
+      },
+
+      async restore() {
+        await loadFromStorage();
+      },
+
+      async refresh() {
+        return loadFromStorage();
+      },
+    };
+  });
 }
 
 /** Storage-backed adapter for web (pass window.localStorage) or any Storage-like object. */

@@ -21,10 +21,39 @@ import {
   `preparePayment(...)` gives you a review object and a `confirm()` you call after
   the user approves. Use this to insert your own review UI between build and sign.
 - **`createSessionStore(adapter)`** — a session store with pluggable storage, for
-  sharing session state across parts of your app.
+  sharing session state across parts of your app. Its `refresh()` method
+  re-reads the persisted session and resolves to a documented
+  `SessionRefreshResult` (`{ session, status }`) — see the
+  [session lifecycle](./how-it-works.md#sessions--reconnect) for where it fits.
 
 The `vellar.connector` and `vellar.payments` getters expose the exact instances the
 facade built, so you can mix the paved road with lower-level calls.
+
+### Session store refresh
+
+`refresh()` re-reads the persisted session from storage and resolves to a
+documented `SessionRefreshResult` — `{ session, status }` — so you can switch on
+the outcome instead of guessing:
+
+```ts
+import { createSessionStore, createWebStorageAdapter } from "vellar-sdk";
+
+const store = createSessionStore(createWebStorageAdapter(localStorage));
+
+// Re-read the persisted session, e.g. when the tab regains focus or after
+// another tab updated it:
+const { session, status } = await store.getState().refresh();
+
+if (status === "connected" && session) {
+  console.log("resumed", session.accountId);
+} else {
+  console.log("no usable session");
+}
+```
+
+`refresh()` never rejects: empty, malformed, or unreadable storage resolves to
+`{ session: null, status: "disconnected" }`. See
+[Sessions & reconnect](./how-it-works.md#sessions--reconnect) for the lifecycle.
 
 ## Subpath exports
 
