@@ -294,6 +294,23 @@ signers (`createSessionKeySigner`, `createPasskeyX402Signer`), the
 RPC-backed readers (`vellar-sdk/rpc`, imported separately so
 `@stellar/stellar-sdk` stays out of bundles that don't read balances).
 
+## API stability
+
+Exports fall into two groups:
+
+| Group | Import | Guarantee |
+| --- | --- | --- |
+| **Stable v1** | `import { createVellarWallet, TESTNET, … } from "vellar-sdk"` | Breaking changes only in major semver releases (until `2.0`). |
+| **Experimental** | `import { experimental } from "vellar-sdk"` then `experimental.createX402Client`, etc. | May change in any release — x402, agentic payments, and related helpers. |
+
+The stable v1 surface covers the wallet facade, config, backend client, balances,
+payments, policies, agent keys, session store, and transaction status helpers.
+Experimental symbols are also re-exported flat at the package root for backward
+compatibility; treat those flat imports as unstable.
+
+The canonical export lists live in `src/export-surface.ts` and are checked by
+`src/index.exports.test.ts`.
+
 ## License
 
 Apache-2.0
