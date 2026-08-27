@@ -12,20 +12,22 @@ start — pull requests that don't follow them will be closed.
    ```sh
    gh repo fork Vellar-Wallet/vellar-sdk --clone
    cd vellar-sdk
-   git checkout drips
+   git checkout dev
    git checkout -b my-change
    # ...work, commit...
    git push -u origin my-change
    ```
 
-2. **All pull requests must target the `drips` branch — never `main`.**
-   When you open a PR, set the base branch to `drips`. PRs opened against
-   `main` are closed automatically by a bot. `main` is the release branch and
-   is managed by maintainers only.
+2. **All pull requests must target the `dev` branch — never `main`.**
+   When you open a PR, set the base branch to `dev`. PRs opened against
+   `main` are automatically retargeted to `dev` by a bot (your work is kept,
+   you don't need to reopen anything — just set the base to `dev` yourself
+   next time). `main` is the release branch and is managed by maintainers
+   only.
 
 3. **Contributor changes must stay inside `contrib/`.** External PRs that
    touch any file outside `contrib/` are closed automatically by a bot, even
-   if they also target `drips` correctly. See [contrib/README.md](contrib/README.md)
+   if they also target `dev` correctly. See [contrib/README.md](contrib/README.md)
    for what belongs there. If your assigned issue genuinely requires changes
    elsewhere in the codebase, say so on the issue before starting — a
    maintainer will make that change or explicitly widen your scope.
