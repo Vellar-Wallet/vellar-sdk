@@ -8,6 +8,7 @@ import {
   TransactionBuilder,
 } from "@stellar/stellar-sdk";
 import type { BalanceReader, TokenInfo } from "./balances";
+import { createNegativeCachingBalanceReader } from "./balances";
 
 // RPC-backed BalanceReader: simulates the token contract's `balance(id)`
 // read — no signature, no fee, works for contract (C...) and classic (G...)
@@ -28,12 +29,14 @@ export function nativeToken(networkPassphrase: string): TokenInfo {
 export interface RpcBalanceReaderOptions {
   rpcUrl: string;
   networkPassphrase: string;
+  /** TTL for negative (not-found) balance lookups. See createNegativeCachingBalanceReader. */
+  negativeCacheTtlMs?: number;
 }
 
 export function createRpcBalanceReader(options: RpcBalanceReaderOptions): BalanceReader {
   const server = new rpc.Server(options.rpcUrl);
 
-  return {
+  const reader: BalanceReader = {
     async getTokenBalance(tokenContractId, holder) {
       const tx = new TransactionBuilder(new Account(SIMULATION_SOURCE, "0"), {
         fee: "100",
@@ -62,4 +65,8 @@ export function createRpcBalanceReader(options: RpcBalanceReaderOptions): Balanc
       return scValToBigInt(retval);
     },
   };
+
+  return createNegativeCachingBalanceReader(reader, {
+    negativeCacheTtlMs: options.negativeCacheTtlMs,
+  });
 }
