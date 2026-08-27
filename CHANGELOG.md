@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- **Runtime assertion for x402 payloads at the network boundary** (#222).
+  `x402-types.ts` previously only declared TypeScript types for
+  `PaymentRequirements` / `PaymentRequired` — types are erased at build time,
+  so a malformed 402 challenge from a misbehaving or malicious resource server
+  could pass straight through the SDK and fail later, far from the actual bad
+  input. New exports: `assertPaymentRequired`, `assertPaymentRequirements`,
+  and `InvalidX402PayloadError` (lists every missing/malformed field). Wired
+  in at `decodePaymentRequired` (loose: checks `x402Version`/`accepts` shape,
+  version-agnostic so x402 v1 challenges still decode for version negotiation)
+  and `selectRequirements` (strict: deep-validates each offered option once
+  the challenge is confirmed v2-shaped).
+
 ## 0.6.1 — 2026-08-24
 
 Developer-experience patch ahead of the hackathon. Everything is additive; no

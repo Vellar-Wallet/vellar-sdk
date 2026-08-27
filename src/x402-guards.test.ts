@@ -12,10 +12,14 @@ import {
   utf8ToBase64,
 } from "./x402-guards";
 import {
+  assertPaymentRequired,
+  assertPaymentRequirements,
   DisallowedAssetError,
   InvalidRequirementsError,
+  InvalidX402PayloadError,
   MaxAmountExceededError,
   NoUsablePaymentOptionError,
+  type PaymentRequirements,
 } from "./x402-types";
 import { CAIP2_TESTNET, TOKEN, b64, decoded, requirements, response402 } from "./x402-test-fixtures";
 
@@ -84,6 +88,66 @@ describe("decodePaymentRequired", () => {
     });
     expect(() => decodePaymentRequired(res)).toThrow(NoUsablePaymentOptionError);
   });
+
+  it("does not deep-validate accepts entries (version-agnostic; v1 payloads must decode too)", () => {
+    const res = new Response("{}", {
+      status: 402,
+      headers: { "PAYMENT-REQUIRED": b64({ x402Version: 2, accepts: [{ scheme: "exact" }] }) },
+    });
+    expect(() => decodePaymentRequired(res)).not.toThrow();
+  });
+});
+
+describe("assertPaymentRequired / assertPaymentRequirements", () => {
+  it("accepts a well-formed challenge", () => {
+    expect(() => assertPaymentRequired(decoded([requirements()]))).not.toThrow();
+  });
+
+  it("accepts a well-formed requirements entry", () => {
+    expect(() => assertPaymentRequirements(requirements())).not.toThrow();
+  });
+
+  it("rejects a non-object payload", () => {
+    expect(() => assertPaymentRequired(null)).toThrow(InvalidX402PayloadError);
+    expect(() => assertPaymentRequired("nope")).toThrow(InvalidX402PayloadError);
+  });
+
+  it("rejects a missing accepts array", () => {
+    try {
+      assertPaymentRequired({ x402Version: 2 });
+      throw new Error("expected to throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(InvalidX402PayloadError);
+      expect((err as InvalidX402PayloadError).problems).toContain("accepts must be an array");
+    }
+  });
+
+  it("lists every missing/malformed field on a bad requirements entry", () => {
+    try {
+      assertPaymentRequirements({ scheme: "exact", network: CAIP2_TESTNET, amount: 5 });
+      throw new Error("expected to throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(InvalidX402PayloadError);
+      const problems = (err as InvalidX402PayloadError).problems;
+      expect(problems).toContain("requirements.asset must be a non-empty string");
+      expect(problems).toContain("requirements.amount must be a string");
+      expect(problems).toContain("requirements.payTo must be a non-empty string");
+    }
+  });
+
+  it("rejects a requirements entry that is not an object", () => {
+    expect(() => assertPaymentRequirements(null)).toThrow(InvalidX402PayloadError);
+    expect(() => assertPaymentRequirements("nope")).toThrow(InvalidX402PayloadError);
+  });
+
+  it("rejects a malformed maxTimeoutSeconds / extra", () => {
+    expect(() =>
+      assertPaymentRequirements(requirements({ maxTimeoutSeconds: "60" as unknown as number })),
+    ).toThrow(InvalidX402PayloadError);
+    expect(() =>
+      assertPaymentRequirements(requirements({ extra: "nope" as unknown as Record<string, unknown> })),
+    ).toThrow(InvalidX402PayloadError);
+  });
 });
 
 describe("selectRequirements", () => {
@@ -97,6 +161,17 @@ describe("selectRequirements", () => {
       CAIP2_TESTNET,
     );
     expect(picked.asset).toBe(ALLOWED);
+  });
+
+  it("throws InvalidX402PayloadError on a malformed offered option (e.g. missing payTo)", () => {
+    const bad = { scheme: "exact", network: CAIP2_TESTNET, asset: TOKEN, amount: "1000000" };
+    expect(() =>
+      selectRequirements(
+        decoded([bad as unknown as PaymentRequirements]),
+        { maxAmount: 10_000_000n },
+        CAIP2_TESTNET,
+      ),
+    ).toThrow(InvalidX402PayloadError);
   });
 
   it("throws DisallowedAssetError only when NO offered asset is allowed", () => {

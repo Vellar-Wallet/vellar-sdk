@@ -15,8 +15,11 @@
 
 import type { Network } from "./types";
 import {
+  assertPaymentRequired,
+  assertPaymentRequirements,
   DisallowedAssetError,
   InvalidRequirementsError,
+  InvalidX402PayloadError,
   MaxAmountExceededError,
   NoUsablePaymentOptionError,
   type PaymentRequired,
@@ -29,6 +32,7 @@ import {
 export {
   DisallowedAssetError,
   InvalidRequirementsError,
+  InvalidX402PayloadError,
   MaxAmountExceededError,
   NoUsablePaymentOptionError,
   PaymentRejectedError,
@@ -104,6 +108,11 @@ export function selectRequirements(
   ourCaip2: string,
 ): PaymentRequirements {
   const options = decoded.accepts ?? [];
+  // Deep-validate each candidate's shape now that the caller has confirmed
+  // (via assertV2Challenge / a v2 x402Version) that these are meant to be
+  // v2 PaymentRequirements. Doing it here — not in decodePaymentRequired —
+  // keeps decode agnostic to x402 wire version; see assertPaymentRequired.
+  options.forEach((a) => assertPaymentRequirements(a));
   const onNetwork = options.filter((a) => a.scheme === "exact" && a.network === ourCaip2);
   if (onNetwork.length === 0) {
     throw new NoUsablePaymentOptionError(
@@ -160,13 +169,20 @@ export function selectRequirements(
 export function decodePaymentRequired(res: Response): PaymentRequired {
   const header = res.headers.get("PAYMENT-REQUIRED") ?? res.headers.get("payment-required");
   if (header) {
+    let parsed: unknown;
     try {
-      return JSON.parse(base64ToUtf8(header)) as PaymentRequired;
+      parsed = JSON.parse(base64ToUtf8(header));
     } catch (err) {
       throw new NoUsablePaymentOptionError(
         `Malformed PAYMENT-REQUIRED header: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
+    // Runtime boundary check: TypeScript types are erased at build time, so a
+    // server sending a malformed challenge would otherwise pass straight
+    // through as a `PaymentRequired` and fail later, deep inside
+    // `selectRequirements` or the signer, far from the actual bad input.
+    assertPaymentRequired(parsed);
+    return parsed;
   }
   throw new NoUsablePaymentOptionError("402 response carried no PAYMENT-REQUIRED header.");
 }
