@@ -61,6 +61,13 @@ export interface X402ClientDeps {
   fetchImpl?: FetchLike;
   /** Signature-expiration window in ledgers (default 12 ≈ 60s at 5s ledgers). */
   expirationLedgerOffset?: number;
+  /**
+   * Optional cache for 402 payment-requirements lookups, keyed by network +
+   * resource (issue #221). Omit to disable caching entirely.
+   */
+  resourceCache?: ResourceCacheStore;
+  /** TTL for cached resource lookups, ms. Default 30_000. */
+  resourceCacheTtlMs?: number;
 }
 
 // Estimated ledger close time (seconds). The facilitator fetches its own estimate
@@ -104,6 +111,60 @@ export function expirationOffsetFor(
   return Math.max(offset, MIN_EXPIRATION_LEDGERS);
 }
 
+/**
+ * Cache-key version. Bumping it invalidates every previously written entry —
+ * this is the migration path for the unscoped (`<resourceId>`-only) keys that
+ * a network-agnostic cache would have produced (issue #221).
+ */
+const RESOURCE_CACHE_KEY_VERSION = "v2";
+
+/**
+ * Composite cache key: `v2|<network>|<resourceId>`.
+ *
+ * The network segment is what prevents a testnet lookup from satisfying a
+ * mainnet one (and vice versa) for consumers that run several networks through
+ * one process. The version segment lets a format change invalidate old entries
+ * without a separate migration pass.
+ *
+ * Exported for testing.
+ */
+export function resourceCacheKey(network: Network, resourceId: string): string {
+  return `${RESOURCE_CACHE_KEY_VERSION}|${network}|${resourceId}`;
+}
+
+/** A cached payment-requirements lookup for one resource on one network. */
+export interface CachedResource {
+  requirements: PaymentRequirements;
+  /** Epoch ms after which the entry is stale. */
+  expiresAt: number;
+}
+
+/**
+ * Storage backing the resource cache. A plain `Map` is used when the consumer
+ * supplies nothing.
+ */
+export interface ResourceCacheStore {
+  get(key: string): CachedResource | undefined;
+  set(key: string, value: CachedResource): void;
+  delete(key: string): void;
+  keys(): Iterable<string>;
+}
+
+/**
+ * Drops entries written under any earlier key format (issue #221 migration
+ * requirement). An unscoped key has no `|` separator, so it can never collide
+ * with a versioned one; entries from a superseded version are dropped too.
+ * Returns the number of entries removed.
+ */
+export function migrateResourceCache(store: ResourceCacheStore): number {
+  const stale: string[] = [];
+  for (const key of store.keys()) {
+    if (!key.startsWith(`${RESOURCE_CACHE_KEY_VERSION}|`)) stale.push(key);
+  }
+  for (const key of stale) store.delete(key);
+  return stale.length;
+}
+
 export function createX402Client(deps: X402ClientDeps): X402Client {
   // Fail here, with the actionable error, not inside rpc.Server's URL parse.
   assertValidX402RpcUrl(deps.rpcUrl);
@@ -112,6 +173,12 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
   // A hard ceiling on the derived expiration offset (undefined ⇒ no ceiling).
   const expirationCeiling = deps.expirationLedgerOffset;
   const ourCaip2 = CAIP2_BY_NETWORK[deps.network];
+  const resourceCache = deps.resourceCache;
+  const resourceCacheTtlMs = deps.resourceCacheTtlMs ?? 30_000;
+  // Any entry written under an older key format is dropped up front, so a
+  // process that previously cached by bare resource id can't serve a
+  // cross-network hit after upgrading (issue #221).
+  if (resourceCache) migrateResourceCache(resourceCache);
 
   async function buildSignedPayment(
     requirements: PaymentRequirements,
@@ -233,8 +300,27 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
       return { response: first, paid: false };
     }
 
-    const decoded = decodePaymentRequired(first);
-    const requirements = selectRequirements(decoded, init, ourCaip2);
+    // Cache lookup is scoped to OUR network, never the resource id alone.
+    const cacheKey = resourceCache ? resourceCacheKey(deps.network, url) : undefined;
+    let requirements: PaymentRequirements | undefined;
+    if (resourceCache && cacheKey) {
+      const hit = resourceCache.get(cacheKey);
+      if (hit && hit.expiresAt > nowMs()) {
+        requirements = hit.requirements;
+      } else if (hit) {
+        resourceCache.delete(cacheKey);
+      }
+    }
+    if (!requirements) {
+      const decoded = decodePaymentRequired(first);
+      requirements = selectRequirements(decoded, init, ourCaip2);
+      if (resourceCache && cacheKey) {
+        resourceCache.set(cacheKey, {
+          requirements,
+          expiresAt: nowMs() + resourceCacheTtlMs,
+        });
+      }
+    }
     const { header, amount } = await buildSignedPayment(requirements);
 
     const paid = await doFetch(url, {
@@ -256,6 +342,11 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
   }
 
   return { fetch: x402Fetch, createPayment };
+}
+
+/** Indirection so tests can hold time still. */
+function nowMs(): number {
+  return Date.now();
 }
 
 function readSettlement(
