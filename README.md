@@ -284,6 +284,44 @@ for a client without the wallet handle.
 > so a policy-governed payment needs a facilitator configured with a higher
 > ceiling (self-hosted, or a hosted one that allows it).
 
+### Error handling
+
+All SDK modules throw standardized error codes (`VELLAR_<MODULE>_<REASON>`):
+
+```ts
+import { VellarError, VellarErrorCode } from "vellar-sdk";
+
+try {
+  await vellar.pay({ to: "C...", amount: 100n, token: { contractId: "C...", symbol: "XLM", decimals: 7 } });
+} catch (err) {
+  if (err instanceof VellarError) {
+    console.error("SDK Error Code:", err.code); // e.g. VELLAR_RPC_RATE_LIMIT_EXCEEDED
+    console.error("Details:", err.details);
+  }
+}
+```
+
+### Observability & hooks
+
+```ts
+import { withRpcInstrumentation, RpcErrorRateTracker } from "vellar-sdk";
+
+// Centralized error reporting hook (#251)
+const onError = (error: Error, context?: Record<string, unknown>) => {
+  Sentry.captureException(error, { extra: context });
+};
+
+// Latency instrumentation hook (#252)
+const onRequestComplete = ({ method, durationMs, success, error }) => {
+  metrics.histogram("vellar_rpc_latency_ms", durationMs, { method, status: success ? "ok" : "fail" });
+};
+
+// Elevated error rate alert callback (#254)
+const onElevatedErrorRate = ({ errorRate, threshold, totalRequests }) => {
+  console.warn(`High RPC error rate: ${(errorRate * 100).toFixed(1)}% across ${totalRequests} requests`);
+};
+```
+
 ### Advanced
 
 The facade is the paved road. For custom flows the package also exports the

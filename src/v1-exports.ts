@@ -14,3 +14,6 @@ export * from "./policy-facade";
 export * from "./agents-facade";
 export * from "./session";
 export * from "./tx-status";
+export * from "./errors";
+export * from "./instrumentation";
+
