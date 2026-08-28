@@ -19,6 +19,14 @@ export class WalletApiError extends Error {
   }
 }
 
+/** Masks Bearer tokens, private keys, and API secrets from logs and error strings. */
+export function sanitizeSecrets(text: string): string {
+  return text
+    .replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, "Bearer [REDACTED]")
+    .replace(/(sk_[a-zA-Z0-9_]{10,})/g, "[REDACTED_SECRET_KEY]")
+    .replace(/(apiKey|token|secret|password)=([^&\s]+)/gi, "$1=[REDACTED]");
+}
+
 async function toApiError(res: Response): Promise<WalletApiError> {
   let payload: { error?: string; message?: string } | undefined;
   try {
@@ -26,12 +34,14 @@ async function toApiError(res: Response): Promise<WalletApiError> {
   } catch {
     // Non-JSON error body — fall through to the generic message.
   }
-  return new WalletApiError(
+  const rawMsg =
     payload?.message ??
-      payload?.error ??
-      `Wallet API request failed (${res.status})`,
+    payload?.error ??
+    `Wallet API request failed (${res.status})`;
+  return new WalletApiError(
+    sanitizeSecrets(rawMsg),
     res.status,
-    payload?.error,
+    payload?.error ? sanitizeSecrets(payload.error) : undefined,
   );
 }
 

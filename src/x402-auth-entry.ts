@@ -135,3 +135,72 @@ export function assertAuthEntryInvocation(
     );
   }
 }
+
+/** Error thrown when an x402 challenge nonce has already been consumed. */
+export class ReplayedChallengeError extends Error {
+  constructor(nonce: string) {
+    super(`Refusing challenge: challenge nonce ${nonce} was already used (replay attack detected).`);
+    this.name = "ReplayedChallengeError";
+  }
+}
+
+/** Error thrown when an x402 challenge timestamp is expired. */
+export class ExpiredChallengeError extends Error {
+  constructor(ageMs: number, maxAgeMs: number) {
+    super(`Refusing challenge: challenge expired (${ageMs}ms old, max allowed is ${maxAgeMs}ms).`);
+    this.name = "ExpiredChallengeError";
+  }
+}
+
+/** In-memory cache of seen challenge nonces to prevent replay attacks. */
+export class ChallengeReplayGuard {
+  private readonly seenNonces = new Map<string, number>(); // nonce -> expiry timestamp
+  private readonly maxAgeMs: number;
+
+  constructor(maxAgeMs = 5 * 60 * 1000) {
+    this.maxAgeMs = maxAgeMs;
+  }
+
+  /**
+   * Asserts that a challenge has not been seen and is not expired.
+   * Records the nonce if valid.
+   */
+  checkAndRecord(nonce: string, timestamp = Date.now()): void {
+    const now = Date.now();
+    this.cleanup(now);
+
+    const age = now - timestamp;
+    if (age > this.maxAgeMs || age < -30_000) {
+      throw new ExpiredChallengeError(age, this.maxAgeMs);
+    }
+
+    if (this.seenNonces.has(nonce)) {
+      throw new ReplayedChallengeError(nonce);
+    }
+
+    this.seenNonces.set(nonce, now + this.maxAgeMs);
+  }
+
+  private cleanup(now: number): void {
+    for (const [nonce, expiry] of this.seenNonces.entries()) {
+      if (now > expiry) {
+        this.seenNonces.delete(nonce);
+      }
+    }
+  }
+
+  clear(): void {
+    this.seenNonces.clear();
+  }
+}
+
+export const globalChallengeReplayGuard = new ChallengeReplayGuard();
+
+/** Validates challenge freshness and single-use against the replay guard. */
+export function assertFreshChallenge(
+  challenge: { nonce: string; timestamp?: number },
+  guard: ChallengeReplayGuard = globalChallengeReplayGuard,
+): void {
+  guard.checkAndRecord(challenge.nonce, challenge.timestamp ?? Date.now());
+}
+

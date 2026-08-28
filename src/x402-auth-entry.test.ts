@@ -7,7 +7,14 @@
 
 import { Address, nativeToScVal, xdr } from "@stellar/stellar-sdk";
 import { describe, expect, it } from "vitest";
-import { AuthEntryMismatchError, assertAuthEntryInvocation } from "./x402-auth-entry";
+import {
+  AuthEntryMismatchError,
+  assertAuthEntryInvocation,
+  ChallengeReplayGuard,
+  assertFreshChallenge,
+  ReplayedChallengeError,
+  ExpiredChallengeError,
+} from "./x402-auth-entry";
 
 const WALLET = "CAFIATCEAZJTGQQKFL3N2YB6VMCUN2UYX4QD5A3FALDRU7UJJ6OWBKOW";
 const TOKEN = "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA";
@@ -155,5 +162,21 @@ describe("assertAuthEntryInvocation", () => {
       expect(e.expected).toBe(PAYTO);
       expect(e.actual).toBe(ATTACKER);
     }
+  });
+
+  it("Issue #260: accepts a fresh challenge and rejects replayed or expired challenges", () => {
+    const guard = new ChallengeReplayGuard(10_000); // 10s max age
+
+    const freshChallenge = { nonce: "nonce-abc-123", timestamp: Date.now() };
+
+    // 1. First presentation succeeds
+    expect(() => assertFreshChallenge(freshChallenge, guard)).not.toThrow();
+
+    // 2. Replay of same nonce is rejected
+    expect(() => assertFreshChallenge(freshChallenge, guard)).toThrow(ReplayedChallengeError);
+
+    // 3. Expired challenge is rejected
+    const expiredChallenge = { nonce: "nonce-old-456", timestamp: Date.now() - 20_000 };
+    expect(() => assertFreshChallenge(expiredChallenge, guard)).toThrow(ExpiredChallengeError);
   });
 });

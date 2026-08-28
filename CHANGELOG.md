@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.2 — 2026-08-28
+
+Security hardening and supply-chain protections:
+
+- **Secrets Sanitization in HTTP Backend (#256)**: All token-attaching and API communication paths in `http-backend.ts` now scrub Bearer tokens, private keys (`sk_...`), and authorization secrets from thrown error messages and log outputs.
+- **Challenge Replay & Expiration Protection (#260)**: `x402-auth-entry.ts` now validates challenge freshness and enforces single-use replay protection via `ChallengeReplayGuard`, preventing replayed authorization challenges.
+- **Supply-Chain Dependency Pinning (#258)**: Pinned all runtime and development dependencies to exact verified versions in `package.json` with an automated CI verification check `check:pinned`.
+- **Strict Untrusted Input Validation (#255)**: Enhanced input validation coverage across all vectors in `x402-untrusted.ts`.
+
 ## 0.6.1 — 2026-08-24
 
 Developer-experience patch ahead of the hackathon. Everything is additive; no

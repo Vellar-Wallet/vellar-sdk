@@ -39,6 +39,16 @@ start — pull requests that don't follow them will be closed.
 5. **Questions go to the Telegram group.** Don't open issues for questions —
    ask in [our Telegram](https://t.me/+RWPCKXXJTj45Njk0).
 
+## Supply-chain hardening & dependency policy
+
+All runtime and development dependencies must be **pinned to exact versions** (no `^` or `~` ranges) in `package.json` to defend against supply-chain attacks and unexpected upstream releases:
+
+```sh
+npm run check:pinned
+```
+
+PRs introducing unpinned dependencies will fail the CI check.
+
 ## Before you open a PR
 
 Make sure the package still typechecks, tests, and builds:
@@ -47,7 +57,9 @@ Make sure the package still typechecks, tests, and builds:
 npm install
 npm run typecheck
 npm test
+npm run check:pinned
 npm run build
 ```
 
 New code is expected to come with tests.
+
