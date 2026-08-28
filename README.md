@@ -294,6 +294,30 @@ signers (`createSessionKeySigner`, `createPasskeyX402Signer`), the
 RPC-backed readers (`vellar-sdk/rpc`, imported separately so
 `@stellar/stellar-sdk` stays out of bundles that don't read balances).
 
+## Connection tuning
+
+`createRpcBalanceReader` accepts a `connection` block that tunes the HTTP layer
+underneath the Soroban RPC client. Balance reads are short and bursty, so
+reusing sockets removes a TCP + TLS handshake per call.
+
+```ts
+const reader = createRpcBalanceReader({
+  rpcUrl,
+  networkPassphrase,
+  connection: { keepAlive: true, maxSockets: 16, keepAliveMsecs: 15_000 },
+});
+```
+
+Recommended values by environment:
+
+| Environment | Setting | Why |
+| --- | --- | --- |
+| **Node** (server, CLI, agent) | `{ keepAlive: true, maxSockets: 16, keepAliveMsecs: 15_000 }` | Pooled sockets across repeated reads. Raise `maxSockets` only if you fan out wider than 16 concurrent RPC calls. |
+| **Browser** | leave unset | The browser owns its own connection pool, and `Connection` / `Keep-Alive` are forbidden headers — the settings are ignored rather than applied. |
+
+Balance reads for multiple tokens are batched into a single simulation
+automatically (chunked at 20 invocations); no configuration is needed.
+
 ## API stability
 
 Exports fall into two groups:
