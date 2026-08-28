@@ -17,6 +17,12 @@ export interface TokenBalance extends TokenInfo {
 
 export interface BalanceReader {
   getTokenBalance(tokenContractId: string, holder: string): Promise<bigint>;
+  /**
+   * Optional bulk read. When a reader implements this, the service collapses N
+   * per-token calls into it instead of issuing one request each (issue #216).
+   * Must resolve in the same order as `tokenContractIds`.
+   */
+  getTokenBalances?(tokenContractIds: string[], holder: string): Promise<bigint[]>;
 }
 
 export interface BalanceService {
@@ -45,6 +51,13 @@ export class BatchBalanceSizeError extends Error {
 export function createBalanceService(reader: BalanceReader, tokens: TokenInfo[]): BalanceService {
   return {
     async getBalances(holder) {
+      if (reader.getTokenBalances) {
+        const amounts = await reader.getTokenBalances(
+          tokens.map((t) => t.contractId),
+          holder,
+        );
+        return tokens.map((token, i) => ({ ...token, amount: amounts[i]! }));
+      }
       return Promise.all(
         tokens.map(async (token) => ({
           ...token,
@@ -65,6 +78,26 @@ export async function fetchBalancesBatch(
 ): Promise<BatchBalanceResult[]> {
   if (tokens.length > MAX_BATCH_BALANCE_SIZE) {
     throw new BatchBalanceSizeError(MAX_BATCH_BALANCE_SIZE, tokens.length);
+  }
+  // Prefer the bulk read (one RPC round trip) when the reader supports it. A
+  // bulk failure degrades to per-token reads so per-item error isolation — the
+  // documented contract of this function — is preserved.
+  if (reader.getTokenBalances) {
+    try {
+      const amounts = await reader.getTokenBalances(
+        tokens.map((t) => t.contractId),
+        holder,
+      );
+      if (amounts.length === tokens.length) {
+        return tokens.map(({ contractId }, i) => ({
+          contractId,
+          success: true as const,
+          amount: amounts[i]!,
+        }));
+      }
+    } catch {
+      // fall through to the per-token path
+    }
   }
   return Promise.all(
     tokens.map(async ({ contractId }) => {
