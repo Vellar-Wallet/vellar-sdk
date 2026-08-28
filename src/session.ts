@@ -23,11 +23,37 @@ export interface SessionState {
   touch(now?: Date): Promise<void>;
   /** End the session and clear persisted state. */
   end(): Promise<void>;
-  /** Restore a persisted session on startup. Corrupt/unreadable storage means disconnected, never a crash. */
+  /**
+   * Restore a persisted session on startup. Corrupt/unreadable storage means
+   * disconnected, never a crash. A session idle past `idleTimeoutMs` (if
+   * configured) is expired and cleared instead of restored — see
+   * `createSessionStore`'s `idleTimeoutMs` option.
+   */
   restore(): Promise<void>;
 }
 
 export type SessionStore = StoreApi<SessionState>;
+
+export interface SessionStoreOptions {
+  /**
+   * How long a session may go without activity (`lastActiveAt`) before it's
+   * treated as expired. Checked on `restore()` — the natural point where a
+   * session that's been sitting untouched (tab closed, browser reopened
+   * days later, a background worker waking up) gets read back in. Not
+   * enforced by `touch()` itself, since touching is what proves the session
+   * is still active. Unset (the default) disables idle expiry entirely,
+   * preserving prior behavior for existing callers.
+   */
+  idleTimeoutMs?: number;
+  /**
+   * Called when `restore()` expires an idle session, before it's cleared.
+   * Defaults to a no-op; pass your own logger to observe idle expirations
+   * (e.g. for debugging unexpectedly-short sessions in the field).
+   */
+  onIdleExpired?: (info: { session: WalletSession; idleForMs: number }) => void;
+  /** Injectable clock, primarily for tests. Defaults to `() => new Date()`. */
+  now?: () => Date;
+}
 
 export function isWalletSession(value: unknown): value is WalletSession {
   if (typeof value !== "object" || value === null) return false;
@@ -43,7 +69,12 @@ export function isWalletSession(value: unknown): value is WalletSession {
   );
 }
 
-export function createSessionStore(storage: SessionStorageAdapter): SessionStore {
+export function createSessionStore(
+  storage: SessionStorageAdapter,
+  options: SessionStoreOptions = {},
+): SessionStore {
+  const { idleTimeoutMs, onIdleExpired = () => {}, now: clock = () => new Date() } = options;
+
   return createStore<SessionState>((set, get) => ({
     session: null,
     status: "loading",
@@ -53,7 +84,7 @@ export function createSessionStore(storage: SessionStorageAdapter): SessionStore
       set({ session, status: "connected" });
     },
 
-    async touch(now = new Date()) {
+    async touch(now = clock()) {
       const { session } = get();
       if (!session) return;
       const updated: WalletSession = { ...session, lastActiveAt: now.toISOString() };
@@ -70,6 +101,18 @@ export function createSessionStore(storage: SessionStorageAdapter): SessionStore
       try {
         const stored = await storage.load();
         if (stored && isWalletSession(stored)) {
+          if (idleTimeoutMs !== undefined) {
+            const idleForMs = clock().getTime() - Date.parse(stored.lastActiveAt);
+            // A negative idleForMs (lastActiveAt in the future — clock skew,
+            // a bogus persisted value) is never treated as expired; only a
+            // genuinely elapsed idle period is.
+            if (idleForMs > idleTimeoutMs) {
+              onIdleExpired({ session: stored, idleForMs });
+              await storage.clear();
+              set({ session: null, status: "disconnected" });
+              return;
+            }
+          }
           set({ session: stored, status: "connected" });
         } else {
           set({ session: null, status: "disconnected" });

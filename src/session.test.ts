@@ -304,6 +304,92 @@ describe("createSessionStore — refresh & expiry edge cases", () => {
   });
 });
 
+describe("createSessionStore idle timeout (#227)", () => {
+  const FIVE_MIN_MS = 5 * 60 * 1000;
+
+  it("restore() keeps a session that has been idle less than the timeout", async () => {
+    const storage = createMemoryStorageAdapter();
+    await storage.save({ ...session, lastActiveAt: "2026-07-16T10:00:00.000Z" });
+    const store = createSessionStore(storage, {
+      idleTimeoutMs: FIVE_MIN_MS,
+      now: () => new Date("2026-07-16T10:04:59.000Z"), // 4m59s idle
+    });
+    await store.getState().restore();
+    expect(store.getState().status).toBe("connected");
+    expect(store.getState().session?.accountId).toBe(session.accountId);
+  });
+
+  it("restore() expires and clears a session idle past the timeout", async () => {
+    const storage = createMemoryStorageAdapter();
+    await storage.save({ ...session, lastActiveAt: "2026-07-16T10:00:00.000Z" });
+    const onIdleExpired = vi.fn();
+    const store = createSessionStore(storage, {
+      idleTimeoutMs: FIVE_MIN_MS,
+      now: () => new Date("2026-07-16T10:05:01.000Z"), // 5m1s idle
+      onIdleExpired,
+    });
+    await store.getState().restore();
+    expect(store.getState().status).toBe("disconnected");
+    expect(store.getState().session).toBeNull();
+    expect(await storage.load()).toBeNull();
+    expect(onIdleExpired).toHaveBeenCalledWith({
+      session: { ...session, lastActiveAt: "2026-07-16T10:00:00.000Z" },
+      idleForMs: 5 * 60 * 1000 + 1000,
+    });
+  });
+
+  it("restore() treats exactly-at-the-boundary as still valid (idleForMs > timeout, not >=)", async () => {
+    const storage = createMemoryStorageAdapter();
+    await storage.save({ ...session, lastActiveAt: "2026-07-16T10:00:00.000Z" });
+    const store = createSessionStore(storage, {
+      idleTimeoutMs: FIVE_MIN_MS,
+      now: () => new Date("2026-07-16T10:05:00.000Z"), // exactly 5m idle
+    });
+    await store.getState().restore();
+    expect(store.getState().status).toBe("connected");
+  });
+
+  it("restore() never expires a session when idleTimeoutMs is not configured", async () => {
+    const storage = createMemoryStorageAdapter();
+    await storage.save({ ...session, lastActiveAt: "2000-01-01T00:00:00.000Z" });
+    const store = createSessionStore(storage);
+    await store.getState().restore();
+    expect(store.getState().status).toBe("connected");
+  });
+
+  it("restore() does not expire a session whose lastActiveAt is in the future (clock skew)", async () => {
+    const storage = createMemoryStorageAdapter();
+    await storage.save({ ...session, lastActiveAt: "2026-07-16T11:00:00.000Z" });
+    const store = createSessionStore(storage, {
+      idleTimeoutMs: FIVE_MIN_MS,
+      now: () => new Date("2026-07-16T10:00:00.000Z"), // "now" before lastActiveAt
+    });
+    await store.getState().restore();
+    expect(store.getState().status).toBe("connected");
+  });
+
+  it("touch() does not itself expire the session, even after the idle window", async () => {
+    // touch() is what proves the session is still active; it should never
+    // be the thing that judges a session idle.
+    const storage = createMemoryStorageAdapter();
+    const store = createSessionStore(storage, { idleTimeoutMs: FIVE_MIN_MS });
+    await store.getState().start(session);
+    await store.getState().touch(new Date("2026-07-16T20:00:00.000Z"));
+    expect(store.getState().status).toBe("connected");
+  });
+
+  it("defaults onIdleExpired to a no-op when not provided", async () => {
+    const storage = createMemoryStorageAdapter();
+    await storage.save({ ...session, lastActiveAt: "2026-07-16T10:00:00.000Z" });
+    const store = createSessionStore(storage, {
+      idleTimeoutMs: FIVE_MIN_MS,
+      now: () => new Date("2026-07-16T11:00:00.000Z"),
+    });
+    await expect(store.getState().restore()).resolves.toBeUndefined();
+    expect(store.getState().status).toBe("disconnected");
+  });
+});
+
 describe("createWebStorageAdapter", () => {
   function fakeStorage() {
     const map = new Map<string, string>();
