@@ -9,6 +9,7 @@
 // time. See docs/design-x402-sdk-client.md and technical-doc.md §17.
 
 import type { Network } from "./types";
+import type { X402TraceContext, X402TracingHooks } from "./x402-tracing";
 
 /**
  * Payment requirements for one accepted payment option, as carried in a 402
@@ -79,6 +80,9 @@ export interface X402FetchInit extends X402PayOptions {
   body?: BodyInit | null;
   /** Passed through to the underlying fetch (signal, credentials, …). */
   requestInit?: Omit<RequestInit, "method" | "headers" | "body">;
+  /** Optional trace context for this request. When present, tracing hooks
+   * (if configured on the client) will be called at each internal boundary. */
+  trace?: X402TraceContext;
 }
 
 /** A signed, ready-to-send payment payload (the `PAYMENT-SIGNATURE` header value). */
@@ -128,6 +132,8 @@ export interface X402Client {
     requirements: PaymentRequirements,
     opts: X402PayOptions,
   ): Promise<SignedPayment>;
+  /** The tracing hooks configured on this client (if any). */
+  readonly tracingHooks?: X402TracingHooks;
 }
 
 // ── errors ───────────────────────────────────────────────────────────────────

@@ -7,6 +7,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { createX402Client, expirationOffsetFor, type FetchLike } from "./x402-client";
+import type { SpanName, X402TracingHooks } from "./x402-tracing";
 import {
   DisallowedAssetError,
   InvalidRequirementsError,
@@ -174,5 +175,83 @@ describe("body replay (bug #3)", () => {
     ).rejects.toThrow(/ReadableStream body cannot be replayed/);
     // Rejected before ANY request went out.
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+});
+
+describe("tracing hooks integration", () => {
+  function clientWithTracing(
+    fetchImpl: FetchLike,
+    hooks: X402TracingHooks,
+    signer: SmartAccountX402Signer = stubSigner,
+  ) {
+    return createX402Client({
+      signer,
+      rpcUrl: "https://soroban-testnet.stellar.org",
+      network: "testnet",
+      simulationSourceAccount: SIM_SOURCE,
+      fetchImpl,
+      tracingHooks: hooks,
+    });
+  }
+
+  it("passes through (no tracing) when hooks are not configured", async () => {
+    const fetchImpl = vi.fn(async () => new Response("ok", { status: 200 }));
+    const c = client(fetchImpl);
+    expect(c.tracingHooks).toBeUndefined();
+    const out = await c.fetch("https://res.test", { maxAmount: 10n });
+    expect(out.paid).toBe(false);
+  });
+
+  it("exposes tracingHooks on the client when configured", async () => {
+    const hooks: X402TracingHooks = { onSpanStart: vi.fn() };
+    const fetchImpl = vi.fn(async () => new Response("ok", { status: 200 }));
+    const c = clientWithTracing(fetchImpl, hooks);
+    expect(c.tracingHooks).toBe(hooks);
+  });
+
+  it("calls onSpanStart with x402.request for a passthrough (200)", async () => {
+    const starts: SpanName[] = [];
+    const hooks: X402TracingHooks = {
+      onSpanStart: (e) => starts.push(e.name),
+    };
+    const fetchImpl = vi.fn(async () => new Response("ok", { status: 200 }));
+    const c = clientWithTracing(fetchImpl, hooks);
+    const trace = { traceId: "test-passthrough" };
+    await c.fetch("https://res.test", { maxAmount: 10n, trace });
+    // Only the initial request span fires for a passthrough.
+    expect(starts).toEqual(["x402.request"]);
+  });
+
+  it("calls onSpanStart/onSpanEnd with x402.request when fetch throws", async () => {
+    const events: { name: SpanName; ok?: boolean }[] = [];
+    const hooks: X402TracingHooks = {
+      onSpanStart: (e) => events.push({ name: e.name }),
+      onSpanEnd: (e) => events.push({ name: e.name, ok: e.ok }),
+    };
+    const fetchImpl = vi.fn(async () => {
+      throw new TypeError("network error");
+    });
+    const c = clientWithTracing(fetchImpl, hooks);
+    await expect(
+      c.fetch("https://res.test", { maxAmount: 10n, trace: { traceId: "err-test" } }),
+    ).rejects.toThrow("network error");
+    expect(events).toEqual([
+      { name: "x402.request" },
+      { name: "x402.request", ok: false },
+    ]);
+  });
+
+  it("captures the trace context from init.trace in all spans", async () => {
+    const traceIds: string[] = [];
+    const hooks: X402TracingHooks = {
+      onSpanStart: (e) => traceIds.push(e.trace.traceId),
+    };
+    const fetchImpl = vi.fn(async () => new Response("ok", { status: 200 }));
+    const c = clientWithTracing(fetchImpl, hooks);
+    await c.fetch("https://res.test", {
+      maxAmount: 10n,
+      trace: { traceId: "ctx-prop" },
+    });
+    expect(traceIds).toEqual(["ctx-prop"]);
   });
 });

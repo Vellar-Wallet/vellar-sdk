@@ -40,6 +40,7 @@ import {
   type X402PayOptions,
   type X402Response,
 } from "./x402-types";
+import { type X402TracingHooks, type X402TraceContext, tracedSpan } from "./x402-tracing";
 
 // The pure guard layer is part of this module's published surface.
 export * from "./x402-guards";
@@ -61,6 +62,8 @@ export interface X402ClientDeps {
   fetchImpl?: FetchLike;
   /** Signature-expiration window in ledgers (default 12 ≈ 60s at 5s ledgers). */
   expirationLedgerOffset?: number;
+  /** Optional observability hooks called at each internal boundary. */
+  tracingHooks?: X402TracingHooks;
 }
 
 // Estimated ledger close time (seconds). The facilitator fetches its own estimate
@@ -115,7 +118,9 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
 
   async function buildSignedPayment(
     requirements: PaymentRequirements,
+    trace?: X402TraceContext,
   ): Promise<{ header: string; amount: bigint }> {
+    return tracedSpan(deps.tracingHooks, "x402.build-payment", trace ?? { traceId: "noop" }, async () => {
     const net = NETWORKS[requirements.network];
     if (!net) throw new NoUsablePaymentOptionError(`Unknown network ${requirements.network}`);
 
@@ -170,9 +175,11 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
       // smart-account work — the classic path has always had this gap.
       assertAuthEntryInvocation(entry, expected);
 
-      const signedXdr = await deps.signer.signAuthEntry(entry.toXDR("base64"), {
-        networkPassphrase: net.passphrase,
-        expirationLedger,
+      const signedXdr = await tracedSpan(deps.tracingHooks, "x402.sign-auth-entry", trace ?? { traceId: "noop" }, async () => {
+        return deps.signer.signAuthEntry(entry.toXDR("base64"), {
+          networkPassphrase: net.passphrase,
+          expirationLedger,
+        });
       });
       auth[i] = xdr.SorobanAuthorizationEntry.fromXDR(signedXdr, "base64");
       signed++;
@@ -191,6 +198,7 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
       header: utf8ToBase64(JSON.stringify(payload)),
       amount: parseAmount(requirements.amount),
     };
+    }); // tracedSpan x402.build-payment
   }
 
   async function createPayment(
@@ -228,19 +236,29 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
       body: init.body ?? undefined,
     };
 
-    const first = await doFetch(url, baseInit);
+    const trace: X402TraceContext = init.trace ?? { traceId: "noop" };
+
+    const first = await tracedSpan(deps.tracingHooks, "x402.request", trace, async () => {
+      return doFetch(url, baseInit);
+    }, { url });
     if (first.status !== 402) {
       return { response: first, paid: false };
     }
 
-    const decoded = decodePaymentRequired(first);
-    const requirements = selectRequirements(decoded, init, ourCaip2);
-    const { header, amount } = await buildSignedPayment(requirements);
-
-    const paid = await doFetch(url, {
-      ...baseInit,
-      headers: { ...(init.headers ?? {}), "PAYMENT-SIGNATURE": header },
+    const decoded = await tracedSpan(deps.tracingHooks, "x402.decode-requirements", trace, async () => {
+      return decodePaymentRequired(first);
     });
+    const requirements = await tracedSpan(deps.tracingHooks, "x402.select-requirements", trace, async () => {
+      return selectRequirements(decoded, init, ourCaip2);
+    });
+    const { header, amount } = await buildSignedPayment(requirements, trace);
+
+    const paid = await tracedSpan(deps.tracingHooks, "x402.paid-retry", trace, async () => {
+      return doFetch(url, {
+        ...baseInit,
+        headers: { ...(init.headers ?? {}), "PAYMENT-SIGNATURE": header },
+      });
+    }, { url });
 
     if (paid.status === 402 || paid.status >= 400) {
       const reason = extractRejectionReason(paid);
@@ -251,11 +269,13 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
       );
     }
 
-    const settlement = readSettlement(paid, requirements, amount, deps.network);
+    const settlement = await tracedSpan(deps.tracingHooks, "x402.read-settlement", trace, async () => {
+      return readSettlement(paid, requirements, amount, deps.network);
+    });
     return { response: paid, paid: true, settlement };
   }
 
-  return { fetch: x402Fetch, createPayment };
+  return { fetch: x402Fetch, createPayment, tracingHooks: deps.tracingHooks };
 }
 
 function readSettlement(

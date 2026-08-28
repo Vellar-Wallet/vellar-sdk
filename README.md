@@ -294,6 +294,58 @@ signers (`createSessionKeySigner`, `createPasskeyX402Signer`), the
 RPC-backed readers (`vellar-sdk/rpc`, imported separately so
 `@stellar/stellar-sdk` stays out of bundles that don't read balances).
 
+### Observability — tracing hooks
+
+The x402 payment flow fires optional tracing hooks at each internal boundary,
+giving you end-to-end visibility without importing a specific tracing library.
+Hooks are **zero-cost when unconfigured** — when no hooks are passed, every call
+is a no-op.
+
+The span phases are:
+
+| Span name | When |
+| --- | --- |
+| `x402.request` | The initial (unpaid) HTTP request |
+| `x402.decode-requirements` | Decoding the `PAYMENT-REQUIRED` header |
+| `x402.select-requirements` | Selecting the best payment option |
+| `x402.build-payment` | Building + signing the SEP-41 transfer |
+| `x402.sign-auth-entry` | Signing one auth entry via the injected signer |
+| `x402.paid-retry` | Retrying the request with the `PAYMENT-SIGNATURE` header |
+| `x402.read-settlement` | Reading the on-chain settlement from the paid response |
+
+Pass `tracingHooks` at the client level and a `trace` context per request:
+
+```ts
+import { createVellarWallet, generateTraceId } from "vellar-sdk";
+
+const vellar = createVellarWallet({
+  /* … */
+  x402: {
+    signer: createSessionKeySigner({ address: walletCAddress, secretKey: sessionKeySecret }),
+    simulationSourceAccount: aFundedGAccount,
+  },
+  tracingHooks: {
+    onSpanStart(e) {
+      console.log(`[${e.trace.traceId}] ▶ ${e.name}`, e.meta);
+    },
+    onSpanEnd(e) {
+      const status = e.ok ? "✓" : "✗";
+      console.log(`[${e.trace.traceId}] ${status} ${e.name} (${e.durationMs.toFixed(1)}ms)`, e.result);
+    },
+  },
+});
+
+// Each request carries its own trace context:
+const { response, paid } = await vellar.x402.fetch("https://api.example.com/paid", {
+  maxAmount: 1_000_000n,
+  trace: { traceId: generateTraceId() },
+});
+```
+
+You can also wire hooks into OpenTelemetry, Datadog, or any other tracing system —
+the callbacks receive plain `SpanStartEvent` / `SpanEndEvent` objects with the
+span name, trace context, duration, and error info.
+
 ## License
 
 Apache-2.0

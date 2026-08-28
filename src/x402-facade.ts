@@ -5,6 +5,7 @@
 // isn't configured). The heavy lifting is in x402-client.ts + x402-signer.ts.
 
 import { createX402Client, type FetchLike } from "./x402-client";
+import type { X402TracingHooks } from "./x402-tracing";
 import {
   X402NotConfiguredError,
   type SmartAccountX402Signer,
@@ -24,6 +25,8 @@ export interface X402FacadeDeps {
   };
   /** Resolves the x402 signer for the connected wallet (throws if not ready). */
   resolveSigner: () => SmartAccountX402Signer;
+  /** Optional observability hooks called at each internal boundary. */
+  tracingHooks?: X402TracingHooks;
 }
 
 /**
@@ -44,6 +47,7 @@ export function createX402Facade(deps: X402FacadeDeps): X402Client {
       simulationSourceAccount: deps.config.simulationSourceAccount,
       fetchImpl: deps.config.fetchImpl,
       expirationLedgerOffset: deps.config.expirationLedgerOffset,
+      tracingHooks: deps.tracingHooks,
     });
   }
 
@@ -52,5 +56,8 @@ export function createX402Facade(deps: X402FacadeDeps): X402Client {
   return {
     fetch: async (url, init) => client().fetch(url, init),
     createPayment: async (requirements, opts) => client().createPayment(requirements, opts),
+    get tracingHooks() {
+      return deps.tracingHooks;
+    },
   };
 }
