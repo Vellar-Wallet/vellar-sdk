@@ -311,6 +311,111 @@ compatibility; treat those flat imports as unstable.
 The canonical export lists live in `src/export-surface.ts` and are checked by
 `src/index.exports.test.ts`.
 
+#### Session idle timeout
+
+`createSessionStore(storage, options?)` accepts an optional `idleTimeoutMs`.
+When set, `restore()` checks how long the persisted session has been idle
+(`now - lastActiveAt`) and expires it — clearing storage and setting
+`status: "disconnected"` — instead of restoring a session that's been sitting
+untouched past that window (tab closed for days, a background worker waking
+up long after the user left):
+
+```ts
+import { createSessionStore, createWebStorageAdapter } from "vellar-sdk";
+
+const store = createSessionStore(createWebStorageAdapter(localStorage), {
+  idleTimeoutMs: 30 * 60 * 1000, // 30 minutes
+  onIdleExpired: ({ session, idleForMs }) => {
+    console.debug(`session for ${session.accountId} expired after ${idleForMs}ms idle`);
+  },
+});
+```
+
+- The check runs on `restore()` only — the point where a possibly-stale
+  session is read back in. `touch()` (called on user activity) is what proves
+  a session is still active, so it never expires the session itself.
+- Left unset, idle expiry is disabled entirely — existing callers see no
+  behavior change.
+- A `lastActiveAt` in the future (clock skew, a corrupted value) is never
+  treated as expired.
+
+#### Rejecting stale or replayed passkey assertions
+
+`createPasskeyKitConnector` never generates or inspects a WebAuthn challenge
+itself — that's a host-issued value (e.g. one your backend mints for a
+step-up reauth before a sensitive action). To reject a stale or already-used
+challenge with a typed error instead of proceeding, pass a `ChallengeTracker`:
+
+```ts
+import { ChallengeTracker, createPasskeyKitConnector } from "vellar-sdk";
+
+const challengeTracker = new ChallengeTracker({ maxAgeMs: 5 * 60 * 1000 }); // 5 min TTL
+
+const connector = createPasskeyKitConnector({
+  kit,
+  backend,
+  network: "testnet",
+  appName: "Vellar",
+  challengeTracker,
+});
+
+// When your backend issues a fresh challenge for a sensitive operation:
+challengeTracker.register(challenge);
+
+// After the passkey ceremony, before acting on it:
+try {
+  connector.verifyPasskeyChallenge(challenge);
+} catch (err) {
+  if (err instanceof PasskeyAssertionExpiredError) {
+    // ask the user to retry — they took too long
+  } else if (err instanceof PasskeyAssertionReplayedError) {
+    // this exact challenge was already used — a genuine replay attempt,
+    // worth logging/alerting on
+  }
+  throw err;
+}
+```
+
+`verifyPasskeyChallenge` throws if no `challengeTracker` was configured, so
+calling it on a connector built without one fails loudly rather than
+silently no-op'ing.
+
+#### Caching and warming up balance reads
+
+`vellar-sdk/balances` also exports a TTL cache for `BalanceReader` and a
+warm-up helper, so a balances UI's first render doesn't have to pay cold RPC
+latency. `createRpcBalanceReader` (the real-world `BalanceReader` this
+wraps) lives in the separate `vellar-sdk/rpc` subpath:
+
+```ts
+import { createCachedBalanceReader, warmUpBalanceCache } from "vellar-sdk/balances";
+import { createRpcBalanceReader, nativeToken } from "vellar-sdk/rpc";
+
+const rawReader = createRpcBalanceReader({ rpcUrl, networkPassphrase });
+const reader = createCachedBalanceReader(rawReader, { ttlMs: 15_000 });
+
+// Right after connect, before the balances UI first renders:
+await warmUpBalanceCache(reader, walletAddress, {
+  tokens: [nativeToken(networkPassphrase), usdcToken],
+});
+
+// Later reads within the TTL are served from memory.
+const service = createBalanceService(reader, [nativeToken(networkPassphrase), usdcToken]);
+const balances = await service.getBalances(walletAddress);
+```
+
+- `tokens` is required and explicit — pass a subset (e.g. just the native
+  asset) to warm up only what your UI shows first.
+- One token failing during warm-up doesn't abort the rest by default
+  (`continueOnError: true`); inspect `result.failed` for what didn't warm up.
+  Pass `continueOnError: false` to instead reject on the first failure.
+- A failed read is never cached, so the next call always retries against the
+  network rather than repeating a stale error.
+- `reader.invalidate()` (all entries), `invalidate(tokenContractId)` (one
+  token, every holder), or `invalidate(tokenContractId, holder)` (one entry)
+  drop cached values directly — e.g. after a transfer you know changed a
+  balance.
+
 ## License
 
 Apache-2.0
