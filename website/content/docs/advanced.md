@@ -37,8 +37,38 @@ import { createRpcBalanceReader } from "vellar-sdk/rpc"; // pulls in @stellar/st
 ```
 
 - **`vellar-sdk/balances`** — token amount formatting and the balance service.
-- **`vellar-sdk/rpc`** — RPC-backed balance readers. Imported separately so
-  `@stellar/stellar-sdk` stays out of bundles that don't read balances.
+- **`vellar-sdk/rpc`** — RPC-backed balance and transaction status readers.
+  Imported separately so `@stellar/stellar-sdk` stays out of bundles that
+  don't read balances.
+
+## RPC fallback endpoints
+
+`createRpcTxStatusReader` supports a prioritized list of fallback RPC
+endpoints for high availability. If the primary endpoint times out or returns a
+network error, the reader automatically retries on the next endpoint.
+
+```ts
+import { createRpcTxStatusReader } from "vellar-sdk/rpc";
+
+const reader = createRpcTxStatusReader({
+  endpoints: [
+    { url: "https://primary-rpc.example.com", timeoutMs: 5_000 },
+    { url: "https://backup-rpc.example.com", timeoutMs: 10_000 },
+    { url: "https://emergency-rpc.example.com" },
+  ],
+  defaultTimeoutMs: 10_000,
+});
+```
+
+| Option | Description |
+| --- | --- |
+| `rpcUrl` | Single endpoint (backward compatible). Ignored if `endpoints` is set. |
+| `endpoints` | Prioritized array of `{ url, timeoutMs? }`. First entry is primary. |
+| `defaultTimeoutMs` | Fallback timeout for endpoints that don't specify one (default: 10 000 ms). |
+
+Retryable errors that trigger fallback: timeouts, `ECONNREFUSED`, `ECONNRESET`,
+`ENOTFOUND`, `socket hang up`, and HTTP 5xx. Non-retryable errors (e.g. invalid
+transaction hash) throw immediately without falling back.
 
 ## Custom review UI (example)
 

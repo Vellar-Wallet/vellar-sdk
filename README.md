@@ -294,6 +294,39 @@ signers (`createSessionKeySigner`, `createPasskeyX402Signer`), the
 RPC-backed readers (`vellar-sdk/rpc`, imported separately so
 `@stellar/stellar-sdk` stays out of bundles that don't read balances).
 
+### RPC fallback endpoints
+
+`createRpcTxStatusReader` supports a prioritized list of fallback RPC
+endpoints. If the primary endpoint times out or returns a network error,
+the reader automatically retries on the next endpoint in the list.
+
+```ts
+import { createRpcTxStatusReader } from "vellar-sdk/rpc";
+
+// Single endpoint (backward compatible):
+const reader = createRpcTxStatusReader({
+  rpcUrl: "https://rpc.example.com",
+});
+
+// Multiple endpoints with fallback:
+const reader = createRpcTxStatusReader({
+  endpoints: [
+    { url: "https://primary-rpc.example.com", timeoutMs: 5_000 },
+    { url: "https://backup-rpc.example.com", timeoutMs: 10_000 },
+    { url: "https://emergency-rpc.example.com" }, // uses defaultTimeoutMs
+  ],
+  defaultTimeoutMs: 10_000,
+});
+```
+
+Each endpoint in the `endpoints` array can specify its own `timeoutMs`. The
+reader falls back on timeouts, connection errors (`ECONNREFUSED`,
+`ECONNRESET`, `ENOTFOUND`, socket hang up), and HTTP 5xx responses. Non-
+retryable errors (e.g. invalid transaction hash) are thrown immediately
+without falling back.
+
+When `endpoints` is provided, the `rpcUrl` field is ignored.
+
 ## License
 
 Apache-2.0
