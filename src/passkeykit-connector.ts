@@ -61,6 +61,33 @@ export interface PasskeyKitConnectorOptions {
   now?: () => Date;
   /** Converts kit.sign output to XDR. Default handles strings and objects with toXDR(). */
   signedToXdr?: (signed: unknown) => string;
+  /**
+   * Opt-in single-use/TTL tracking for a caller-issued challenge (e.g. one
+   * the backend minted for a step-up reauth before a sensitive
+   * signTransaction call). When set, use the returned connector's
+   * `verifyPasskeyChallenge(challenge)` to validate a challenge before/after
+   * the passkey ceremony — see #230. Unset by default: this connector never
+   * requires a challenge unless the caller opts in.
+   */
+  challengeTracker?: ChallengeTracker;
+}
+
+/**
+ * The concrete connector `createPasskeyKitConnector` returns: the standard
+ * `WalletConnector` interface, plus an extra method only available when
+ * `challengeTracker` was configured. Kept off the shared `WalletConnector`
+ * interface itself so other connector implementations aren't forced to grow
+ * an unused method.
+ */
+export interface PasskeyKitConnector extends WalletConnector {
+  /**
+   * Validates and consumes `challenge` against the configured
+   * `challengeTracker`. Throws `PasskeyAssertionReplayedError` if already
+   * used, `PasskeyAssertionExpiredError` if past its TTL, or a plain `Error`
+   * if `challengeTracker` was never configured or the challenge was never
+   * registered.
+   */
+  verifyPasskeyChallenge(challenge: string): void;
 }
 
 export function defaultSignedToXdr(signed: unknown): string {
@@ -80,6 +107,103 @@ export class WalletNetworkMismatchError extends Error {
   constructor(expected: Network, actual: Network) {
     super(`Connector is configured for ${expected} but was asked to operate on ${actual}`);
     this.name = "WalletNetworkMismatchError";
+  }
+}
+
+/**
+ * A passkey assertion's challenge is older than the tracker's TTL. Thrown by
+ * `ChallengeTracker.consume` (see below) — distinct from
+ * `PasskeyAssertionReplayedError` so callers can tell "the user took too
+ * long" (ask them to retry) apart from "this exact assertion was already
+ * used" (a genuine replay attempt, worth logging/alerting on).
+ */
+export class PasskeyAssertionExpiredError extends Error {
+  constructor(
+    public readonly challenge: string,
+    public readonly issuedAt: Date,
+    public readonly maxAgeMs: number,
+  ) {
+    super(
+      `Passkey assertion challenge expired: issued at ${issuedAt.toISOString()}, ` +
+        `max age ${maxAgeMs}ms`,
+    );
+    this.name = "PasskeyAssertionExpiredError";
+  }
+}
+
+/**
+ * A passkey assertion's challenge was already consumed once. Every challenge
+ * is single-use: consuming it a second time — whether from a genuine replay
+ * attempt or a caller accidentally re-submitting the same response — is
+ * always rejected.
+ */
+export class PasskeyAssertionReplayedError extends Error {
+  constructor(public readonly challenge: string) {
+    super(`Passkey assertion challenge has already been used: ${challenge}`);
+    this.name = "PasskeyAssertionReplayedError";
+  }
+}
+
+/**
+ * Tracks single-use passkey challenges issued to the client, so a signing
+ * operation gated by `consume()` can distinguish a stale assertion (too old)
+ * from a replayed one (already used) with a typed error for each — see
+ * #230. Not itself a WebAuthn challenge generator: callers issue their own
+ * random/opaque challenge string (e.g. one the backend minted) and register
+ * it here before presenting it to the passkey ceremony.
+ *
+ * Entries are pruned lazily (on `register`/`consume`) rather than on a
+ * timer, so this class has no background interval to clean up.
+ */
+export class ChallengeTracker {
+  private readonly issuedAt = new Map<string, Date>();
+  private readonly consumed = new Set<string>();
+  private readonly maxAgeMs: number;
+  private readonly now: () => Date;
+
+  constructor(options: { maxAgeMs?: number; now?: () => Date } = {}) {
+    this.maxAgeMs = options.maxAgeMs ?? 5 * 60 * 1000; // 5 minutes
+    this.now = options.now ?? (() => new Date());
+  }
+
+  /** Registers a freshly-issued challenge, timestamped at the current time. */
+  register(challenge: string): void {
+    this.pruneExpired();
+    this.issuedAt.set(challenge, this.now());
+    this.consumed.delete(challenge);
+  }
+
+  /**
+   * Validates and single-use-consumes `challenge`. Throws
+   * `PasskeyAssertionReplayedError` if it was already consumed,
+   * `PasskeyAssertionExpiredError` if it's older than `maxAgeMs`, or a plain
+   * `Error` if it was never registered at all. Returns void on success.
+   */
+  consume(challenge: string): void {
+    if (this.consumed.has(challenge)) {
+      throw new PasskeyAssertionReplayedError(challenge);
+    }
+    const issuedAt = this.issuedAt.get(challenge);
+    if (issuedAt === undefined) {
+      throw new Error(`Unknown passkey assertion challenge: ${challenge}`);
+    }
+    const ageMs = this.now().getTime() - issuedAt.getTime();
+    if (ageMs > this.maxAgeMs) {
+      throw new PasskeyAssertionExpiredError(challenge, issuedAt, this.maxAgeMs);
+    }
+    this.consumed.add(challenge);
+    this.issuedAt.delete(challenge);
+  }
+
+  /** Drops tracked challenges older than `maxAgeMs`, whether consumed or not. */
+  private pruneExpired(): void {
+    const cutoff = this.now().getTime() - this.maxAgeMs;
+    for (const [challenge, issuedAt] of this.issuedAt) {
+      if (issuedAt.getTime() < cutoff) {
+        this.issuedAt.delete(challenge);
+        this.consumed.delete(challenge);
+      }
+    }
   }
 }
 
@@ -110,8 +234,8 @@ function assertBrowserWebAuthnContext(operation: string): void {
   }
 }
 
-export function createPasskeyKitConnector(options: PasskeyKitConnectorOptions): WalletConnector {
-  const { kit, backend, network, appName } = options;
+export function createPasskeyKitConnector(options: PasskeyKitConnectorOptions): PasskeyKitConnector {
+  const { kit, backend, network, appName, challengeTracker } = options;
   const now = options.now ?? (() => new Date());
   const signedToXdr = options.signedToXdr ?? defaultSignedToXdr;
 
@@ -174,6 +298,16 @@ export function createPasskeyKitConnector(options: PasskeyKitConnectorOptions): 
       assertNetwork(input.network);
       const signed = await kit.sign(input.xdr);
       return { signedXdr: signedToXdr(signed) };
+    },
+
+    verifyPasskeyChallenge(challenge: string): void {
+      if (!challengeTracker) {
+        throw new Error(
+          "verifyPasskeyChallenge() called but no challengeTracker was configured on " +
+            "createPasskeyKitConnector — pass { challengeTracker: new ChallengeTracker() } to use it.",
+        );
+      }
+      challengeTracker.consume(challenge);
     },
   };
 }
