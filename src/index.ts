@@ -6,6 +6,29 @@
 //
 // (balances-rpc is intentionally NOT re-exported here — import it from
 // "vellar-sdk/rpc" so stellar-sdk stays out of bundles that don't need it)
+export * from "./types";
+export * from "./client";
+export * from "./config";
+export * from "./http-backend";
+export * from "./balances";
+export * from "./connector";
+export * from "./passkeykit-connector";
+export * from "./payments";
+export * from "./payments-client";
+export * from "./policy-types";
+export * from "./policy-client";
+export * from "./policy-facade";
+export * from "./agents-facade";
+export * from "./x402-types";
+export * from "./x402-auth-entry";
+export * from "./x402-signer";
+export * from "./x402-signer-capabilities";
+export * from "./x402-budget-attributes";
+export * from "./x402-client";
+export * from "./x402-facade";
+export * from "./x402-request-auth";
+export * from "./session";
+export * from "./tx-status";
 
 /** Stable v1 API — breaking changes only in major semver releases. */
 export * from "./v1-exports";
