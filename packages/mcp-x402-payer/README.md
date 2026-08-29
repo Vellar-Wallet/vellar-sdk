@@ -326,6 +326,29 @@ spent nothing — confirmed by arithmetic on-chain, not by trusting the error.
 
 Reproducible as `test/integration/layer2.integration.test.ts`.
 
+
+## Startup readiness
+
+Use `checkReadiness()` before starting the payer when you want to validate
+configuration without starting the MCP server.
+
+```ts
+import { checkReadiness } from "@vellar-wallet/mcp-x402-payer";
+
+const readiness = checkReadiness();
+
+if (!readiness.ready) {
+  console.error("MCP payer is not ready:");
+
+  for (const issue of readiness.issues) {
+    console.error(`${issue.field}: ${issue.message}`);
+  }
+
+  process.exit(1);
+}
+
+
+
 ### Reading the refusal
 
 The wallet wraps **every** auth failure in its own `Error(Contract, #110)`, so
@@ -437,6 +460,111 @@ crossed the transport does not demonstrate a working MCP server.
 An unconfigured machine **skips** the integration suite; a *partially* configured
 one **errors**, because a half-set environment is how a test quietly stops
 covering anything.
+
+
+
+# Facilitator Outage Runbook
+
+## Purpose
+
+This runbook describes how consumers and maintainers should respond when
+the Vellar facilitator is unavailable or degraded.
+
+## Detection
+
+Investigate a possible facilitator outage when multiple requests begin
+returning:
+
+- connection failures
+- request timeouts
+- HTTP 5xx responses
+- settlement failures
+- unavailable payment options
+
+First determine whether the failure is local to the consumer or shared
+across multiple environments.
+
+## Consumer response
+
+Consumers should:
+
+1. Confirm the configured facilitator URL.
+2. Check whether requests are timing out or returning 5xx responses.
+3. Avoid retrying indefinitely.
+4. Respect SDK-specific retry guidance.
+5. Preserve the original error type and message for diagnostics.
+6. Escalate if the outage persists.
+
+Do not expose payer secrets, private keys, or payment credentials when
+reporting the failure.
+
+## Expected SDK behavior
+
+A facilitator outage should normally surface as a transport, timeout,
+or settlement-related SDK error rather than being silently treated as a
+successful payment.
+
+Consumers should distinguish:
+
+- timeout/network failure
+- facilitator rejection
+- settlement failure
+- indeterminate settlement
+
+An indeterminate settlement must not be blindly retried because the
+original payment may already have succeeded.
+
+## Maintainer response
+
+1. Confirm the facilitator health endpoint or service status.
+2. Check recent deployment and infrastructure changes.
+3. Compare failures across testnet and mainnet.
+4. Check logs and request correlation data.
+5. Determine whether the problem is facilitator-wide or SDK-specific.
+6. Communicate an incident status to affected consumers.
+7. Restore service or route traffic to the approved fallback if one exists.
+8. Verify successful settlement before closing the incident.
+
+## Escalation
+
+Primary maintainer:
+
+- Vellar Wallet maintainers via the project's approved maintainer channel.
+
+Secondary escalation:
+
+- Repository owners and organization maintainers.
+
+Do not place private credentials or sensitive incident information in
+public GitHub issues.
+
+## Recovery verification
+
+Before declaring recovery:
+
+- successful facilitator request observed
+- successful payment/settlement observed
+- SDK errors return to normal levels
+- no duplicate settlement behavior observed
+- affected consumer workflows verified
+
+## Post-incident
+
+Record:
+
+- incident start time
+- detection method
+- affected environments
+- customer impact
+- root cause
+- recovery time
+- corrective actions
+
+Update this runbook whenever the facilitator architecture or escalation
+path changes.
+
+
+
 
 ## Debugging
 
