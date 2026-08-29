@@ -21,6 +21,14 @@ import {
   type FacilitatorRequestSigningConfig,
 } from "./x402-request-auth";
 import {
+  assertBudgetAttributes,
+  assertValidBudgetAttributeRules,
+  matchingBudgetRule,
+  type BudgetAttributeRequest,
+  type BudgetAttributeRule,
+  type BudgetAttributeTracker,
+} from "./x402-budget-attributes";
+import {
   CAIP2_BY_NETWORK,
   NETWORKS,
   decodePaymentRequired,
@@ -73,6 +81,22 @@ export interface X402ClientDeps {
    * a facilitator that does not verify these headers is unaffected either way.
    */
   requestSigning?: FacilitatorRequestSigningConfig;
+  /**
+   * Attribute-based scoping for the session key's budget (#225): merchant,
+   * category, and time-window rules checked BEFORE a payment is built or
+   * signed, on top of (never instead of) `maxAmount` and the on-chain
+   * spending-limit policy. Omit for no attribute scoping (the pre-#225
+   * behaviour — only `maxAmount` and the chain enforce the budget). See
+   * ./x402-budget-attributes.ts for what this does and does not guarantee.
+   */
+  budgetAttributes?: readonly BudgetAttributeRule[];
+  /** Running-spend accounting for `budgetAttributes` rules with a
+   * `periodMaxAmount`. Without it, only each rule's per-payment `maxAmount`
+   * is enforced — `periodMaxAmount` is silently not tracked. */
+  budgetAttributeTracker?: BudgetAttributeTracker;
+  /** Clock for time-window budget rules (defaults to `() => new Date()`);
+   * overridable for tests. */
+  now?: () => Date;
 }
 
 // Estimated ledger close time (seconds). The facilitator fetches its own estimate
@@ -119,6 +143,12 @@ export function expirationOffsetFor(
 export function createX402Client(deps: X402ClientDeps): X402Client {
   // Fail here, with the actionable error, not inside rpc.Server's URL parse.
   assertValidX402RpcUrl(deps.rpcUrl);
+  // Fail on a malformed rule at construction, not mid-payment (#225 mirrors
+  // #224's assertValidCapabilityRules posture: a typo'd rule fails loudly
+  // before it can wrongly deny or wrongly admit).
+  const budgetAttributes = deps.budgetAttributes ?? [];
+  assertValidBudgetAttributeRules(budgetAttributes);
+  const now = deps.now ?? (() => new Date());
   const server = new rpc.Server(deps.rpcUrl);
   const baseFetch: FetchLike = deps.fetchImpl ?? ((url, init) => fetch(url, init));
   // Request signing wraps whatever fetch the caller already injected, so a
@@ -130,11 +160,27 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
   const expirationCeiling = deps.expirationLedgerOffset;
   const ourCaip2 = CAIP2_BY_NETWORK[deps.network];
 
+  function budgetRequestFor(requirements: PaymentRequirements): BudgetAttributeRequest {
+    const category = requirements.extra?.category;
+    return {
+      merchant: requirements.payTo,
+      ...(typeof category === "string" ? { category } : {}),
+      amount: parseAmount(requirements.amount),
+      at: now(),
+    };
+  }
+
   async function buildSignedPayment(
     requirements: PaymentRequirements,
   ): Promise<{ header: string; amount: bigint }> {
     const net = NETWORKS[requirements.network];
     if (!net) throw new NoUsablePaymentOptionError(`Unknown network ${requirements.network}`);
+
+    // Attribute-scoped budget check (#225) — BEFORE simulation, so an
+    // out-of-budget payment never even round-trips to the RPC. Independent of
+    // (checked in addition to) maxAmount / allowedAssets in createPayment.
+    const budgetRequest = budgetRequestFor(requirements);
+    await assertBudgetAttributes(budgetAttributes, budgetRequest, deps.budgetAttributeTracker);
 
     // Build the SEP-41 transfer(from = C-address, to = payTo, amount).
     const tx = await AssembledTransaction.build({
@@ -269,6 +315,17 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
     }
 
     const settlement = readSettlement(paid, requirements, amount, deps.network);
+
+    // Record spend only now that the facilitator has actually accepted the
+    // payment — a request rejected above (over-budget on-chain, or any other
+    // 4xx) must not consume period budget it never actually spent.
+    if (deps.budgetAttributeTracker && budgetAttributes.length > 0) {
+      const rule = matchingBudgetRule(budgetAttributes, budgetRequestFor(requirements));
+      if (rule?.periodMaxAmount !== undefined) {
+        await deps.budgetAttributeTracker.record(rule, amount);
+      }
+    }
+
     return { response: paid, paid: true, settlement };
   }
 

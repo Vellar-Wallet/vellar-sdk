@@ -15,8 +15,12 @@ import {
   X402NotConfiguredError,
   type SmartAccountX402Signer,
 } from "./x402-types";
-import { C_ADDRESS, SIM_SOURCE, requirements, response402 } from "./x402-test-fixtures";
+import { C_ADDRESS, PAYTO, SIM_SOURCE, TOKEN, requirements, response402 } from "./x402-test-fixtures";
 import { SIGNED_REQUEST_HEADER_NAMES } from "./x402-request-auth";
+import {
+  BudgetAttributeDeniedError,
+  InvalidBudgetAttributeRuleError,
+} from "./x402-budget-attributes";
 
 describe("createX402Client — rpcUrl validation", () => {
   function withRpcUrl(rpcUrl: string) {
@@ -207,6 +211,138 @@ describe("requestSigning (#226) — opt-in signed requests to the facilitator", 
     });
     await c.fetch("https://facilitator.test/paid", { maxAmount: 10n });
     expect(seen).toEqual(["https://facilitator.test/paid"]);
+  });
+});
+
+describe("budgetAttributes (#225) — attribute-scoped budget checked before signing", () => {
+  it("rejects a malformed rule at construction, before any fetch", () => {
+    expect(() =>
+      createX402Client({
+        signer: stubSigner,
+        rpcUrl: "https://soroban-testnet.stellar.org",
+        network: "testnet",
+        simulationSourceAccount: SIM_SOURCE,
+        budgetAttributes: [{ merchant: "not-an-address", maxAmount: 1n }],
+      }),
+    ).toThrow(InvalidBudgetAttributeRuleError);
+  });
+
+  it("never throws BudgetAttributeDeniedError when budgetAttributes is omitted (backward compatible)", async () => {
+    const fetchImpl = vi.fn(async () => response402([requirements({ amount: "5000000" })]));
+    const c = createX402Client({
+      signer: stubSigner,
+      rpcUrl: "https://rpc.invalid.example",
+      network: "testnet",
+      simulationSourceAccount: SIM_SOURCE,
+      fetchImpl,
+    });
+    // No budgetAttributes configured ⇒ assertBudgetAttributes short-circuits
+    // before ever constructing a BudgetAttributeDeniedError. Whatever else
+    // this rejects with (network/signing, since this test has no live RPC),
+    // it must not be that error.
+    await expect(
+      c.fetch("https://res.test/paid", { maxAmount: 10_000_000n }),
+    ).rejects.not.toBeInstanceOf(BudgetAttributeDeniedError);
+  });
+
+  it("throws BudgetAttributeDeniedError for a merchant not covered by any rule, before signing", async () => {
+    const fetchImpl = vi.fn(async () => response402([requirements()]));
+    const c = createX402Client({
+      signer: stubSigner,
+      rpcUrl: "https://soroban-testnet.stellar.org",
+      network: "testnet",
+      simulationSourceAccount: SIM_SOURCE,
+      fetchImpl,
+      budgetAttributes: [{ merchant: TOKEN, maxAmount: 10_000_000n }],
+    });
+    await expect(
+      c.fetch("https://res.test/paid", { maxAmount: 10_000_000n }),
+    ).rejects.toBeInstanceOf(BudgetAttributeDeniedError);
+    // Only the initial probe happened — no payment retry, and the stub signer
+    // (which throws if called) was never reached.
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws BudgetAttributeDeniedError when the amount exceeds the matching rule's ceiling", async () => {
+    const fetchImpl = vi.fn(async () => response402([requirements({ amount: "5000000" })]));
+    const c = createX402Client({
+      signer: stubSigner,
+      rpcUrl: "https://soroban-testnet.stellar.org",
+      network: "testnet",
+      simulationSourceAccount: SIM_SOURCE,
+      fetchImpl,
+      budgetAttributes: [{ merchant: PAYTO, maxAmount: 1_000_000n }],
+    });
+    await expect(
+      c.fetch("https://res.test/paid", { maxAmount: 10_000_000n }),
+    ).rejects.toBeInstanceOf(BudgetAttributeDeniedError);
+  });
+
+  it("permits a payment matching merchant and within the ceiling to proceed past the budget check", async () => {
+    // A malformed (but URL-parseable) RPC host so AssembledTransaction.build's
+    // network call fails immediately (DNS/connection error) rather than
+    // actually reaching testnet — this test only needs to observe that the
+    // budget check itself did not reject, not that a full payment completes.
+    const fetchImpl = vi.fn(async () => response402([requirements({ amount: "500000" })]));
+    const c = createX402Client({
+      signer: stubSigner,
+      rpcUrl: "https://rpc.invalid.example",
+      network: "testnet",
+      simulationSourceAccount: SIM_SOURCE,
+      fetchImpl,
+      budgetAttributes: [{ merchant: PAYTO, maxAmount: 1_000_000n }],
+    });
+    await expect(
+      c.fetch("https://res.test/paid", { maxAmount: 10_000_000n }),
+    ).rejects.not.toBeInstanceOf(BudgetAttributeDeniedError);
+  });
+
+  it("checks category via requirements.extra.category", async () => {
+    const fetchImpl = vi.fn(async () =>
+      response402([requirements({ amount: "500000", extra: { areFeesSponsored: true, category: "electronics" } })]),
+    );
+    const c = createX402Client({
+      signer: stubSigner,
+      rpcUrl: "https://soroban-testnet.stellar.org",
+      network: "testnet",
+      simulationSourceAccount: SIM_SOURCE,
+      fetchImpl,
+      budgetAttributes: [{ merchant: PAYTO, category: "groceries", maxAmount: 1_000_000n }],
+    });
+    await expect(
+      c.fetch("https://res.test/paid", { maxAmount: 10_000_000n }),
+    ).rejects.toBeInstanceOf(BudgetAttributeDeniedError);
+  });
+
+  it("applies a time window using the injected clock", async () => {
+    const fetchImpl = vi.fn(async () => response402([requirements({ amount: "500000" })]));
+    const c = createX402Client({
+      signer: stubSigner,
+      rpcUrl: "https://soroban-testnet.stellar.org",
+      network: "testnet",
+      simulationSourceAccount: SIM_SOURCE,
+      fetchImpl,
+      now: () => new Date("2026-08-15T23:00:00.000Z"),
+      budgetAttributes: [
+        { merchant: PAYTO, maxAmount: 1_000_000n, window: { startHourUtc: 9, endHourUtc: 17 } },
+      ],
+    });
+    await expect(
+      c.fetch("https://res.test/paid", { maxAmount: 10_000_000n }),
+    ).rejects.toBeInstanceOf(BudgetAttributeDeniedError);
+  });
+
+  it("createPayment's direct path also enforces budgetAttributes", async () => {
+    const c = createX402Client({
+      signer: stubSigner,
+      rpcUrl: "https://soroban-testnet.stellar.org",
+      network: "testnet",
+      simulationSourceAccount: SIM_SOURCE,
+      budgetAttributes: [{ merchant: TOKEN, maxAmount: 10_000_000n }],
+    });
+    await expect(
+      c.createPayment(requirements(), { maxAmount: 10_000_000n }),
+    ).rejects.toBeInstanceOf(BudgetAttributeDeniedError);
   });
 });
 
