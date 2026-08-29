@@ -42,6 +42,8 @@ export interface PolicyClientOptions {
 export interface PolicyClient {
   /** GET /policies/templates — the available policy templates + enforcement. */
   listTemplates(): Promise<PolicyTemplateInfo[]>;
+  /** GET /policies — list generated policies, optionally filtered. */
+  listPolicies(filters?: PolicyListFilters): Promise<GeneratedPolicy[]>;
   /** POST /policies/validate — validate a definition without generating. */
   validate(definition: PolicyDefinition): Promise<ValidationResult>;
   /** POST /policies/generate — validate + produce the deployable artifacts. */
