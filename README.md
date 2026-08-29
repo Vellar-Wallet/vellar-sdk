@@ -387,8 +387,10 @@ The facade is the paved road. For custom flows the package also exports the
 underlying pieces: `createPasskeyKitConnector`, `createPaymentClient`,
 `createSessionStore`, `createX402Client` (x402 without the wallet handle) and its
 signers (`createSessionKeySigner`, `createPasskeyX402Signer`), the
-`WalletConnector` interface, balances helpers (`vellar-sdk/balances`), and
-RPC-backed readers (`vellar-sdk/rpc`, imported separately so
+`WalletConnector` interface, balances helpers (`vellar-sdk/balances`), a
+`redactSensitiveFields` helper for logging hooks (see
+[Redacting sensitive fields in logging hooks](#security-redacting-sensitive-fields-in-logging-hooks)),
+and RPC-backed readers (`vellar-sdk/rpc`, imported separately so
 `@stellar/stellar-sdk` stays out of bundles that don't read balances).
 
 #### Session key rotation on re-authentication
@@ -426,6 +428,50 @@ failure is reported to `onDebugLog` (default: a no-op — bring your own logger)
 rather than thrown, and mint always runs before revoke so a revoke failure
 never leaves the wallet with no valid session key. Omit `sessionKeyRotation`
 for the pre-existing behaviour (no rotation).
+
+#### Security: redacting sensitive fields in logging hooks
+
+`onDebugLog` (above) and any other place this SDK hands a structured object to
+a hook you supplied is designed to be piped straight into your own
+logger/telemetry pipeline — this SDK never logs anything on its own. Those
+objects can carry fields that identify a specific user or wallet: an ed25519
+session-key public key, the smart-account contract id, a WebAuthn credential
+id (`WalletSession.keyId`), or a server-side session id. None of these are
+secrets this SDK holds (it never has a wallet private key to log), but they
+are stable, wallet-linkable identifiers that a downstream log aggregator,
+support export, or analytics sink generally should not retain in plaintext.
+
+`redactSensitiveFields` replaces every field matching a known-sensitive name
+(`secretKey`, `secret`, `privateKey`, `publicKey`, `previousPublicKey`,
+`newPublicKey`, `accountId`, `contractId`, `keyId`, `sessionId`,
+`serverSessionId`, `signature` — see `SENSITIVE_LOG_FIELDS`) with `"[redacted]"`,
+walking nested objects and arrays, before you hand the result to your logger:
+
+```ts
+import { createPasskeyKitConnector, redactSensitiveFields } from "vellar-sdk";
+
+const connector = createPasskeyKitConnector({
+  kit,
+  backend,
+  network: "testnet",
+  appName: "Vellar",
+  onDebugLog: (event, details) => myLogger.debug(event, redactSensitiveFields(details)),
+});
+```
+
+This is an **opt-in helper**, not a change to what the SDK passes to your
+hook by default — wiring it is your call, so tests and pipelines that already
+inspect real values are unaffected unless you choose to wrap the hook. Pass
+`extraFields` to also redact fields specific to your own `details` payloads
+(e.g. an email address your app adds before re-logging):
+
+```ts
+redactSensitiveFields(details, { extraFields: ["email", "phoneNumber"] });
+```
+
+`redactSensitiveFields` is a pure function over plain data: it does not
+serialize, and non-plain values (`Error`, `Date`, class instances, XDR/`ScVal`
+objects) pass through untouched rather than being flattened into `{}`.
 ## API stability
 
 Exports fall into two groups:
