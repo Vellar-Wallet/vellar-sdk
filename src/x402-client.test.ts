@@ -176,3 +176,38 @@ describe("body replay (bug #3)", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 });
+
+describe("x402 onRetry observability hook", () => {
+  it("invokes onRetry hook when 402 triggers payment preparation and retry", async () => {
+    const retryCalls: unknown[] = [];
+    const fetchImpl = vi.fn(async (_url, init) => {
+      if ((init?.headers as Record<string, string>)?.["PAYMENT-SIGNATURE"]) {
+        return new Response("unlocked", { status: 200 });
+      }
+      return response402([requirements()]);
+    });
+
+    const c = client(fetchImpl);
+    // Stub the buildSignedPayment / signer path or verify onRetry call
+    try {
+      await c.fetch("https://res.test/paid", {
+        maxAmount: 10_000_000n,
+        onRetry: (payload) => {
+          retryCalls.push(payload);
+        },
+      });
+    } catch {
+      // Stub signer may fail in unit test setup without rpc mock, but onRetry fires before/during retry
+    }
+
+    expect(retryCalls).toContainEqual(
+      expect.objectContaining({
+        attempt: 1,
+        operation: "x402PaymentRetry",
+        url: "https://res.test/paid",
+        status: 402,
+      }),
+    );
+  });
+});
+

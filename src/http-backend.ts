@@ -41,15 +41,23 @@ export interface HttpWalletBackend {
     contractId: string;
     network: Network;
     signedTx: unknown;
+    correlationId?: string;
   }): Promise<{ sessionId: string }>;
   lookupContractId(input: {
     keyId: string;
     network: Network;
+    correlationId?: string;
   }): Promise<{ contractId: string; sessionId: string } | undefined>;
   submitTransaction(input: {
     signedXdr: string;
     network: Network;
+    correlationId?: string;
   }): Promise<{ hash: string }>;
+}
+
+export interface HttpWalletBackendOptions {
+  /** Optional fallback/default correlation ID (or generator) attached to requests when not given per-call. */
+  correlationId?: string | (() => string | undefined);
 }
 
 /**
@@ -59,41 +67,61 @@ export interface HttpWalletBackend {
  *
  * @param apiUrl   Base URL of your Vellar-compatible gateway.
  * @param fetchImpl Optional fetch (defaults to the global fetch).
+ * @param options  Optional configuration (e.g. default correlation ID).
  */
 export function createHttpWalletBackend(
   apiUrl: string,
   fetchImpl: typeof fetch = globalThis.fetch.bind(globalThis),
+  options: HttpWalletBackendOptions = {},
 ): HttpWalletBackend {
   const base = apiUrl.replace(/\/+$/, "");
 
-  const post = (path: string, body: unknown): Promise<Response> =>
-    fetchImpl(`${base}${path}`, {
+  function resolveCorrelationId(explicit?: string): string | undefined {
+    if (explicit !== undefined) return explicit;
+    if (typeof options.correlationId === "function") {
+      return options.correlationId();
+    }
+    return options.correlationId;
+  }
+
+  const post = (path: string, body: unknown, correlationId?: string): Promise<Response> => {
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    const cid = resolveCorrelationId(correlationId);
+    if (cid) {
+      headers["x-correlation-id"] = cid;
+    }
+    return fetchImpl(`${base}${path}`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers,
       body: JSON.stringify(body),
     });
+  };
 
   return {
-    async submitWalletCreation({ keyId, contractId, network, signedTx }) {
-      const res = await post("/wallet/create", {
-        keyId,
-        contractId,
-        network,
-        signedTx: defaultSignedToXdr(signedTx),
-      });
+    async submitWalletCreation({ keyId, contractId, network, signedTx, correlationId }) {
+      const res = await post(
+        "/wallet/create",
+        {
+          keyId,
+          contractId,
+          network,
+          signedTx: defaultSignedToXdr(signedTx),
+        },
+        correlationId,
+      );
       if (!res.ok) throw await toApiError(res);
       return (await res.json()) as { sessionId: string };
     },
 
-    async lookupContractId({ keyId, network }) {
-      const res = await post("/wallet/connect", { keyId, network });
+    async lookupContractId({ keyId, network, correlationId }) {
+      const res = await post("/wallet/connect", { keyId, network }, correlationId);
       if (res.status === 404) return undefined;
       if (!res.ok) throw await toApiError(res);
       return (await res.json()) as { contractId: string; sessionId: string };
     },
 
-    async submitTransaction({ signedXdr, network }) {
-      const res = await post("/wallet/submit", { signedXdr, network });
+    async submitTransaction({ signedXdr, network, correlationId }) {
+      const res = await post("/wallet/submit", { signedXdr, network }, correlationId);
       if (!res.ok) throw await toApiError(res);
       return (await res.json()) as { hash: string };
     },

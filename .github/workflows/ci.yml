@@ -15,10 +15,11 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # Security audit V-8. Blocking at `high` matches the sibling repos. Fixes
-      # are lockfile-only by policy: anything needing a `package.json` range
-      # change is reported and decided, not forced through by CI.
-      - run: npm audit --audit-level=high
+      # Security audit V-8: Automated dependency scanning in CI.
+      # Fails the build on high or critical severity findings.
+      # Documented exception process is in docs/dependency-exceptions.md.
+      - name: Dependency vulnerability scan
+        run: npm run audit
       - run: npm run typecheck
       # Docs snippets typecheck against the current source — a quickstart that
       # drifts from the real API fails the PR that introduces the drift.

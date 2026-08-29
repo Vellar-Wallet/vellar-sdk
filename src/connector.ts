@@ -13,7 +13,7 @@ export interface WalletConnector {
   /** Register a passkey and create/initialize the smart account (idea.md §6.1 create flow). */
   createWallet(input: CreateWalletInput): Promise<WalletSession>;
   /** Authenticate with an existing passkey and restore the account mapping (reconnect flow). */
-  connectWallet(network: Network): Promise<WalletSession>;
+  connectWallet(network: Network, options?: { correlationId?: string }): Promise<WalletSession>;
   /** Produce a signature/auth for a reviewed transaction (sign flow). */
   signTransaction(input: SignTransactionInput): Promise<SignedTransaction>;
 }

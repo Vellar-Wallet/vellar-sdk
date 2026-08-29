@@ -57,4 +57,44 @@ describe("waitForTransaction", () => {
       "rpc down",
     );
   });
+
+  it("invokes onRetry hook with attempt number and status during polling sequence", async () => {
+    const reader = readerReturning(["pending", "pending", "success"]);
+    const retryCalls: unknown[] = [];
+
+    await waitForTransaction(reader, "TX123", {
+      sleep: instantSleep,
+      intervalMs: 10,
+      onRetry: (payload) => {
+        retryCalls.push(payload);
+      },
+    });
+
+    expect(retryCalls).toEqual([
+      { attempt: 1, error: undefined, hash: "TX123", operation: "waitForTransaction", status: "pending" },
+      { attempt: 2, error: undefined, hash: "TX123", operation: "waitForTransaction", status: "pending" },
+    ]);
+  });
+
+  it("passes error to onRetry when reader throws", async () => {
+    const rpcErr = new Error("transient network drop");
+    const reader: TxStatusReader = {
+      getStatus: vi.fn().mockRejectedValue(rpcErr),
+    };
+    const retryCalls: unknown[] = [];
+
+    await expect(
+      waitForTransaction(reader, "TX123", {
+        sleep: instantSleep,
+        intervalMs: 10,
+        onRetry: (payload) => {
+          retryCalls.push(payload);
+        },
+      }),
+    ).rejects.toThrow("transient network drop");
+
+    expect(retryCalls).toEqual([
+      { attempt: 1, error: rpcErr, hash: "TX123", operation: "waitForTransaction" },
+    ]);
+  });
 });

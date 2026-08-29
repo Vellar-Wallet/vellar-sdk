@@ -131,6 +131,13 @@ export interface PayerDeps {
   ledger: SpendLedger;
   signer: PaymentSigner;
   fetchImpl?: FetchLike;
+  /** Optional structured logging hook for retry attempts. */
+  onRetry?: (payload: {
+    attempt: number;
+    error?: unknown;
+    operation?: string;
+    [key: string]: unknown;
+  }) => void | Promise<void>;
 }
 
 export interface Payer {
@@ -322,6 +329,18 @@ export function createPayer(deps: PayerDeps): Payer {
         if (isRetryableSettleFailure(settle)) {
           lastReason =
             settle?.errorReason ?? `attempt ${attempt} failed before submission`;
+          if (deps.onRetry) {
+            try {
+              await deps.onRetry({
+                attempt,
+                error: new Error(lastReason),
+                operation: "x402PaymentSettleRetry",
+                url,
+                asset: chosen.asset,
+                amount,
+              });
+            } catch {}
+          }
           continue; // nothing spent — sign a fresh payload and try again
         }
 
@@ -344,6 +363,18 @@ export function createPayer(deps: PayerDeps): Payer {
         // POSITIVE evidence nothing reached the chain — the facilitator released
         // its fee reservation. The only state it is safe to retry.
         lastReason = `attempt ${attempt}: ${outcome.reason}`;
+        if (deps.onRetry) {
+          try {
+            await deps.onRetry({
+              attempt,
+              error: new Error(lastReason),
+              operation: "x402PaymentSettleRetry",
+              url,
+              asset: chosen.asset,
+              amount,
+            });
+          } catch {}
+        }
         await discardBody(res);
         continue;
       }

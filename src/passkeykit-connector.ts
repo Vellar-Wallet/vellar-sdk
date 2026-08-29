@@ -44,11 +44,13 @@ export interface WalletBackend {
     contractId: string;
     network: Network;
     signedTx: unknown;
+    correlationId?: string;
   }): Promise<{ sessionId: string }>;
   /** POST /wallet/connect — reverse lookup for reconnect flows; opens a server session record. */
   lookupContractId(input: {
     keyId: string;
     network: Network;
+    correlationId?: string;
   }): Promise<{ contractId: string; sessionId: string } | undefined>;
 }
 
@@ -150,11 +152,12 @@ export function createPasskeyKitConnector(options: PasskeyKitConnectorOptions): 
         contractId,
         network,
         signedTx,
+        correlationId: input.correlationId,
       });
       return sessionFor(contractId, keyIdBase64, sessionId);
     },
 
-    async connectWallet(requested: Network): Promise<WalletSession> {
+    async connectWallet(requested: Network, options?: { correlationId?: string }): Promise<WalletSession> {
       assertBrowserWebAuthnContext("connectWallet() (vellar.connect())");
       assertNetwork(requested);
       // The lookup that resolves the wallet also opens the server session
@@ -162,7 +165,11 @@ export function createPasskeyKitConnector(options: PasskeyKitConnectorOptions): 
       let serverSessionId: string | undefined;
       const { contractId, keyIdBase64 } = await kit.connectWallet({
         getContractId: async (keyId) => {
-          const found = await backend.lookupContractId({ keyId, network });
+          const found = await backend.lookupContractId({
+            keyId,
+            network,
+            correlationId: options?.correlationId,
+          });
           serverSessionId = found?.sessionId;
           return found?.contractId;
         },

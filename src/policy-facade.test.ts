@@ -100,4 +100,94 @@ describe("policy facade — deploy orchestration", () => {
     expect(url).toBe("https://api.test/policies/p1/simulate");
     expect(JSON.parse(init!.body as string)).toEqual({ wallet: WALLET });
   });
+
+  it("fires onStep hooks with step name and outcome across deployment steps", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      const u = String(url);
+      if (u.endsWith("/deploy-instance")) return jsonResponse({ contractId: "CINSTANCE" });
+      if (u.endsWith("/policies/deploy")) return jsonResponse({ policy: { id: "p1", status: "deployed" } });
+      return jsonResponse({});
+    });
+    const attach = {
+      resume: vi.fn(async () => {}),
+      attachPolicy: vi.fn(async () => ({ hash: "TX_HASH" })),
+    };
+
+    const steps: unknown[] = [];
+    const p = facade({ attach, fetch: fetchMock });
+    await p.deploy("p1", {
+      onStep: (payload) => {
+        steps.push(payload);
+      },
+    });
+
+    expect(steps).toEqual([
+      { step: "deploy_instance", outcome: "started", policyId: "p1" },
+      { step: "deploy_instance", outcome: "success", policyId: "p1", contractId: "CINSTANCE" },
+      { step: "attach_policy", outcome: "started", policyId: "p1", contractId: "CINSTANCE" },
+      {
+        step: "attach_policy",
+        outcome: "success",
+        policyId: "p1",
+        contractId: "CINSTANCE",
+        txHash: "TX_HASH",
+      },
+      {
+        step: "record_deployment",
+        outcome: "started",
+        policyId: "p1",
+        contractId: "CINSTANCE",
+        txHash: "TX_HASH",
+      },
+      {
+        step: "record_deployment",
+        outcome: "success",
+        policyId: "p1",
+        contractId: "CINSTANCE",
+        txHash: "TX_HASH",
+      },
+    ]);
+  });
+
+  it("fires onStep with outcome 'failed' when a deployment step fails", async () => {
+    const deployError = new Error("attach failed");
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (String(url).endsWith("/deploy-instance")) return jsonResponse({ contractId: "CINSTANCE" });
+      return jsonResponse({});
+    });
+    const attach = {
+      resume: vi.fn(async () => {}),
+      attachPolicy: vi.fn(async () => {
+        throw deployError;
+      }),
+    };
+
+    const steps: unknown[] = [];
+    const p = createPolicyFacade({
+      apiUrl: "https://api.test",
+      network: "testnet",
+      requireSession: () => ({ accountId: WALLET, keyId: "key-1" }),
+      attach,
+      fetch: fetchMock,
+      onStep: (payload) => {
+        steps.push(payload);
+      },
+    });
+
+    await expect(p.deploy("p1")).rejects.toThrow("attach failed");
+
+    expect(steps).toEqual([
+      { step: "deploy_instance", outcome: "started", policyId: "p1" },
+      { step: "deploy_instance", outcome: "success", policyId: "p1", contractId: "CINSTANCE" },
+      { step: "attach_policy", outcome: "started", policyId: "p1", contractId: "CINSTANCE" },
+      {
+        step: "attach_policy",
+        outcome: "failed",
+        policyId: "p1",
+        contractId: "CINSTANCE",
+        error: deployError,
+      },
+    ]);
+  });
 });
+

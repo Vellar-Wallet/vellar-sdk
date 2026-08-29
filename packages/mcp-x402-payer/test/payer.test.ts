@@ -247,6 +247,38 @@ describe("pay — settle-failure retry", () => {
     expect(ledger.remainingFor(ASSET_A)).toBe(1_000_000n - 1_000n);
   });
 
+  it("invokes onRetry hook with attempt and error on retryable settle failure", async () => {
+    const config = testConfig();
+    const ledger = testLedger(config);
+    const signer = stubSigner();
+    const retryCalls: unknown[] = [];
+    const fetchImpl = scriptedFetch([
+      response402(),
+      responseUnsettled(),
+      responsePaid("tx-after-retry"),
+    ]);
+    const payer = createPayer({
+      config,
+      ledger,
+      signer,
+      fetchImpl,
+      onRetry: (payload) => {
+        retryCalls.push(payload);
+      },
+    });
+
+    await payer.pay(URL, "1000000");
+
+    expect(retryCalls).toHaveLength(1);
+    expect(retryCalls[0]).toMatchObject({
+      attempt: 1,
+      operation: "x402PaymentSettleRetry",
+      url: URL,
+      asset: ASSET_A,
+    });
+    expect((retryCalls[0] as { error: Error }).error).toBeInstanceOf(Error);
+  });
+
   it("signs a FRESH payload for every attempt rather than replaying one", async () => {
     // Signatures expire in ledgers (~5s each), so a cached payload is a payload
     // that will be rejected. Each call must reach the signer independently.

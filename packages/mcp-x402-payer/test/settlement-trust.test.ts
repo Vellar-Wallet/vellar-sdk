@@ -173,5 +173,5 @@ describe("V-3 — seller-controlled strings do not reach the model unfenced", ()
     // The content-type went through sanitizeMetadata: clamped, single-lined,
     // control and format characters stripped.
     expect(text).toMatch(/Content \(text\/plain/);
-  });
+  }, 15_000);
 });

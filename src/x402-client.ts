@@ -61,6 +61,8 @@ export interface X402ClientDeps {
   fetchImpl?: FetchLike;
   /** Signature-expiration window in ledgers (default 12 ≈ 60s at 5s ledgers). */
   expirationLedgerOffset?: number;
+  /** Optional structured logging hook for retry attempts. */
+  onRetry?: import("./types").OnRetryHook;
 }
 
 // Estimated ledger close time (seconds). The facilitator fetches its own estimate
@@ -231,6 +233,20 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
     const first = await doFetch(url, baseInit);
     if (first.status !== 402) {
       return { response: first, paid: false };
+    }
+
+    const onRetry = init.onRetry ?? deps.onRetry;
+    if (onRetry) {
+      try {
+        await onRetry({
+          attempt: 1,
+          operation: "x402PaymentRetry",
+          url,
+          status: 402,
+        });
+      } catch {
+        // Logging hook errors shouldn't crash payment retry
+      }
     }
 
     const decoded = decodePaymentRequired(first);

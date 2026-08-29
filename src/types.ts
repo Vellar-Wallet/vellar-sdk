@@ -25,12 +25,29 @@ export interface WalletSession {
 export interface CreateWalletInput {
   username?: string;
   network: Network;
+  /** Optional correlation ID for cross-boundary tracing in backend logs. */
+  correlationId?: string;
 }
 
 export interface SignTransactionInput {
   xdr: string;
   network: Network;
 }
+
+// --- Shared Observability & Retry Hooks ---
+
+export interface RetryPayload {
+  /** The 1-based attempt number for this retry sequence. */
+  attempt: number;
+  /** The error or rejection that triggered the retry, if available. */
+  error?: unknown;
+  /** Name or identifier of the operation/callsite retrying. */
+  operation?: string;
+  /** Arbitrary structured contextual metadata (e.g. transaction hash, status, url). */
+  [key: string]: unknown;
+}
+
+export type OnRetryHook = (payload: RetryPayload) => void | Promise<void>;
 
 // --- Smart Account Policy Builder ---
 

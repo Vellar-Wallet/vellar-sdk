@@ -28,6 +28,35 @@ export interface PolicyAttachRuntime {
   attachPolicy(policyContractId: string): Promise<{ hash: string }>;
 }
 
+export type PolicyDeployStepName =
+  | "deploy_instance"
+  | "attach_policy"
+  | "record_deployment";
+
+export type PolicyDeployStepOutcome = "started" | "success" | "failed";
+
+export interface PolicyDeployStepPayload {
+  /** The name of the deployment step. */
+  step: PolicyDeployStepName;
+  /** The outcome of the step. */
+  outcome: PolicyDeployStepOutcome;
+  /** ID of the policy being deployed. */
+  policyId: string;
+  /** Address of the deployed policy contract instance (when available). */
+  contractId?: string;
+  /** On-chain transaction hash from passkey attach (when available). */
+  txHash?: string;
+  /** Error encountered if outcome is 'failed'. */
+  error?: unknown;
+}
+
+export type PolicyStepHook = (payload: PolicyDeployStepPayload) => void | Promise<void>;
+
+export interface DeployPolicyOptions {
+  /** Optional per-call step hook. */
+  onStep?: PolicyStepHook;
+}
+
 export interface PolicyFacade {
   listTemplates(): Promise<PolicyTemplateInfo[]>;
   /** Validate + generate the deployable artifacts for a definition. */
@@ -35,7 +64,7 @@ export interface PolicyFacade {
   /** Dry-run the on-chain deploy for the connected wallet (no submit). */
   simulate(policyId: string): Promise<SimulateResult>;
   /** Attach a generated policy to the connected wallet (passkey-signed). */
-  deploy(policyId: string): Promise<DeployPolicyResult>;
+  deploy(policyId: string, options?: DeployPolicyOptions): Promise<DeployPolicyResult>;
   /** The lower-level HTTP client, for custom flows. */
   readonly client: PolicyClient;
 }
@@ -48,6 +77,8 @@ export interface PolicyFacadeDeps {
   /** The passkey-attach runtime (undefined ⇒ deploy() throws a clear error). */
   attach?: PolicyAttachRuntime;
   fetch?: typeof fetch;
+  /** Optional structured logging hook invoked at each step of policy deployment. */
+  onStep?: PolicyStepHook;
 }
 
 export class PolicyNotDeployableError extends Error {
@@ -76,21 +107,65 @@ export function createPolicyFacade(deps: PolicyFacadeDeps): PolicyFacade {
       const { accountId } = deps.requireSession();
       return client.simulate(policyId, accountId);
     },
-    async deploy(policyId) {
+    async deploy(policyId, options) {
+      const onStep = options?.onStep ?? deps.onStep;
+      const reportStep = async (
+        step: PolicyDeployStepName,
+        outcome: PolicyDeployStepOutcome,
+        extra?: Partial<PolicyDeployStepPayload>,
+      ) => {
+        if (!onStep) return;
+        try {
+          await onStep({ step, outcome, policyId, ...extra });
+        } catch {
+          // Structured logging hook failures should not abort deployment unless intended
+        }
+      };
+
       const session = deps.requireSession();
       if (!deps.attach) {
         throw new PolicyNotDeployableError(
           "Policy deploy needs a passkey-attach runtime. This wallet was created without one — provide `policyAttach` in the config (or use the web app runtime).",
         );
       }
+
       // 1. server-side, sponsor-funded instance deploy bound to the wallet.
-      const { contractId } = await client.deployInstance(policyId, session.accountId);
+      let contractId: string;
+      await reportStep("deploy_instance", "started");
+      try {
+        const deployed = await client.deployInstance(policyId, session.accountId);
+        contractId = deployed.contractId;
+        await reportStep("deploy_instance", "success", { contractId });
+      } catch (err) {
+        await reportStep("deploy_instance", "failed", { error: err });
+        throw err;
+      }
+
       // 2. passkey-sign the attach (the ONLY prompt).
-      if (session.keyId && deps.attach.resume) await deps.attach.resume(session.keyId);
-      const { hash } = await deps.attach.attachPolicy(contractId);
+      let hash: string;
+      await reportStep("attach_policy", "started", { contractId });
+      try {
+        if (session.keyId && deps.attach.resume) await deps.attach.resume(session.keyId);
+        const attached = await deps.attach.attachPolicy(contractId);
+        hash = attached.hash;
+        await reportStep("attach_policy", "success", { contractId, txHash: hash });
+      } catch (err) {
+        await reportStep("attach_policy", "failed", { contractId, error: err });
+        throw err;
+      }
+
       // 3. record the completed attach.
-      const policy = await client.recordDeployment(policyId, hash, contractId);
-      return { policy, contractId, attachTxHash: hash };
+      let policy: unknown;
+      await reportStep("record_deployment", "started", { contractId, txHash: hash });
+      try {
+        policy = await client.recordDeployment(policyId, hash, contractId);
+        await reportStep("record_deployment", "success", { contractId, txHash: hash });
+      } catch (err) {
+        await reportStep("record_deployment", "failed", { contractId, txHash: hash, error: err });
+        throw err;
+      }
+
+      return { policy: policy as DeployPolicyResult["policy"], contractId, attachTxHash: hash };
     },
   };
 }

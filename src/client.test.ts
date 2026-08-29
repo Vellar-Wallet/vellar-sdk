@@ -27,7 +27,12 @@ function fakeKit(contractId = "CWALLET") {
       contractId,
       signedTx: "signed-deploy-xdr",
     })),
-    connectWallet: vi.fn(async () => ({ keyIdBase64: "key123", contractId })),
+    connectWallet: vi.fn(
+      async (opts?: { getContractId?: (keyId: string) => Promise<string | undefined> }) => {
+        if (opts?.getContractId) await opts.getContractId("key123");
+        return { keyIdBase64: "key123", contractId };
+      },
+    ),
     // sign returns the tx unchanged (a string), which defaultSignedToXdr passes through
     sign: vi.fn(async (tx: unknown) => tx),
     wallet: undefined,
@@ -135,6 +140,47 @@ describe("createVellarWallet", () => {
       PasskeyBrowserRequiredError,
     );
     expect(kit.createWallet).not.toHaveBeenCalled();
+  });
+
+  it("propagates correlationId from create, connect, and pay through to backend calls", async () => {
+    const { wallet, backend } = build();
+
+    await wallet.create({ username: "alice", correlationId: "cid-create-123" });
+    expect(backend.submitWalletCreation).toHaveBeenCalledWith(
+      expect.objectContaining({ correlationId: "cid-create-123" }),
+    );
+
+    await wallet.connect({ correlationId: "cid-connect-456" });
+    expect(backend.lookupContractId).toHaveBeenCalledWith(
+      expect.objectContaining({ correlationId: "cid-connect-456" }),
+    );
+
+    await wallet.pay({ to: "CDEST", amount: 5n, token, correlationId: "cid-pay-789" });
+    expect(backend.submitTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({ correlationId: "cid-pay-789" }),
+    );
+  });
+
+  it("uses config correlationId function as fallback when not provided per-call", async () => {
+    let count = 0;
+    const { wallet, backend } = build({
+      correlationId: () => `req-${++count}`,
+    });
+
+    await wallet.create({ username: "bob" });
+    expect(backend.submitWalletCreation).toHaveBeenCalledWith(
+      expect.objectContaining({ correlationId: "req-1" }),
+    );
+
+    await wallet.connect();
+    expect(backend.lookupContractId).toHaveBeenCalledWith(
+      expect.objectContaining({ correlationId: "req-2" }),
+    );
+
+    await wallet.pay({ to: "CDEST", amount: 5n, token });
+    expect(backend.submitTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({ correlationId: "req-3" }),
+    );
   });
 });
 

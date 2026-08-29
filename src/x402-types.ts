@@ -79,6 +79,8 @@ export interface X402FetchInit extends X402PayOptions {
   body?: BodyInit | null;
   /** Passed through to the underlying fetch (signal, credentials, …). */
   requestInit?: Omit<RequestInit, "method" | "headers" | "body">;
+  /** Optional structured retry hook called when an x402 challenge triggers a payment retry. */
+  onRetry?: import("./types").OnRetryHook;
 }
 
 /** A signed, ready-to-send payment payload (the `PAYMENT-SIGNATURE` header value). */

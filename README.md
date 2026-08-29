@@ -284,6 +284,72 @@ for a client without the wallet handle.
 > so a policy-governed payment needs a facilitator configured with a higher
 > ceiling (self-hosted, or a hosted one that allows it).
 
+### Observability & Tracing
+
+`vellar-sdk` exposes structured hooks and tracing metadata across client operations, policy deployments, and asynchronous retry loops:
+
+#### Policy Deployment Step Logging (`onStep`)
+
+Track multi-phase policy deployments in real-time by passing an `onStep` hook to `wallet.policies.deploy()` or configuring `policyOnStep` in `createVellarWallet`:
+
+```ts
+const { contractId } = await vellar.policies.deploy(policy.id, {
+  onStep: (step) => {
+    console.log(`[Policy Deploy] ${step.step} (${step.outcome})`, step.details);
+    if (step.error) console.error("Step failed:", step.error);
+  },
+});
+```
+
+Payload structure (`PolicyDeployStepPayload`):
+- `step`: `"deploy_instance"` | `"attach_policy"` | `"record_deployment"`
+- `outcome`: `"started"` | `"success"` | `"failed"`
+- `policyId`: ID of the policy template being deployed
+- `details`: Optional metadata such as `contractId`
+- `error`: Populated if the step threw an exception
+
+#### Retry Sequences Logging (`onRetry`)
+
+Observe background polling and retry sequences (e.g. `waitForTransaction` or x402 payment challenge retries) via the structured `onRetry` hook:
+
+```ts
+import { waitForTransaction } from "vellar-sdk";
+
+const status = await waitForTransaction(reader, txHash, {
+  onRetry: (retry) => {
+    console.warn(`[Retry attempt #${retry.attempt}] operation=${retry.operation}`, retry);
+  },
+});
+```
+
+Payload structure (`RetryPayload`):
+- `attempt`: Current attempt number (1-based index)
+- `operation`: Name of the retrying operation (e.g. `"waitForTransaction"`, `"x402PaymentRetry"`, `"x402PaymentSettleRetry"`)
+- `error`: Error instance (if caused by an error/exception)
+- `status`: Status code or state string (e.g. `"pending"`, `402`)
+
+#### Correlation ID Propagation (`x-correlation-id`)
+
+Propagate end-to-end tracing identifiers across the client and your backend services. Set a static ID or generator function on `createVellarWallet` or pass `correlationId` per-call:
+
+```ts
+const vellar = createVellarWallet({
+  network: "testnet",
+  apiUrl: "https://api.example.com",
+  correlationId: () => `trace-${crypto.randomUUID()}`,
+});
+
+// Or per-operation override:
+await vellar.pay({
+  to: destinationAddress,
+  amount: 10_000_000n,
+  token: xlmToken,
+  correlationId: "custom-req-id-123",
+});
+```
+
+All backend requests dispatched by `createHttpWalletBackend` attach the `x-correlation-id: <correlationId>` HTTP header.
+
 ### Advanced
 
 The facade is the paved road. For custom flows the package also exports the
@@ -293,6 +359,12 @@ signers (`createSessionKeySigner`, `createPasskeyX402Signer`), the
 `WalletConnector` interface, balances helpers (`vellar-sdk/balances`), and
 RPC-backed readers (`vellar-sdk/rpc`, imported separately so
 `@stellar/stellar-sdk` stays out of bundles that don't read balances).
+
+## Security & Dependency Scanning
+
+Automated dependency vulnerability audits run in CI on every push and pull request via `npm audit --audit-level=high`. Pull requests introducing known high or critical vulnerabilities fail the build automatically.
+
+For accepted risks or false positives, see the documented [Dependency Vulnerability Exception Policy](docs/dependency-exceptions.md).
 
 ## License
 

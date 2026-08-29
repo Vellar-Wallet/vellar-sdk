@@ -105,6 +105,7 @@
     "build": "tsup",
     "typecheck": "tsc --noEmit && tsc --noEmit -p packages/mcp-x402-payer/tsconfig.json",
     "check:docs": "node scripts/check-doc-snippets.mjs",
+    "audit": "npm audit --audit-level=high",
     "test": "vitest run",
     "test:integration": "npm run test:integration --workspace @vellar/mcp-x402-payer",
     "prepublishOnly": "npm run typecheck && npm test && npm run build",

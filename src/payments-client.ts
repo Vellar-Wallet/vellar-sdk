@@ -27,7 +27,11 @@ export interface SacClientLike {
 
 export interface PaymentSubmitBackend {
   /** POST /wallet/submit (idea.md §11) — resolves with the network tx hash. */
-  submitTransaction(input: { signedXdr: string; network: Network }): Promise<{ hash: string }>;
+  submitTransaction(input: {
+    signedXdr: string;
+    network: Network;
+    correlationId?: string;
+  }): Promise<{ hash: string }>;
 }
 
 export class InvalidRecipientError extends Error {
@@ -40,7 +44,7 @@ export class InvalidRecipientError extends Error {
 export interface PreparedPayment {
   review: PaymentReview;
   /** Sign with the passkey and submit. Only ever call after explicit user approval. */
-  confirm(): Promise<{ hash: string }>;
+  confirm(options?: { correlationId?: string }): Promise<{ hash: string }>;
 }
 
 export interface PaymentClient {
@@ -49,6 +53,7 @@ export interface PaymentClient {
     to: string;
     token: TokenInfo;
     amount: bigint;
+    correlationId?: string;
   }): Promise<PreparedPayment>;
 }
 
@@ -66,7 +71,7 @@ export function createPaymentClient(options: PaymentClientOptions): PaymentClien
   const signedToXdr = options.signedToXdr ?? defaultSignedToXdr;
 
   return {
-    async preparePayment({ from, to, token, amount }) {
+    async preparePayment({ from, to, token, amount, correlationId }) {
       if (!options.isValidAddress(to)) {
         throw new InvalidRecipientError(`"${to}" is not a valid Stellar address`);
       }
@@ -87,11 +92,12 @@ export function createPaymentClient(options: PaymentClientOptions): PaymentClien
 
       return {
         review,
-        async confirm() {
+        async confirm(confirmOptions) {
           const signed = (await options.kit.sign(tx)) ?? tx;
           return options.backend.submitTransaction({
             signedXdr: signedToXdr(signed),
             network: options.network,
+            correlationId: confirmOptions?.correlationId ?? correlationId,
           });
         },
       };

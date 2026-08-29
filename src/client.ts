@@ -66,12 +66,19 @@ export interface VellarWalletConfig {
    */
   apiUrl?: string;
   /**
+   * Optional correlation ID or generator for cross-boundary tracing.
+   * Attached as `x-correlation-id` to backend HTTP requests.
+   */
+  correlationId?: string | (() => string | undefined);
+  /**
    * Passkey-attach runtime for `wallet.policies.deploy` — wires
    * kit.addPolicy → passkey sign → backend submit. Without it, read/generate
    * still work but deploy() throws a clear error. (The web app supplies its
    * connector-factory runtime; a headless integrator supplies their own.)
    */
   policyAttach?: PolicyAttachRuntime;
+  /** Optional logging hook for policy deployment steps (`wallet.policies.deploy`). */
+  policyOnStep?: import("./policy-facade").PolicyStepHook;
   /**
    * Passkey-signed wallet-admin runtime for `wallet.agents` (mint/revoke scoped
    * agent session keys). Wire to kit.addEd25519 / kit.remove + kit.sign +
@@ -105,6 +112,19 @@ export interface PayInput {
   amount: bigint;
   /** The token to send (contract id + decimals). */
   token: TokenInfo;
+  /** Optional correlation ID for cross-boundary tracing in backend logs. */
+  correlationId?: string;
+}
+
+export interface CreateWalletOptions {
+  username?: string;
+  /** Optional correlation ID for cross-boundary tracing in backend logs. */
+  correlationId?: string;
+}
+
+export interface ConnectOptions {
+  /** Optional correlation ID for cross-boundary tracing in backend logs. */
+  correlationId?: string;
 }
 
 /**
@@ -116,10 +136,10 @@ export interface VellarWallet {
   /** The current session, or null before create/connect. */
   readonly session: WalletSession | null;
   /** Register a passkey and create the smart account. Prompts WebAuthn. */
-  create(input?: { username?: string }): Promise<WalletSession>;
+  create(input?: CreateWalletOptions): Promise<WalletSession>;
   /** Reconnect with an existing passkey. Prompts WebAuthn (or resumes silently
    * if the host wired keyId resumption into `kit`). */
-  connect(): Promise<WalletSession>;
+  connect(options?: ConnectOptions): Promise<WalletSession>;
   /**
    * Send a payment: builds + simulates, then signs with the passkey and submits.
    * Simulation happens inside `prepare`, so failures surface before the passkey
@@ -222,6 +242,14 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
     runtime: config.agentKeys,
   });
 
+  function resolveCorrelationId(explicit?: string): string | undefined {
+    if (explicit !== undefined) return explicit;
+    if (typeof config.correlationId === "function") {
+      return config.correlationId();
+    }
+    return config.correlationId;
+  }
+
   const policies = createPolicyFacade({
     // Policies need a gateway; if apiUrl is omitted every policy call fails
     // loudly with a clear message rather than hitting an empty base URL.
@@ -234,6 +262,7 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
       return { accountId: session.accountId, keyId: session.keyId };
     },
     attach: config.policyAttach,
+    onStep: config.policyOnStep,
   });
 
   return {
@@ -262,29 +291,34 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
     },
 
     async create(input) {
+      const correlationId = resolveCorrelationId(input?.correlationId);
       session = await connector.createWallet({
         network: config.network,
         username: input?.username,
+        correlationId,
       });
       return session;
     },
 
-    async connect() {
-      session = await connector.connectWallet(config.network);
+    async connect(options) {
+      const correlationId = resolveCorrelationId(options?.correlationId);
+      session = await connector.connectWallet(config.network, { correlationId });
       return session;
     },
 
-    async pay({ to, amount, token }) {
+    async pay({ to, amount, token, correlationId }) {
       if (!session) {
         throw new WalletNotReadyError("Call create() or connect() before pay()");
       }
+      const cid = resolveCorrelationId(correlationId);
       const prepared = await payments.preparePayment({
         from: session.accountId,
         to,
         token,
         amount,
+        correlationId: cid,
       });
-      return prepared.confirm();
+      return prepared.confirm({ correlationId: cid });
     },
   };
 }

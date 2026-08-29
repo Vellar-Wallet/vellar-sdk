@@ -30,7 +30,7 @@ mkdirSync(outDir, { recursive: true });
 let extracted = 0;
 for (const page of PAGES) {
   const md = readFileSync(path.join(root, page), "utf8");
-  const blocks = [...md.matchAll(/```ts\n([\s\S]*?)```/g)].map((m) => m[1]);
+  const blocks = [...md.matchAll(/```ts\r?\n([\s\S]*?)```/g)].map((m) => m[1]);
   if (blocks.length === 0) continue;
 
   const imports = new Set();
@@ -96,7 +96,7 @@ writeFileSync(
 );
 
 try {
-  execFileSync("npx", ["tsc", "--noEmit", "-p", outDir], { cwd: root, stdio: "inherit" });
+  execFileSync("npx", ["tsc", "--noEmit", "-p", outDir], { cwd: root, stdio: "inherit", shell: true });
 } catch {
   console.error("\ndoc snippets failed to typecheck against the current SDK — fix the docs (or the API drift) before merging.");
   process.exit(1);
