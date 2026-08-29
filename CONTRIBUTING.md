@@ -39,6 +39,14 @@ start — pull requests that don't follow them will be closed.
 5. **Questions go to the Telegram group.** Don't open issues for questions —
    ask in [our Telegram](https://t.me/+RWPCKXXJTj45Njk0).
 
+6. **A breaking change to the stored session schema must reference the
+   migration checklist.** If your PR changes `WalletSession`,
+   `isWalletSession`, or the storage adapters in `src/session.ts` in a way
+   that an older stored session would no longer read correctly, work through
+   [MIGRATION_CHECKLIST.md](MIGRATION_CHECKLIST.md) and link it in your PR
+   description with the boxes checked (or marked N/A with a reason).
+   Reviewers will ask for this if it's missing.
+
 ## Before you open a PR
 
 Make sure the package still typechecks, tests, and builds:
