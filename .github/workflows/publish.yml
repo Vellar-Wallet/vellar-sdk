@@ -4,6 +4,14 @@ name: Publish
 # that guard a pull request. Security audit V-8: a compromised publish executes
 # in every consumer's browser and inside an MCP server holding a signing key, so
 # the artifact must be attributable to a specific commit and workflow.
+#
+# Canary rollout (#283): while this package is pre-1.0, a tag carrying a
+# semver PRERELEASE suffix (e.g. v0.7.0-canary.0) publishes to the npm `next`
+# dist-tag instead of `latest`. `npm install vellar-sdk` for ordinary
+# consumers is completely unaffected — `next` is only ever installed by
+# someone who explicitly asks for it (`npm install vellar-sdk@next`) or who
+# is promoted onto it deliberately. See docs/release-process.md for the full
+# canary -> latest promotion process and its consumer-validation checklist.
 on:
   push:
     tags: ["v*"]
@@ -40,6 +48,13 @@ jobs:
             exit 1
           fi
 
-      - run: npm publish --provenance --access public
+      - name: Determine dist-tag (canary vs latest)
+        id: dist_tag
+        run: |
+          DIST_TAG="$(node scripts/npm-dist-tag-for.mjs "$GITHUB_REF_NAME")"
+          echo "dist-tag: $DIST_TAG"
+          echo "tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
+
+      - run: npm publish --provenance --access public --tag "${{ steps.dist_tag.outputs.tag }}"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

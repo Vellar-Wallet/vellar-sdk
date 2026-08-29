@@ -1,0 +1,46 @@
+name: Promote canary to latest
+
+# Manual-only: promoting a canary is a maintainer decision made after real
+# consumer validation (see docs/release-process.md's checklist), never an
+# automatic follow-on to publishing it. This workflow does not build or
+# publish a new tarball — it moves the npm `latest` dist-tag to point at a
+# version ALREADY published under `next`/canary, so what consumers get on
+# `latest` is byte-for-byte the same artifact that was validated as a canary.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Exact package version already published to npm (e.g. 0.7.0-canary.0, or 0.7.0 once renamed) — must already exist on the registry"
+        required: true
+        type: string
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      # Fail loudly if someone fat-fingers a version that was never published,
+      # rather than having `npm dist-tag add` produce a confusing registry
+      # error, or worse, silently doing nothing.
+      - name: Verify the version exists on the registry
+        run: |
+          if ! npm view "vellar-sdk@${{ inputs.version }}" version >/dev/null 2>&1; then
+            echo "vellar-sdk@${{ inputs.version }} is not published — nothing to promote"
+            exit 1
+          fi
+
+      - name: Promote to latest
+        run: npm dist-tag add "vellar-sdk@${{ inputs.version }}" latest
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Confirm the promotion
+        run: npm dist-tag ls vellar-sdk
