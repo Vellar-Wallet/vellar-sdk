@@ -341,6 +341,40 @@ what the SDK will attempt, but the on-chain `SignerLimits`/Policy mechanism
 process can't bypass. See `src/x402-signer-capabilities.ts`'s doc comments for
 the full scope of what this does and does not guarantee.
 
+##### Experimental: strict wildcard validation
+
+> **Experimental.** Opt-in only. Default signer behavior is completely
+> unchanged unless you set this flag.
+
+`capabilities` rules accept `"*"` as a wildcard for `resourceType` or
+`action` by default — this is deliberate and remains the default so existing
+configs never break. For early adopters who want to catch an accidentally
+loose rule (a wildcard left in place after copy-pasting an example, say)
+before it ships, pass `experimentalStrictWildcardCapabilities: true` to
+either signer:
+
+```ts
+const signer = createSessionKeySigner({
+  address: walletCAddress,
+  secretKey: sessionKeySecret,
+  capabilities: [{ resourceType: usdcSac, action: "transfer" }],
+  // Any rule using "*" now throws InvalidCapabilityRuleError at
+  // construction, instead of being silently accepted.
+  experimentalStrictWildcardCapabilities: true,
+});
+```
+
+**Risks:**
+
+- This is experimental and may change shape or be removed in a future
+  release without a major-version bump, per this package's pre-1.0 status.
+- Turning it on for a signer config that currently relies on a wildcard rule
+  is a **breaking change for that signer** — construction throws instead of
+  succeeding. Only enable it once your `capabilities` list is already fully
+  explicit, or as a CI check ahead of tightening a config for production.
+- It has no effect at all when `capabilities` is omitted or contains no
+  wildcard rules — those configs behave exactly as before.
+
 #### Attribute-based session key budgets
 
 `maxAmount` and the on-chain spending-limit policy bound a session key's

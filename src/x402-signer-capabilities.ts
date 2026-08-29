@@ -78,9 +78,22 @@ const CONTRACT_ID = /^C[A-Z2-7]{55}$/;
 // function names this SDK actually emits (e.g. "transfer").
 const SOROBAN_SYMBOL = /^[A-Za-z0-9_]{1,32}$/;
 
-/** Validate a capability rule set at construction time. Throws on the first
- * malformed rule; an empty array is valid (see {@link evaluateCapability}). */
-export function assertValidCapabilityRules(rules: readonly CapabilityRule[]): void {
+/**
+ * Validate a capability rule set at construction time. Throws on the first
+ * malformed rule; an empty array is valid (see {@link evaluateCapability}).
+ *
+ * `strictWildcards` (experimental, opt-in — see the signer configs'
+ * `experimentalStrictWildcardCapabilities` flag) additionally rejects any rule
+ * using `"*"` for `resourceType` or `action`. A wildcard rule is valid and
+ * unrestricted by default: this only tightens validation for callers who
+ * opt in, e.g. to enforce fully-explicit least-privilege capability lists in
+ * CI before promoting a signer config to production. Default `false` keeps
+ * today's behaviour (wildcards accepted) unchanged for everyone else.
+ */
+export function assertValidCapabilityRules(
+  rules: readonly CapabilityRule[],
+  strictWildcards = false,
+): void {
   for (const rule of rules) {
     if (rule.resourceType !== "*" && !CONTRACT_ID.test(rule.resourceType)) {
       throw new InvalidCapabilityRuleError(
@@ -90,6 +103,13 @@ export function assertValidCapabilityRules(rules: readonly CapabilityRule[]): vo
     if (rule.action !== "*" && !SOROBAN_SYMBOL.test(rule.action)) {
       throw new InvalidCapabilityRuleError(
         `capability rule action must be a Soroban function-name symbol or "*": got ${JSON.stringify(rule.action)}`,
+      );
+    }
+    if (strictWildcards && (rule.resourceType === "*" || rule.action === "*")) {
+      throw new InvalidCapabilityRuleError(
+        `capability rule uses a wildcard ("*") but experimentalStrictWildcardCapabilities is enabled, ` +
+          `which requires every rule to name an explicit resourceType and action: got ` +
+          `${JSON.stringify(rule)}`,
       );
     }
   }

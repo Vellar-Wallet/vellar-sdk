@@ -202,6 +202,22 @@ export interface SessionKeySignerConfig {
    * for what this does and does not guarantee.
    */
   capabilities?: readonly CapabilityRule[];
+  /**
+   * EXPERIMENTAL (#284) — opt in to stricter capability-rule validation: any
+   * `capabilities` rule using a `"*"` wildcard for `resourceType` or `action`
+   * is rejected at construction, requiring every rule to be fully explicit.
+   *
+   * Default (`false`/omitted): unchanged — wildcard rules are accepted, same
+   * as every signer built before this flag existed.
+   *
+   * This is a signal for early adopters that new signer-policy behavior may
+   * default to strict validation in a future major version. Turning it on
+   * for an existing signer config that uses wildcards is a BREAKING change
+   * for that signer (construction throws `InvalidCapabilityRuleError`) — only
+   * enable it once your capability rules are already fully explicit, or in a
+   * CI check ahead of tightening a config for production.
+   */
+  experimentalStrictWildcardCapabilities?: boolean;
 }
 
 /**
@@ -224,7 +240,7 @@ export function createSessionKeySigner(config: SessionKeySignerConfig): SmartAcc
   }
 
   const capabilities = config.capabilities ?? [];
-  assertValidCapabilityRules(capabilities);
+  assertValidCapabilityRules(capabilities, config.experimentalStrictWildcardCapabilities ?? false);
 
   return {
     address: config.address,
@@ -271,6 +287,10 @@ export interface PasskeyX402SignerConfig {
   /** Client-side capability scoping (#224) — see
    * {@link SessionKeySignerConfig.capabilities}. Same semantics apply here. */
   capabilities?: readonly CapabilityRule[];
+  /** EXPERIMENTAL (#284) — see
+   * {@link SessionKeySignerConfig.experimentalStrictWildcardCapabilities}.
+   * Same semantics apply here. */
+  experimentalStrictWildcardCapabilities?: boolean;
 }
 
 /**
@@ -286,7 +306,7 @@ export function createPasskeyX402Signer(config: PasskeyX402SignerConfig): SmartA
     throw new Error(`passkey signer address must be a contract (C…): got ${config.address}`);
   }
   const capabilities = config.capabilities ?? [];
-  assertValidCapabilityRules(capabilities);
+  assertValidCapabilityRules(capabilities, config.experimentalStrictWildcardCapabilities ?? false);
 
   return {
     address: config.address,

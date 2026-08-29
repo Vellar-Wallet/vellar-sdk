@@ -127,4 +127,36 @@ describe("assertValidCapabilityRules", () => {
       assertValidCapabilityRules([{ resourceType: TOKEN_A, action: "a".repeat(33) }]),
     ).toThrow(InvalidCapabilityRuleError);
   });
+
+  describe("strictWildcards (experimental, #284)", () => {
+    it("accepts wildcard rules when strictWildcards is not set (default, unchanged)", () => {
+      expect(() =>
+        assertValidCapabilityRules([{ resourceType: "*", action: "*" }]),
+      ).not.toThrow();
+    });
+
+    it("accepts wildcard rules when strictWildcards is explicitly false", () => {
+      expect(() =>
+        assertValidCapabilityRules([{ resourceType: TOKEN_A, action: "*" }], false),
+      ).not.toThrow();
+    });
+
+    it("rejects a wildcard resourceType when strictWildcards is true", () => {
+      expect(() =>
+        assertValidCapabilityRules([{ resourceType: "*", action: "transfer" }], true),
+      ).toThrow(InvalidCapabilityRuleError);
+    });
+
+    it("rejects a wildcard action when strictWildcards is true", () => {
+      expect(() =>
+        assertValidCapabilityRules([{ resourceType: TOKEN_A, action: "*" }], true),
+      ).toThrow(InvalidCapabilityRuleError);
+    });
+
+    it("still accepts fully explicit rules when strictWildcards is true", () => {
+      expect(() =>
+        assertValidCapabilityRules([{ resourceType: TOKEN_A, action: "transfer" }], true),
+      ).not.toThrow();
+    });
+  });
 });

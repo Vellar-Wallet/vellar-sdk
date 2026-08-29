@@ -188,6 +188,57 @@ describe("createSessionKeySigner", () => {
         }),
       ).toThrow(InvalidCapabilityRuleError);
     });
+
+    describe("experimentalStrictWildcardCapabilities (#284)", () => {
+      it("flagged and unflagged behavior differ on a wildcard rule", () => {
+        const kp = Keypair.random();
+        const wildcardConfig = {
+          address: C_ADDRESS,
+          secretKey: kp.secret(),
+          capabilities: [{ resourceType: OTHER_C, action: "*" }],
+        };
+
+        // Default (flag unset): wildcard rules are accepted, unchanged.
+        expect(() => createSessionKeySigner(wildcardConfig)).not.toThrow();
+
+        // Flagged: the same config is now rejected at construction.
+        expect(() =>
+          createSessionKeySigner({
+            ...wildcardConfig,
+            experimentalStrictWildcardCapabilities: true,
+          }),
+        ).toThrow(InvalidCapabilityRuleError);
+      });
+
+      it("explicitly setting the flag to false matches default (unflagged) behavior", () => {
+        const kp = Keypair.random();
+        expect(() =>
+          createSessionKeySigner({
+            address: C_ADDRESS,
+            secretKey: kp.secret(),
+            capabilities: [{ resourceType: "*", action: "transfer" }],
+            experimentalStrictWildcardCapabilities: false,
+          }),
+        ).not.toThrow();
+      });
+
+      it("does not affect signers with no wildcard rules", async () => {
+        const kp = Keypair.random();
+        const signer = createSessionKeySigner({
+          address: C_ADDRESS,
+          secretKey: kp.secret(),
+          capabilities: [{ resourceType: OTHER_C, action: "transfer" }],
+          experimentalStrictWildcardCapabilities: true,
+        });
+        const entry = makeV1AuthEntry(C_ADDRESS);
+        await expect(
+          signer.signAuthEntry(entry.toXDR("base64"), {
+            networkPassphrase: PASSPHRASE,
+            expirationLedger: 1000,
+          }),
+        ).resolves.toBeDefined();
+      });
+    });
   });
 });
 
@@ -270,6 +321,22 @@ describe("createPasskeyX402Signer", () => {
           expirationLedger: 2000,
         }),
       ).resolves.toBeDefined();
+    });
+
+    it("experimentalStrictWildcardCapabilities (#284): flagged and unflagged behavior differ", () => {
+      const wildcardConfig = {
+        address: C_ADDRESS,
+        webAuthn: { async sign() { return assertion; } },
+        capabilities: [{ resourceType: "*", action: "transfer" }],
+      };
+
+      expect(() => createPasskeyX402Signer(wildcardConfig)).not.toThrow();
+      expect(() =>
+        createPasskeyX402Signer({
+          ...wildcardConfig,
+          experimentalStrictWildcardCapabilities: true,
+        }),
+      ).toThrow(InvalidCapabilityRuleError);
     });
   });
 });
