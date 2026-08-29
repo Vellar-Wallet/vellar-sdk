@@ -17,6 +17,10 @@ import { AssembledTransaction } from "@stellar/stellar-sdk/contract";
 import { assertAuthEntryInvocation, type ExpectedInvocation } from "./x402-auth-entry";
 import type { Network } from "./types";
 import {
+  createSignedFetch,
+  type FacilitatorRequestSigningConfig,
+} from "./x402-request-auth";
+import {
   CAIP2_BY_NETWORK,
   NETWORKS,
   decodePaymentRequired,
@@ -61,6 +65,14 @@ export interface X402ClientDeps {
   fetchImpl?: FetchLike;
   /** Signature-expiration window in ledgers (default 12 ≈ 60s at 5s ledgers). */
   expirationLedgerOffset?: number;
+  /**
+   * Signed-request auth between this client and the facilitator (#226).
+   * When set, every outgoing facilitator request (the initial probe AND the
+   * paid retry) carries the `X-Vellar-*` signature headers from
+   * ./x402-request-auth, on top of whatever `fetchImpl` already does. Opt-in:
+   * a facilitator that does not verify these headers is unaffected either way.
+   */
+  requestSigning?: FacilitatorRequestSigningConfig;
 }
 
 // Estimated ledger close time (seconds). The facilitator fetches its own estimate
@@ -108,7 +120,12 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
   // Fail here, with the actionable error, not inside rpc.Server's URL parse.
   assertValidX402RpcUrl(deps.rpcUrl);
   const server = new rpc.Server(deps.rpcUrl);
-  const doFetch: FetchLike = deps.fetchImpl ?? ((url, init) => fetch(url, init));
+  const baseFetch: FetchLike = deps.fetchImpl ?? ((url, init) => fetch(url, init));
+  // Request signing wraps whatever fetch the caller already injected, so a
+  // test double or logging wrapper composes with it rather than being replaced.
+  const doFetch: FetchLike = deps.requestSigning
+    ? createSignedFetch(deps.requestSigning, baseFetch)
+    : baseFetch;
   // A hard ceiling on the derived expiration offset (undefined ⇒ no ceiling).
   const expirationCeiling = deps.expirationLedgerOffset;
   const ourCaip2 = CAIP2_BY_NETWORK[deps.network];

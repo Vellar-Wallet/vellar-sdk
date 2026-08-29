@@ -11,6 +11,7 @@ import {
   type X402Client,
 } from "./x402-types";
 import type { Network } from "./types";
+import type { FacilitatorRequestSigningConfig } from "./x402-request-auth";
 
 export interface X402FacadeDeps {
   /** Present ⇒ x402 is configured. Absent ⇒ the facade throws a clear error. */
@@ -21,6 +22,8 @@ export interface X402FacadeDeps {
     simulationSourceAccount: string;
     fetchImpl?: FetchLike;
     expirationLedgerOffset?: number;
+    /** Signed-request auth between the client and the facilitator (#226). */
+    requestSigning?: FacilitatorRequestSigningConfig;
   };
   /** Resolves the x402 signer for the connected wallet (throws if not ready). */
   resolveSigner: () => SmartAccountX402Signer;
@@ -44,6 +47,7 @@ export function createX402Facade(deps: X402FacadeDeps): X402Client {
       simulationSourceAccount: deps.config.simulationSourceAccount,
       fetchImpl: deps.config.fetchImpl,
       expirationLedgerOffset: deps.config.expirationLedgerOffset,
+      requestSigning: deps.config.requestSigning,
     });
   }
 

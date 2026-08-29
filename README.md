@@ -284,6 +284,34 @@ for a client without the wallet handle.
 > so a policy-governed payment needs a facilitator configured with a higher
 > ceiling (self-hosted, or a hosted one that allows it).
 
+#### Security: signed requests to the facilitator
+
+The payment payload itself is already signed (the smart-wallet auth entry).
+That proves the **payment** is authentic; it says nothing about the **HTTP
+request** that carries it. Pass `requestSigning` in `x402` config to also
+sign every outgoing facilitator request with HMAC-SHA256 over a canonical
+string (method, path, timestamp, nonce, body), using a shared secret
+provisioned out of band with your facilitator operator:
+
+```ts
+const vellar = createVellarWallet({
+  x402: {
+    signer: createSessionKeySigner({ address: walletCAddress, secretKey: sessionKeySecret }),
+    simulationSourceAccount: aFundedGAccount,
+    requestSigning: { keyId: "your-key-id", secret: process.env.VELLAR_FACILITATOR_SECRET! },
+  },
+});
+```
+
+This is **opt-in** and additive — a facilitator that doesn't verify the
+`X-Vellar-*` headers is unaffected either way, and it does not replace TLS.
+`vellar-sdk/x402-request-auth` also exports `verifyFacilitatorRequest` so a
+facilitator implemented in TypeScript can share the exact same canonical-string
+logic rather than reimplementing it and risking drift. See the module's
+doc comments for what this does and does not cover (it authenticates the
+*request*, not the on-chain payment, which the auth-entry signature already
+covers, and not the facilitator's response).
+
 ### Advanced
 
 The facade is the paved road. For custom flows the package also exports the
