@@ -19,6 +19,26 @@ export class WalletApiError extends Error {
   }
 }
 
+export interface RequestLog {
+  /** HTTP method used for the request. */
+  method: string;
+  /** Full request URL (base + path). */
+  url: string;
+  /** HTTP status returned by the gateway. */
+  status: number;
+  /** Round-trip duration of the request, in milliseconds. */
+  durationMs: number;
+}
+
+/**
+ * Structured logging hook for HTTP-backend requests. If provided, it is
+ * invoked once per completed request (success and failure alike) with
+ * `method`, `url`, `status`, and `durationMs`, so consumer log pipelines can
+ * parse, filter, and route on structured fields instead of free-form console
+ * output.
+ */
+export type RequestLogHook = (log: RequestLog) => void;
+
 async function toApiError(res: Response): Promise<WalletApiError> {
   let payload: { error?: string; message?: string } | undefined;
   try {
@@ -57,21 +77,30 @@ export interface HttpWalletBackend {
  * "https://api.myapp.com"). Suitable to pass directly as
  * `createVellarWallet({ backend })`.
  *
- * @param apiUrl   Base URL of your Vellar-compatible gateway.
+ * @param apiUrl    Base URL of your Vellar-compatible gateway.
  * @param fetchImpl Optional fetch (defaults to the global fetch).
+ * @param logHook   Optional structured logging hook; called once per completed
+ *                  request with `{ method, url, status, durationMs }`. Omit it
+ *                  (or pass `undefined`) to disable logging.
  */
 export function createHttpWalletBackend(
   apiUrl: string,
   fetchImpl: typeof fetch = globalThis.fetch.bind(globalThis),
+  logHook?: RequestLogHook,
 ): HttpWalletBackend {
   const base = apiUrl.replace(/\/+$/, "");
 
-  const post = (path: string, body: unknown): Promise<Response> =>
-    fetchImpl(`${base}${path}`, {
+  const post = async (path: string, body: unknown): Promise<Response> => {
+    const url = `${base}${path}`;
+    const start = performance.now();
+    const res = await fetchImpl(url, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     });
+    logHook?.({ method: "POST", url, status: res.status, durationMs: performance.now() - start });
+    return res;
+  };
 
   return {
     async submitWalletCreation({ keyId, contractId, network, signedTx }) {

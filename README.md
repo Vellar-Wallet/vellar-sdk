@@ -108,8 +108,25 @@ transactions to your backend, which does the sponsored submit.
 | `POST /wallet/connect` | Resolve the smart-account for a known passkey  |
 | `POST /wallet/submit`  | Submit an already-signed transaction           |
 
-You run a backend implementing these (holding your relayer/sponsor creds). Your
-backend must also allow your app's origin via CORS.
+### Logging
+
+`createHttpWalletBackend` accepts an optional third argument — a structured
+logging hook — invoked once per completed request (success and failure alike)
+with a `{ method, url, status, durationMs }` entry:
+
+```ts
+import { createHttpWalletBackend } from "vellar-sdk";
+
+const backend = createHttpWalletBackend("https://api.myapp.com", undefined, (log) => {
+  console.info(JSON.stringify(log)); // { method, url, status, durationMs }
+  // route, parse, or filter on log.status / log.url in your log pipeline
+});
+```
+
+The hook receives structured fields instead of free-form console output, so
+consumer log pipelines can parse and route on them directly. The two arguments
+after the URL are optional; pass `undefined` for the default `fetch` and only
+the hook.
 
 ## API
 
@@ -129,9 +146,9 @@ Returns a `VellarWallet`:
 
 ### Helpers
 
-| Export                         | Description                                                                              |
-| ------------------------------ | ---------------------------------------------------------------------------------------- |
-| `createHttpWalletBackend(url)` | An HTTP `backend` client for your gateway — pass straight to the config                  |
+| Export                                    | Description                                                                              |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `createHttpWalletBackend(url, fetch?, log?)` | An HTTP `backend` client for your gateway — pass straight to the config. Optional third arg is a structured `{ method, url, status, durationMs }` logging hook — see [Logging](#logging) |
 | `TESTNET`                      | Testnet config: `rpcUrl`, `networkPassphrase`, `walletWasmHash`, `nativeTokenContractId` |
 | `MAINNET` / `mainnetConfig()`  | Mainnet config — see [Mainnet](#mainnet) (two values you must supply)                    |
 | `WalletApiError`               | Thrown by the HTTP backend on non-2xx responses (has `status`, `code`)                   |
