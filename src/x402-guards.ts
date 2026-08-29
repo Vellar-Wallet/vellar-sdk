@@ -15,6 +15,7 @@
 
 import type { Network } from "./types";
 import {
+  ConfirmationRequiredError,
   DisallowedAssetError,
   InvalidRequirementsError,
   MaxAmountExceededError,
@@ -27,13 +28,19 @@ import {
 // The errors these guards throw, re-exported so a consumer importing
 // "vellar-sdk/x402-guards" can catch them without also importing the wallet.
 export {
+  ConfirmationRequiredError,
   DisallowedAssetError,
   InvalidRequirementsError,
   MaxAmountExceededError,
   NoUsablePaymentOptionError,
   PaymentRejectedError,
 } from "./x402-types";
-export type { PaymentRequired, PaymentRequirements, X402PayOptions } from "./x402-types";
+export type {
+  PaymentRequired,
+  PaymentRequirements,
+  PendingConfirmation,
+  X402PayOptions,
+} from "./x402-types";
 
 // ── base64 (browser-safe: no Buffer, no @types/node) ─────────────────────────
 
@@ -148,6 +155,19 @@ export function selectRequirements(
     throw new MaxAmountExceededError(required, opts.maxAmount, usable.asset);
   }
   return usable;
+}
+
+// ── explicit confirmation for high-value payments ───────────────────────────
+
+/**
+ * Pure predicate: does this payment amount require explicit confirmation
+ * under `opts`? True when `opts.confirmationThreshold` is set and `amount`
+ * meets or exceeds it. Kept separate from the (necessarily async, IO-bound)
+ * act of actually calling `confirm()` — that lives in ./x402-client, which
+ * owns the signing flow's control order.
+ */
+export function needsConfirmation(amount: bigint, opts: X402PayOptions): boolean {
+  return opts.confirmationThreshold !== undefined && amount >= opts.confirmationThreshold;
 }
 
 // ── 402 decode ───────────────────────────────────────────────────────────────

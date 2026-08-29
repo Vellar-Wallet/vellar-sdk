@@ -113,6 +113,29 @@ describe("createVellarWallet", () => {
     expect(result.hash).toBe("txhash-abc");
   });
 
+  it("pay() with the same paymentId across two calls submits only once (#240)", async () => {
+    const { wallet, kit, backend } = build();
+    await wallet.connect();
+
+    const first = await wallet.pay({ to: "CDEST", amount: 5n, token, paymentId: "pay-1" });
+    const second = await wallet.pay({ to: "CDEST", amount: 5n, token, paymentId: "pay-1" });
+
+    expect(first).toEqual(second);
+    expect(kit.sign).toHaveBeenCalledTimes(1);
+    expect(backend.submitTransaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("pay() without a paymentId submits independently each call (unchanged default behavior)", async () => {
+    const { wallet, kit, backend } = build();
+    await wallet.connect();
+
+    await wallet.pay({ to: "CDEST", amount: 5n, token });
+    await wallet.pay({ to: "CDEST", amount: 5n, token });
+
+    expect(kit.sign).toHaveBeenCalledTimes(2);
+    expect(backend.submitTransaction).toHaveBeenCalledTimes(2);
+  });
+
   it("rejects a payment to an invalid address before signing", async () => {
     const { wallet, kit } = build({ isValidAddress: () => false });
     await wallet.connect();

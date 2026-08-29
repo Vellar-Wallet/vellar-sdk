@@ -7,6 +7,7 @@ import {
   decodePaymentRequired,
   decodeSettlementHeader,
   extractRejectionReason,
+  needsConfirmation,
   parseAmount,
   selectRequirements,
   utf8ToBase64,
@@ -228,6 +229,38 @@ describe("selectRequirements", () => {
         CAIP2_TESTNET,
       ),
     ).toThrow(InvalidRequirementsError);
+  });
+});
+
+describe("needsConfirmation (#228)", () => {
+  it("is false when confirmationThreshold is unset, regardless of amount", () => {
+    expect(needsConfirmation(999_999_999n, { maxAmount: 10_000_000_000n })).toBe(false);
+  });
+
+  it("is false when the amount is below the threshold", () => {
+    expect(
+      needsConfirmation(4_999_999n, { maxAmount: 10_000_000n, confirmationThreshold: 5_000_000n }),
+    ).toBe(false);
+  });
+
+  it("is true when the amount equals the threshold", () => {
+    expect(
+      needsConfirmation(5_000_000n, { maxAmount: 10_000_000n, confirmationThreshold: 5_000_000n }),
+    ).toBe(true);
+  });
+
+  it("is true when the amount exceeds the threshold", () => {
+    expect(
+      needsConfirmation(5_000_001n, { maxAmount: 10_000_000n, confirmationThreshold: 5_000_000n }),
+    ).toBe(true);
+  });
+
+  it("is true for a zero threshold even at a zero amount (0 >= 0)", () => {
+    // Edge case worth pinning down explicitly: a threshold of exactly 0 means
+    // "confirm everything", including a zero-amount payment.
+    expect(
+      needsConfirmation(0n, { maxAmount: 10_000_000n, confirmationThreshold: 0n }),
+    ).toBe(true);
   });
 });
 

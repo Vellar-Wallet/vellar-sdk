@@ -105,6 +105,16 @@ export interface PayInput {
   amount: bigint;
   /** The token to send (contract id + decimals). */
   token: TokenInfo;
+  /**
+   * Client-generated idempotency key for the exactly-once submission guard
+   * (#240) — see `PreparedPayment.confirm`'s doc comment in
+   * payments-client.ts for the full scope/limits. Pass a stable id (e.g.
+   * derived from the triggering UI action) so a retried/double-submitted
+   * `pay()` call for the same logical payment resolves to the same result
+   * instead of submitting twice. Omit to opt out (each call submits
+   * independently).
+   */
+  paymentId?: string;
 }
 
 /**
@@ -274,7 +284,7 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
       return session;
     },
 
-    async pay({ to, amount, token }) {
+    async pay({ to, amount, token, paymentId }) {
       if (!session) {
         throw new WalletNotReadyError("Call create() or connect() before pay()");
       }
@@ -283,6 +293,7 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
         to,
         token,
         amount,
+        paymentId,
       });
       return prepared.confirm();
     },

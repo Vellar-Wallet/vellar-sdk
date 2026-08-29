@@ -93,6 +93,41 @@ const { hash } = await vellar.pay({
 `pay()` simulates **before** the passkey prompt, so failures (e.g. insufficient
 balance) surface without asking the user to sign.
 
+### Exactly-once submission guard
+
+Pass a stable `paymentId` to avoid a duplicate on-chain submission if `pay()`
+is called twice for the same logical payment — e.g. a double-tap on a submit
+button, or your own retry after a slow or ambiguous response:
+
+```ts
+const { hash } = await vellar.pay({
+  to: "CDEST...",
+  amount: 5_0000000n,
+  token: { contractId: TESTNET.nativeTokenContractId, symbol: "XLM", decimals: 7 },
+  paymentId: "checkout-session-42", // your own id — stable across retries of the SAME payment
+});
+```
+
+- Two `pay()` calls with the **same** `paymentId` resolve to the **same**
+  result: the second call returns the first call's outcome (or shares its
+  in-flight attempt, if the first hasn't settled yet) instead of signing and
+  submitting again.
+- Omit `paymentId` to opt out — every call submits independently, matching
+  behavior before this guard existed.
+- **Scope and limits:** this is an in-memory guard scoped to one
+  `VellarWallet`/`createPaymentClient` instance's lifetime. It does **not**
+  survive a page reload, and it does **not** coordinate across two separate
+  wallet instances (e.g. two tabs). It also isn't itself an on-chain
+  guarantee — it prevents *this SDK instance* from signing/submitting twice,
+  but ultimate exactly-once delivery of the underlying transaction still
+  depends on your backend/relayer's own handling of a resubmitted signed XDR.
+  Reusing the same `paymentId` for two genuinely different payments (different
+  amount, recipient, etc.) is a caller error: the guard keys purely on the id,
+  so it will incorrectly return the first payment's result for the second.
+- A **failed** submission (e.g. a transient relayer error) does not
+  permanently lock the id — retrying `pay()` with the same `paymentId` after
+  a failure submits fresh.
+
 ## Your backend
 
 Submission is fee-sponsored, which requires an OpenZeppelin Relayer API key and

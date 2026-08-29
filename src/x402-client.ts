@@ -22,12 +22,14 @@ import {
   decodePaymentRequired,
   decodeSettlementHeader,
   extractRejectionReason,
+  needsConfirmation,
   parseAmount,
   selectRequirements,
   utf8ToBase64,
 } from "./x402-guards";
 import {
   assertValidX402RpcUrl,
+  ConfirmationRequiredError,
   DisallowedAssetError,
   MaxAmountExceededError,
   NoUsablePaymentOptionError,
@@ -193,6 +195,37 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
     };
   }
 
+  /**
+   * Enforce `confirmationThreshold` for `requirements` (#228). Blocks until
+   * `confirm` resolves — no auth entry is built or signed while a
+   * confirmation decision is pending. Throws `ConfirmationRequiredError`
+   * (without ever calling the signer) if the threshold is crossed and either
+   * no `confirm` callback was configured, or it resolves `false`.
+   *
+   * A no-op when `confirmationThreshold` is unset — every existing caller
+   * that doesn't opt in sees no behavior change.
+   */
+  async function enforceConfirmation(
+    requirements: PaymentRequirements,
+    amount: bigint,
+    opts: X402PayOptions,
+  ): Promise<void> {
+    if (!needsConfirmation(amount, opts)) return;
+    const threshold = opts.confirmationThreshold!;
+    if (!opts.confirm) {
+      throw new ConfirmationRequiredError(
+        amount,
+        threshold,
+        requirements.asset,
+        "no-confirm-callback",
+      );
+    }
+    const approved = await opts.confirm({ amount, asset: requirements.asset, requirements });
+    if (!approved) {
+      throw new ConfirmationRequiredError(amount, threshold, requirements.asset, "declined");
+    }
+  }
+
   async function createPayment(
     requirements: PaymentRequirements,
     opts: X402PayOptions,
@@ -206,6 +239,7 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
     if (required > opts.maxAmount) {
       throw new MaxAmountExceededError(required, opts.maxAmount, requirements.asset);
     }
+    await enforceConfirmation(requirements, required, opts);
     const { header, amount } = await buildSignedPayment(requirements);
     return { header, requirements, amount };
   }
@@ -235,6 +269,7 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
 
     const decoded = decodePaymentRequired(first);
     const requirements = selectRequirements(decoded, init, ourCaip2);
+    await enforceConfirmation(requirements, parseAmount(requirements.amount), init);
     const { header, amount } = await buildSignedPayment(requirements);
 
     const paid = await doFetch(url, {

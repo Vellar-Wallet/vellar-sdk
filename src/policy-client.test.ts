@@ -41,6 +41,150 @@ describe("createPolicyClient", () => {
     expect(fetchMock.mock.calls[0]![0]).toBe("https://api.test/policies/templates");
   });
 
+  it("caches listTemplates() — a second call does not re-fetch", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      jsonResponse([
+        { type: "spending_limit", title: "Spending limit", description: "", enforcement: { kind: "none" } },
+      ]),
+    );
+    const client = createPolicyClient({ apiUrl: "https://api.test", network: "testnet", fetch: fetchMock });
+
+    const first = await client.listTemplates();
+    const second = await client.listTemplates();
+
+    expect(second).toEqual(first);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("de-duplicates concurrent listTemplates() calls into one request", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      jsonResponse([
+        { type: "spending_limit", title: "Spending limit", description: "", enforcement: { kind: "none" } },
+      ]),
+    );
+    const client = createPolicyClient({ apiUrl: "https://api.test", network: "testnet", fetch: fetchMock });
+
+    const [a, b, c] = await Promise.all([
+      client.listTemplates(),
+      client.listTemplates(),
+      client.listTemplates(),
+    ]);
+
+    expect(a).toEqual(b);
+    expect(b).toEqual(c);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("generate() invalidates the templates cache — a subsequent listTemplates() re-fetches", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse([
+          { type: "spending_limit", title: "Spending limit", description: "", enforcement: { kind: "none" } },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse({ policy: { id: "p1", status: "generated" } }))
+      .mockResolvedValueOnce(
+        jsonResponse([
+          { type: "spending_limit", title: "Spending limit (updated)", description: "", enforcement: { kind: "none" } },
+        ]),
+      );
+    const client = createPolicyClient({ apiUrl: "https://api.test", network: "testnet", fetch: fetchMock });
+
+    await client.listTemplates(); // populates the cache
+    await client.generate(definition); // should invalidate it
+    const templates = await client.listTemplates(); // should re-fetch, not read stale cache
+
+    expect(templates[0]!.title).toBe("Spending limit (updated)");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("refreshTemplates() invalidates the cache and re-fetches even without an intervening mutation", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse([
+          { type: "spending_limit", title: "Spending limit", description: "", enforcement: { kind: "none" } },
+        ]),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse([
+          { type: "spending_limit", title: "Spending limit v2", description: "", enforcement: { kind: "none" } },
+        ]),
+      );
+    const client = createPolicyClient({ apiUrl: "https://api.test", network: "testnet", fetch: fetchMock });
+
+    await client.listTemplates();
+    const refreshed = await client.refreshTemplates();
+
+    expect(refreshed[0]!.title).toBe("Spending limit v2");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("fires onCacheInvalidated with reason 'template-update' when generate() invalidates a populated cache", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse([]))
+      .mockResolvedValueOnce(jsonResponse({ policy: { id: "p1", status: "generated" } }));
+    const onCacheInvalidated = vi.fn();
+    const fixedNow = () => new Date("2026-01-01T00:00:00.000Z");
+    const client = createPolicyClient({
+      apiUrl: "https://api.test",
+      network: "testnet",
+      fetch: fetchMock,
+      onCacheInvalidated,
+      now: fixedNow,
+    });
+
+    await client.listTemplates(); // populate the cache first
+    await client.generate(definition);
+
+    expect(onCacheInvalidated).toHaveBeenCalledTimes(1);
+    expect(onCacheInvalidated).toHaveBeenCalledWith({
+      cache: "templates",
+      reason: "template-update",
+      at: "2026-01-01T00:00:00.000Z",
+    });
+  });
+
+  it("fires onCacheInvalidated with reason 'explicit-refresh' from refreshTemplates()", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => jsonResponse([]));
+    const onCacheInvalidated = vi.fn();
+    const client = createPolicyClient({
+      apiUrl: "https://api.test",
+      network: "testnet",
+      fetch: fetchMock,
+      onCacheInvalidated,
+    });
+
+    await client.listTemplates();
+    await client.refreshTemplates();
+
+    expect(onCacheInvalidated).toHaveBeenCalledTimes(1);
+    expect(onCacheInvalidated.mock.calls[0]![0]).toMatchObject({
+      cache: "templates",
+      reason: "explicit-refresh",
+    });
+  });
+
+  it("does not fire onCacheInvalidated when generate() runs before the cache was ever populated", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      jsonResponse({ policy: { id: "p1", status: "generated" } }),
+    );
+    const onCacheInvalidated = vi.fn();
+    const client = createPolicyClient({
+      apiUrl: "https://api.test",
+      network: "testnet",
+      fetch: fetchMock,
+      onCacheInvalidated,
+    });
+
+    // No listTemplates() call first — nothing was ever cached.
+    await client.generate(definition);
+
+    expect(onCacheInvalidated).not.toHaveBeenCalled();
+  });
+
   it("generate() posts the definition + network and returns the policy", async () => {
     const fetchMock = vi.fn<typeof fetch>(async () =>
       jsonResponse({ policy: { id: "p1", status: "generated" } }),

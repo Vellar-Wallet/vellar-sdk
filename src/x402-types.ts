@@ -59,6 +59,21 @@ export interface SmartAccountX402Signer {
   ): Promise<string>;
 }
 
+/**
+ * A pending payment awaiting explicit confirmation — passed to
+ * {@link X402PayOptions.confirm}. Carries what's needed to render a
+ * meaningful confirmation prompt (amount, asset, destination) without the
+ * caller having to re-derive it from `PaymentRequirements`.
+ */
+export interface PendingConfirmation {
+  /** Amount, in the asset's base units. */
+  amount: bigint;
+  /** SAC (asset contract) id the payment is denominated in. */
+  asset: string;
+  /** The requirements this confirmation is for. */
+  requirements: PaymentRequirements;
+}
+
 /** Options for building/signing a single payment (shared by fetch + createPayment). */
 export interface X402PayOptions {
   /**
@@ -71,6 +86,28 @@ export interface X402PayOptions {
   /** If set, only pay for these asset (SAC) ids; a 402 asking for anything else
    * is rejected without signing. Default: accept whatever asset the server asks. */
   allowedAssets?: string[];
+  /**
+   * When set, any payment whose amount is >= this threshold (base units, same
+   * asset the payment is denominated in) additionally requires `confirm` to
+   * resolve `true` before the client will sign. This is a SEPARATE gate from
+   * `maxAmount`: `maxAmount` is a hard ceiling the client will never exceed
+   * regardless of confirmation; `confirmationThreshold` narrows the band of
+   * amounts BELOW that ceiling that still require an explicit go-ahead (e.g.
+   * "auto-pay under $1, but ask above that").
+   *
+   * Setting a threshold without also setting `confirm` is a configuration
+   * error — every threshold-crossing payment would otherwise have nothing to
+   * resolve it and fails closed with {@link ConfirmationRequiredError}.
+   */
+  confirmationThreshold?: bigint;
+  /**
+   * Resolve `true` to proceed with a payment that crossed
+   * `confirmationThreshold`, or `false` to refuse it. The client blocks
+   * signing until this promise settles — no auth entry is built or signed
+   * while confirmation is pending. Rejecting/throwing propagates to the
+   * caller of `fetch`/`createPayment` same as any other error.
+   */
+  confirm?: (pending: PendingConfirmation) => Promise<boolean>;
 }
 
 export interface X402FetchInit extends X402PayOptions {
@@ -179,6 +216,31 @@ export class MaxAmountExceededError extends Error {
       `x402 payment of ${required} (${asset}) exceeds maxAmount ${maxAmount}; refusing to sign.`,
     );
     this.name = "MaxAmountExceededError";
+  }
+}
+
+/**
+ * A payment crossed `confirmationThreshold` but either no `confirm` callback
+ * was configured (a configuration error — fails closed rather than silently
+ * skipping the confirmation the caller asked for) or `confirm` resolved
+ * `false`. No payment was signed either way.
+ */
+export class ConfirmationRequiredError extends Error {
+  constructor(
+    readonly required: bigint,
+    readonly threshold: bigint,
+    readonly asset: string,
+    readonly reason: "no-confirm-callback" | "declined",
+  ) {
+    super(
+      reason === "no-confirm-callback"
+        ? `x402 payment of ${required} (${asset}) crosses confirmationThreshold ${threshold}, ` +
+            "but no `confirm` callback was configured; refusing to sign. " +
+            "Pass a `confirm` function alongside `confirmationThreshold` to allow this payment."
+        : `x402 payment of ${required} (${asset}) crosses confirmationThreshold ${threshold} ` +
+            "and was declined via `confirm`; refusing to sign.",
+    );
+    this.name = "ConfirmationRequiredError";
   }
 }
 

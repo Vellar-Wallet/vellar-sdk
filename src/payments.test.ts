@@ -157,3 +157,131 @@ describe("PreparedPayment.confirm", () => {
     await expect(prepared.confirm()).rejects.toThrow("relayer down");
   });
 });
+
+// #240: exactly-once submission guard, keyed on a client-generated paymentId.
+describe("PreparedPayment.confirm — exactly-once submission guard (#240)", () => {
+  it("submits once for two sequential confirm() calls with the same paymentId", async () => {
+    const { client, sign, submitTransaction } = clientWith();
+    const prepared = await client.preparePayment({
+      from: FROM,
+      to: TO,
+      token: xlm,
+      amount: 5n,
+      paymentId: "pay-1",
+    });
+
+    const first = await prepared.confirm();
+    const second = await prepared.confirm();
+
+    expect(first).toEqual({ hash: "txhash" });
+    expect(second).toEqual({ hash: "txhash" });
+    expect(sign).toHaveBeenCalledTimes(1);
+    expect(submitTransaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("de-duplicates CONCURRENT confirm() calls (a UI double-submit) into one submission", async () => {
+    let resolveSign!: (v: { toXDR(): string }) => void;
+    const sign = vi.fn(() => new Promise<{ toXDR(): string }>((r) => (resolveSign = r)));
+    const submitTransaction = vi.fn().mockResolvedValue({ hash: "txhash" });
+    const { client } = clientWith({ kit: { sign }, backend: { submitTransaction } });
+    const prepared = await client.preparePayment({
+      from: FROM,
+      to: TO,
+      token: xlm,
+      amount: 5n,
+      paymentId: "pay-2",
+    });
+
+    // Two calls fired back-to-back, before the first has resolved.
+    const p1 = prepared.confirm();
+    const p2 = prepared.confirm();
+    resolveSign({ toXDR: () => "signed-xdr" });
+
+    const [r1, r2] = await Promise.all([p1, p2]);
+    expect(r1).toEqual({ hash: "txhash" });
+    expect(r2).toEqual({ hash: "txhash" });
+    expect(sign).toHaveBeenCalledTimes(1);
+    expect(submitTransaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("submits independently each call when no paymentId is given (opt-out, unchanged pre-#240 behavior)", async () => {
+    const { client, sign, submitTransaction } = clientWith();
+    const prepared = await client.preparePayment({ from: FROM, to: TO, token: xlm, amount: 5n });
+
+    await prepared.confirm();
+    await prepared.confirm();
+
+    expect(sign).toHaveBeenCalledTimes(2);
+    expect(submitTransaction).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not permanently block retries after a FAILED submission under the same paymentId", async () => {
+    const submitTransaction = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("relayer down"))
+      .mockResolvedValueOnce({ hash: "txhash-retry" });
+    const { client, sign } = clientWith({ backend: { submitTransaction } });
+    const prepared = await client.preparePayment({
+      from: FROM,
+      to: TO,
+      token: xlm,
+      amount: 5n,
+      paymentId: "pay-3",
+    });
+
+    await expect(prepared.confirm()).rejects.toThrow("relayer down");
+    await expect(prepared.confirm()).resolves.toEqual({ hash: "txhash-retry" });
+    expect(sign).toHaveBeenCalledTimes(2);
+    expect(submitTransaction).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps distinct paymentIds fully independent — each submits its own payment", async () => {
+    const { client, sign, submitTransaction } = clientWith();
+    const first = await client.preparePayment({
+      from: FROM,
+      to: TO,
+      token: xlm,
+      amount: 5n,
+      paymentId: "pay-a",
+    });
+    const second = await client.preparePayment({
+      from: FROM,
+      to: TO,
+      token: xlm,
+      amount: 7n,
+      paymentId: "pay-b",
+    });
+
+    await first.confirm();
+    await second.confirm();
+
+    expect(sign).toHaveBeenCalledTimes(2);
+    expect(submitTransaction).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not share submission state across separate PaymentClient instances", async () => {
+    const { client: clientA, submitTransaction: submitA } = clientWith();
+    const { client: clientB, submitTransaction: submitB } = clientWith();
+
+    const preparedA = await clientA.preparePayment({
+      from: FROM,
+      to: TO,
+      token: xlm,
+      amount: 5n,
+      paymentId: "shared-id",
+    });
+    const preparedB = await clientB.preparePayment({
+      from: FROM,
+      to: TO,
+      token: xlm,
+      amount: 5n,
+      paymentId: "shared-id",
+    });
+
+    await preparedA.confirm();
+    await preparedB.confirm();
+
+    expect(submitA).toHaveBeenCalledTimes(1);
+    expect(submitB).toHaveBeenCalledTimes(1);
+  });
+});

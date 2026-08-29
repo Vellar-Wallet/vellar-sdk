@@ -8,6 +8,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createX402Client, expirationOffsetFor, type FetchLike } from "./x402-client";
 import {
+  ConfirmationRequiredError,
   DisallowedAssetError,
   InvalidRequirementsError,
   MaxAmountExceededError,
@@ -132,6 +133,136 @@ describe("createPayment — direct-path guards", () => {
     await expect(
       c.createPayment(requirements({ amount: "1.5" }), { maxAmount: 10_000_000n }),
     ).rejects.toBeInstanceOf(InvalidRequirementsError);
+  });
+});
+
+// #228: high-value payments require explicit confirmation, gated by
+// `confirmationThreshold` + `confirm`, on BOTH the createPayment direct path
+// and the fetch (402-retry) path. This file never mocks the RPC simulation
+// layer (see the passthrough-only coverage above), so a stub signer's
+// simulated transaction never produces a real auth entry to sign —
+// `buildSignedPayment` reaches its "No wallet auth entry found to sign" check
+// instead of ever calling `signAuthEntry`. That's still the right signal
+// here: reaching it proves execution got PAST the confirmation gate (i.e.
+// confirmation was granted, or wasn't required); a ConfirmationRequiredError
+// instead proves confirmation blocked BEFORE that point was ever reached.
+describe("explicit confirmation for high-value payments (#228)", () => {
+  describe("createPayment", () => {
+    it("does not call confirm when the amount is below the threshold, and proceeds past the confirmation gate", async () => {
+      const confirm = vi.fn(async () => true);
+      const c = client(vi.fn());
+      // amount 1_000_000 (fixture default) is below the 5_000_000 threshold,
+      // so it should reach (and be rejected by) the stub signer, not confirm.
+      await expect(
+        c.createPayment(requirements(), {
+          maxAmount: 10_000_000n,
+          confirmationThreshold: 5_000_000n,
+          confirm,
+        }),
+      ).rejects.toThrow(/No wallet auth entry found to sign/);
+      expect(confirm).not.toHaveBeenCalled();
+    });
+
+    it("calls confirm with the pending payment's details when the amount meets the threshold", async () => {
+      const confirm = vi.fn(async () => true);
+      const c = client(vi.fn());
+      // confirm resolves true, so this proceeds past confirmation and is
+      // rejected by the stub signer instead — proving confirm ran first.
+      await expect(
+        c.createPayment(requirements({ amount: "5000000" }), {
+          maxAmount: 10_000_000n,
+          confirmationThreshold: 5_000_000n,
+          confirm,
+        }),
+      ).rejects.toThrow(/No wallet auth entry found to sign/);
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect(confirm).toHaveBeenCalledWith(
+        expect.objectContaining({ amount: 5_000_000n, asset: expect.any(String) }),
+      );
+    });
+
+    it("throws ConfirmationRequiredError, never reaching the signer, when confirm resolves false", async () => {
+      const confirm = vi.fn(async () => false);
+      const c = client(vi.fn());
+      await expect(
+        c.createPayment(requirements({ amount: "9000000" }), {
+          maxAmount: 10_000_000n,
+          confirmationThreshold: 5_000_000n,
+          confirm,
+        }),
+      ).rejects.toBeInstanceOf(ConfirmationRequiredError);
+    });
+
+    it("throws ConfirmationRequiredError, never reaching the signer, when a threshold is set with no confirm callback", async () => {
+      const c = client(vi.fn());
+      await expect(
+        c.createPayment(requirements({ amount: "9000000" }), {
+          maxAmount: 10_000_000n,
+          confirmationThreshold: 5_000_000n,
+          // confirm intentionally omitted — configuration error, fails closed.
+        }),
+      ).rejects.toBeInstanceOf(ConfirmationRequiredError);
+    });
+
+    it("treats an amount exactly equal to the threshold as requiring confirmation", async () => {
+      const confirm = vi.fn(async () => true);
+      const c = client(vi.fn());
+      await expect(
+        c.createPayment(requirements({ amount: "5000000" }), {
+          maxAmount: 10_000_000n,
+          confirmationThreshold: 5_000_000n,
+          confirm,
+        }),
+      ).rejects.toThrow(/No wallet auth entry found to sign/);
+      expect(confirm).toHaveBeenCalledTimes(1);
+    });
+
+    it("is a no-op (never calls confirm) when confirmationThreshold is unset, preserving existing behavior", async () => {
+      const confirm = vi.fn(async () => true);
+      const c = client(vi.fn());
+      await expect(
+        c.createPayment(requirements({ amount: "999999999" }), {
+          maxAmount: 10_000_000_000n,
+          confirm,
+        }),
+      ).rejects.toThrow(/No wallet auth entry found to sign/);
+      expect(confirm).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("fetch (402-retry path)", () => {
+    it("blocks on confirm before ever retrying with a payment signature", async () => {
+      const confirm = vi.fn(async () => true);
+      const fetchImpl = vi.fn(async () => response402([requirements({ amount: "5000000" })]));
+      const c = client(fetchImpl);
+      // confirm approves, so this proceeds to buildSignedPayment and is
+      // rejected by the stub signer — proving confirm ran first, and that
+      // the retry request was never sent (fetchImpl called once: the 402).
+      await expect(
+        c.fetch("https://res.test/paid", {
+          maxAmount: 10_000_000n,
+          confirmationThreshold: 5_000_000n,
+          confirm,
+        }),
+      ).rejects.toThrow(/No wallet auth entry found to sign/);
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    });
+
+    it("never retries the request when confirmation is declined", async () => {
+      const confirm = vi.fn(async () => false);
+      const fetchImpl = vi.fn(async () => response402([requirements({ amount: "9000000" })]));
+      const c = client(fetchImpl);
+      await expect(
+        c.fetch("https://res.test/paid", {
+          maxAmount: 10_000_000n,
+          confirmationThreshold: 5_000_000n,
+          confirm,
+        }),
+      ).rejects.toBeInstanceOf(ConfirmationRequiredError);
+      // Only the initial 402-triggering request happened; no payment retry.
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    });
   });
 });
 
