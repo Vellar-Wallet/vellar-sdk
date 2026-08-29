@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PolicyDefinition } from "./types";
-import { createPolicyClient } from "./policy-client";
+import { createPolicyClient, PolicyListFilterError } from "./policy-client";
 import { PolicyApiError } from "./policy-types";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -123,6 +123,62 @@ describe("createPolicyClient", () => {
     });
     await expect(client.listTemplates()).rejects.toBeInstanceOf(PolicyApiError);
     await expect(client.listTemplates()).rejects.toMatchObject({ status: 0 });
+  });
+
+  it("listPolicies() passes status and date filters as query params", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      jsonResponse([{ id: "p1", status: "generated", createdAt: "2026-01-01T00:00:00Z" }]),
+    );
+    const client = createPolicyClient({
+      apiUrl: "https://api.test",
+      network: "testnet",
+      fetch: fetchMock,
+    });
+
+    await client.listPolicies({
+      status: "active",
+      createdAfter: "2026-01-01T00:00:00Z",
+      createdBefore: "2026-12-31T23:59:59Z",
+    });
+
+    expect(fetchMock.mock.calls[0]![0]).toBe(
+      "https://api.test/policies?status=active&created_after=2026-01-01T00%3A00%3A00Z&created_before=2026-12-31T23%3A59%3A59Z",
+    );
+  });
+
+  it("listPolicies() rejects malformed createdAfter", () => {
+    const client = createPolicyClient({
+      apiUrl: "https://api.test",
+      network: "testnet",
+      fetch: vi.fn(),
+    });
+    expect(() => client.listPolicies({ createdAfter: "not-a-date" })).toThrow(
+      PolicyListFilterError,
+    );
+  });
+
+  it("listPolicies() rejects malformed createdBefore", () => {
+    const client = createPolicyClient({
+      apiUrl: "https://api.test",
+      network: "testnet",
+      fetch: vi.fn(),
+    });
+    expect(() => client.listPolicies({ createdBefore: "also-bad" })).toThrow(
+      PolicyListFilterError,
+    );
+  });
+
+  it("listPolicies() accepts each status filter independently", async () => {
+    for (const status of ["active", "draft", "revoked"] as const) {
+      const fetchMock = vi.fn<typeof fetch>(async () => jsonResponse([]));
+      const client = createPolicyClient({
+        apiUrl: "https://api.test",
+        network: "testnet",
+        fetch: fetchMock,
+      });
+      await client.listPolicies({ status });
+      expect(String(fetchMock.mock.calls[0]![0])).toContain(`status=${status}`);
+    }
   });
 });
 

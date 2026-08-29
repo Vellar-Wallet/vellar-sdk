@@ -25,6 +25,11 @@ import {
   xdr,
 } from "@stellar/stellar-sdk";
 import type { SmartAccountX402Signer } from "./x402-types";
+import {
+  assertCapability,
+  assertValidCapabilityRules,
+  type CapabilityRule,
+} from "./x402-signer-capabilities";
 
 // ── raw ScVal builders (byte-identical to the wallet contract spec; verified) ──
 //
@@ -116,6 +121,26 @@ function policySignature(): xdr.ScVal {
 }
 
 /**
+ * Read the resource type (contract) + action (function name) a decoded auth
+ * entry's root invocation authorizes, for a {@link CapabilityRequest}. Returns
+ * `undefined` when the root invocation isn't a contract call (nothing for a
+ * capability rule to match against) — checked entries are always contract
+ * calls in practice (x402-client only signs SEP-41 `transfer`), but a
+ * structural signer must not crash on an unexpected shape.
+ */
+function capabilityRequestFor(
+  entry: xdr.SorobanAuthorizationEntry,
+): { resourceType: string; action: string } | undefined {
+  const fn = entry.rootInvocation().function();
+  if (fn.switch().name !== "sorobanAuthorizedFunctionTypeContractFn") return undefined;
+  const call = fn.contractFn();
+  return {
+    resourceType: Address.fromScAddress(call.contractAddress()).toString(),
+    action: call.functionName().toString(),
+  };
+}
+
+/**
  * Set the entry's signature to the smart-wallet map `Vec[Map[key → sig]]`.
  *
  * Soroban requires map keys in ScVal order. Both key variants are `scvVec`
@@ -169,6 +194,14 @@ export interface SessionKeySignerConfig {
    * than a missing co-signer. Omit only for an unrestricted key.
    */
   policies?: readonly string[];
+  /**
+   * Client-side capability scoping (#224): restrict which resource
+   * type (contract) + action (function name) combinations this signer will
+   * sign, independent of the on-chain policy. Omit for no scoping (signs
+   * anything x402-client.ts hands it, as before). See x402-signer-capabilities.ts
+   * for what this does and does not guarantee.
+   */
+  capabilities?: readonly CapabilityRule[];
 }
 
 /**
@@ -190,11 +223,16 @@ export function createSessionKeySigner(config: SessionKeySignerConfig): SmartAcc
     }
   }
 
+  const capabilities = config.capabilities ?? [];
+  assertValidCapabilityRules(capabilities);
+
   return {
     address: config.address,
     async signAuthEntry(entryXdr, { networkPassphrase, expirationLedger }) {
       const entry = xdr.SorobanAuthorizationEntry.fromXDR(entryXdr, "base64");
       assertEntryAddress(entry, config.address);
+      const request = capabilityRequestFor(entry);
+      if (request) assertCapability(capabilities, request);
       const payload = payloadHashForEntry(entry, networkPassphrase, expirationLedger);
       const signature = keypair.sign(payload);
       setSignatureMap(entry, ed25519SignerKey(rawPk), ed25519Signature(signature), policies);
@@ -230,6 +268,9 @@ export interface PasskeyX402SignerConfig {
   /** Policy contracts this signer's `SignerLimits` require — see
    * {@link SessionKeySignerConfig.policies}. Same trap applies here. */
   policies?: readonly string[];
+  /** Client-side capability scoping (#224) — see
+   * {@link SessionKeySignerConfig.capabilities}. Same semantics apply here. */
+  capabilities?: readonly CapabilityRule[];
 }
 
 /**
@@ -244,11 +285,16 @@ export function createPasskeyX402Signer(config: PasskeyX402SignerConfig): SmartA
   if (!isContractAddress(config.address)) {
     throw new Error(`passkey signer address must be a contract (C…): got ${config.address}`);
   }
+  const capabilities = config.capabilities ?? [];
+  assertValidCapabilityRules(capabilities);
+
   return {
     address: config.address,
     async signAuthEntry(entryXdr, { networkPassphrase, expirationLedger }) {
       const entry = xdr.SorobanAuthorizationEntry.fromXDR(entryXdr, "base64");
       assertEntryAddress(entry, config.address);
+      const request = capabilityRequestFor(entry);
+      if (request) assertCapability(capabilities, request);
       const payload = payloadHashForEntry(entry, networkPassphrase, expirationLedger);
       const assertion = await config.webAuthn.sign(new Uint8Array(payload));
       setSignatureMap(

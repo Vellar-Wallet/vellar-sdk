@@ -17,6 +17,18 @@ import { AssembledTransaction } from "@stellar/stellar-sdk/contract";
 import { assertAuthEntryInvocation, type ExpectedInvocation } from "./x402-auth-entry";
 import type { Network } from "./types";
 import {
+  createSignedFetch,
+  type FacilitatorRequestSigningConfig,
+} from "./x402-request-auth";
+import {
+  assertBudgetAttributes,
+  assertValidBudgetAttributeRules,
+  matchingBudgetRule,
+  type BudgetAttributeRequest,
+  type BudgetAttributeRule,
+  type BudgetAttributeTracker,
+} from "./x402-budget-attributes";
+import {
   CAIP2_BY_NETWORK,
   NETWORKS,
   decodePaymentRequired,
@@ -109,17 +121,44 @@ export function expirationOffsetFor(
 export function createX402Client(deps: X402ClientDeps): X402Client {
   // Fail here, with the actionable error, not inside rpc.Server's URL parse.
   assertValidX402RpcUrl(deps.rpcUrl);
+  // Fail on a malformed rule at construction, not mid-payment (#225 mirrors
+  // #224's assertValidCapabilityRules posture: a typo'd rule fails loudly
+  // before it can wrongly deny or wrongly admit).
+  const budgetAttributes = deps.budgetAttributes ?? [];
+  assertValidBudgetAttributeRules(budgetAttributes);
+  const now = deps.now ?? (() => new Date());
   const server = new rpc.Server(deps.rpcUrl);
-  const doFetch: FetchLike = deps.fetchImpl ?? ((url, init) => fetch(url, init));
+  const baseFetch: FetchLike = deps.fetchImpl ?? ((url, init) => fetch(url, init));
+  // Request signing wraps whatever fetch the caller already injected, so a
+  // test double or logging wrapper composes with it rather than being replaced.
+  const doFetch: FetchLike = deps.requestSigning
+    ? createSignedFetch(deps.requestSigning, baseFetch)
+    : baseFetch;
   // A hard ceiling on the derived expiration offset (undefined ⇒ no ceiling).
   const expirationCeiling = deps.expirationLedgerOffset;
   const ourCaip2 = CAIP2_BY_NETWORK[deps.network];
+
+  function budgetRequestFor(requirements: PaymentRequirements): BudgetAttributeRequest {
+    const category = requirements.extra?.category;
+    return {
+      merchant: requirements.payTo,
+      ...(typeof category === "string" ? { category } : {}),
+      amount: parseAmount(requirements.amount),
+      at: now(),
+    };
+  }
 
   async function buildSignedPayment(
     requirements: PaymentRequirements,
   ): Promise<{ header: string; amount: bigint }> {
     const net = NETWORKS[requirements.network];
     if (!net) throw new NoUsablePaymentOptionError(`Unknown network ${requirements.network}`);
+
+    // Attribute-scoped budget check (#225) — BEFORE simulation, so an
+    // out-of-budget payment never even round-trips to the RPC. Independent of
+    // (checked in addition to) maxAmount / allowedAssets in createPayment.
+    const budgetRequest = budgetRequestFor(requirements);
+    await assertBudgetAttributes(budgetAttributes, budgetRequest, deps.budgetAttributeTracker);
 
     // Build the SEP-41 transfer(from = C-address, to = payTo, amount).
     const tx = await AssembledTransaction.build({
@@ -268,6 +307,17 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
     }
 
     const settlement = readSettlement(paid, requirements, amount, deps.network);
+
+    // Record spend only now that the facilitator has actually accepted the
+    // payment — a request rejected above (over-budget on-chain, or any other
+    // 4xx) must not consume period budget it never actually spent.
+    if (deps.budgetAttributeTracker && budgetAttributes.length > 0) {
+      const rule = matchingBudgetRule(budgetAttributes, budgetRequestFor(requirements));
+      if (rule?.periodMaxAmount !== undefined) {
+        await deps.budgetAttributeTracker.record(rule, amount);
+      }
+    }
+
     return { response: paid, paid: true, settlement };
   }
 

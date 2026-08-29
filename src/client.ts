@@ -18,6 +18,11 @@ import {
   type SmartAccountX402Signer,
   type X402Client,
 } from "./x402-types";
+import {
+  createInMemoryBudgetAttributeTracker,
+  type BudgetAttributeRule,
+  type BudgetAttributeTracker,
+} from "./x402-budget-attributes";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Vellar Wallet SDK — public client facade.
@@ -100,6 +105,18 @@ export interface VellarWalletConfig {
     rpcUrl?: string;
     fetchImpl?: FetchLike;
     expirationLedgerOffset?: number;
+    /**
+     * Attribute-based scoping for the session key's x402 budget (#225):
+     * merchant, category, and time-window rules checked before a payment is
+     * built or signed, on top of (never instead of) each call's `maxAmount`
+     * and the on-chain spending-limit policy. See
+     * ./x402-budget-attributes.ts for what this does and does not guarantee.
+     */
+    budgetAttributes?: readonly BudgetAttributeRule[];
+    /** Running-spend accounting for `budgetAttributes` rules with a
+     * `periodMaxAmount`. Defaults to an in-memory, process-lifetime tracker
+     * when `budgetAttributes` includes one and no tracker is supplied. */
+    budgetAttributeTracker?: BudgetAttributeTracker;
   };
   /** RPC URL for x402 simulation when `x402.rpcUrl` is not given. */
   rpcUrl?: string;
@@ -213,6 +230,12 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
           simulationSourceAccount: config.x402.simulationSourceAccount,
           fetchImpl: config.x402.fetchImpl,
           expirationLedgerOffset: config.x402.expirationLedgerOffset,
+          budgetAttributes: config.x402.budgetAttributes,
+          budgetAttributeTracker:
+            config.x402.budgetAttributeTracker ??
+            (config.x402.budgetAttributes?.length
+              ? createInMemoryBudgetAttributeTracker()
+              : undefined),
         }
       : undefined,
     resolveSigner: () => {
