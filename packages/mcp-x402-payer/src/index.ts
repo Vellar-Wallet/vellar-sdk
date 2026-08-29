@@ -1,6 +1,14 @@
 // Library surface, for embedding the payer in another host or testing it.
 // The runnable server is ./bin.ts (`vellar-mcp-x402-payer`).
 
+export {
+  checkReadiness,
+  type ReadinessEnv,
+  type ReadinessIssue,
+  type ReadinessIssueCode,
+  type ReadinessResult,
+} from "./readiness.js";
+
 export { loadConfig, type PayerConfig, type PayerNetwork } from "./config.js";
 export * from "./errors.js";
 export { createMutex, createSpendLedger, type SpendLedger, type SpendSnapshot } from "./ledger.js";
