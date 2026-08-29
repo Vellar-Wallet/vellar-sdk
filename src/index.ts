@@ -29,3 +29,12 @@ export * from "./x402-facade";
 export * from "./x402-request-auth";
 export * from "./session";
 export * from "./tx-status";
+
+/** Stable v1 API — breaking changes only in major semver releases. */
+export * from "./v1-exports";
+
+/** Experimental API — may change in any release. Prefer this namespace for new code. */
+export * as experimental from "./experimental-exports";
+
+// Legacy flat re-exports of experimental symbols (same stability as experimental.*).
+export * from "./experimental-exports";

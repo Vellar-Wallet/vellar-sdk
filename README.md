@@ -426,6 +426,22 @@ failure is reported to `onDebugLog` (default: a no-op — bring your own logger)
 rather than thrown, and mint always runs before revoke so a revoke failure
 never leaves the wallet with no valid session key. Omit `sessionKeyRotation`
 for the pre-existing behaviour (no rotation).
+## API stability
+
+Exports fall into two groups:
+
+| Group | Import | Guarantee |
+| --- | --- | --- |
+| **Stable v1** | `import { createVellarWallet, TESTNET, … } from "vellar-sdk"` | Breaking changes only in major semver releases (until `2.0`). |
+| **Experimental** | `import { experimental } from "vellar-sdk"` then `experimental.createX402Client`, etc. | May change in any release — x402, agentic payments, and related helpers. |
+
+The stable v1 surface covers the wallet facade, config, backend client, balances,
+payments, policies, agent keys, session store, and transaction status helpers.
+Experimental symbols are also re-exported flat at the package root for backward
+compatibility; treat those flat imports as unstable.
+
+The canonical export lists live in `src/export-surface.ts` and are checked by
+`src/index.exports.test.ts`.
 
 ## License
 
