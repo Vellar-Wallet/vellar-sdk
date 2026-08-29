@@ -1,20 +1,28 @@
-// x402 client — the fetch wrapper + payment builder (smart-account path).
+// x402 client — the fetch wrapper + payment orchestration (smart-account path).
 //
 // Flow (proven in scripts/x402-spike/): request → 402 → decode requirements →
 // build SEP-41 transfer(from=C-address, to=payTo, amount) → sign the wallet auth
 // entry as V1 (via the injected signer) → retry with the `PAYMENT-SIGNATURE`
 // header → return the unlocked response + on-chain settlement.
 //
-// The PURE decision layer (decode / select / validate) lives in ./x402-guards so
-// payers that don't share this signing path can reuse it — see that file. It is
-// re-exported here so this module's public API is unchanged.
+// This module is deliberately just the orchestration layer now (#299 split it
+// into two focused pieces):
+//   - the PURE decision layer (decode / select / validate a 402 challenge)
+//     lives in ./x402-guards, so payers that don't share this signing path can
+//     reuse it — see that file. Re-exported here so this module's public API
+//     is unchanged.
+//   - the payment-BUILDING layer (simulate the transfer, derive the signature
+//     expiration, verify + sign the auth entry) lives in ./x402-payment.
+//
+// What's left here: turning `X402ClientDeps` into a `rpc.Server` + signed
+// fetch, running the guards/budget checks BEFORE a payment is built, wiring
+// the 402 → pay → retry flow, and recording settlement/spend after the
+// facilitator actually accepts a payment.
 //
 // Structural deps (rpc, an AssembledTransaction builder, fetch) keep this
 // unit-testable without a network. The signer is injected (ed25519 or passkey).
 
-import { Address, nativeToScVal, rpc, xdr } from "@stellar/stellar-sdk";
-import { AssembledTransaction } from "@stellar/stellar-sdk/contract";
-import { assertAuthEntryInvocation, type ExpectedInvocation } from "./x402-auth-entry";
+import { rpc } from "@stellar/stellar-sdk";
 import type { Network } from "./types";
 import {
   createSignedFetch,
@@ -30,14 +38,13 @@ import {
 } from "./x402-budget-attributes";
 import {
   CAIP2_BY_NETWORK,
-  NETWORKS,
   decodePaymentRequired,
   decodeSettlementHeader,
   extractRejectionReason,
   parseAmount,
   selectRequirements,
-  utf8ToBase64,
 } from "./x402-guards";
+import { buildSignedPayment, readSettlement } from "./x402-payment";
 import {
   assertValidX402RpcUrl,
   DisallowedAssetError,
@@ -55,6 +62,10 @@ import {
 
 // The pure guard layer is part of this module's published surface.
 export * from "./x402-guards";
+// The payment-building layer's public exports are part of this module's
+// published surface too, so existing imports of `expirationOffsetFor` from
+// "./x402-client" keep working unchanged.
+export { expirationOffsetFor } from "./x402-payment";
 
 /** Minimal fetch surface (injectable for tests). */
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
@@ -99,47 +110,6 @@ export interface X402ClientDeps {
   now?: () => Date;
 }
 
-// Estimated ledger close time (seconds). The facilitator fetches its own estimate
-// from Horizon (~5s on testnet/pubnet); we use the same constant so our derived
-// expiration tracks its `maxLedger = current + ceil(maxTimeoutSeconds / ~5)`.
-const ESTIMATED_LEDGER_SECONDS = 5;
-// Ledgers we stay UNDER the facilitator's computed maxLedger, to absorb drift
-// between our getLatestLedger() read and the facilitator's (it reads a beat
-// later, so ITS current ledger is ≥ ours; a margin keeps us inside its window
-// even though it grants a +2 tolerance).
-const EXPIRATION_SAFETY_MARGIN = 2;
-// Never sign an expiration less than this many ledgers out, even for a tiny
-// server timeout — below this the payment can't realistically round-trip.
-const MIN_EXPIRATION_LEDGERS = 3;
-/**
- * Default ceiling on seller-requested signature lifetime (security audit V-7).
- * `maxTimeoutSeconds` is attacker-controlled and previously had no upper bound
- * here unless a caller passed `expirationLedgerOffset`. 300s / 5s = 60 ledgers,
- * less the safety margin. See the scheme client for the measurement behind 300s.
- */
-const DEFAULT_MAX_EXPIRATION_LEDGERS = 58;
-
-/**
- * Ledgers-from-now to set as the signature expiration. Derived from the server's
- * `maxTimeoutSeconds` so we stay inside the facilitator's own `maxLedger` window
- * (a fixed offset would exceed a short server timeout and be rejected as
- * `expiration_too_far`). Kept a safety margin below the facilitator's ceiling,
- * floored at MIN_EXPIRATION_LEDGERS, and optionally capped by `ceiling`.
- *
- * Exported for testing; the ceiling is the client's `expirationLedgerOffset`.
- */
-export function expirationOffsetFor(
-  maxTimeoutSeconds: number | undefined,
-  ceiling?: number,
-): number {
-  const windowLedgers = Math.ceil((maxTimeoutSeconds ?? 120) / ESTIMATED_LEDGER_SECONDS);
-  let offset = windowLedgers - EXPIRATION_SAFETY_MARGIN;
-  // An explicit ceiling still wins; absent one, fall back to the default bound
-  // rather than honouring whatever the seller asked for.
-  offset = Math.min(offset, ceiling ?? DEFAULT_MAX_EXPIRATION_LEDGERS);
-  return Math.max(offset, MIN_EXPIRATION_LEDGERS);
-}
-
 export function createX402Client(deps: X402ClientDeps): X402Client {
   // Fail here, with the actionable error, not inside rpc.Server's URL parse.
   assertValidX402RpcUrl(deps.rpcUrl);
@@ -170,90 +140,22 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
     };
   }
 
-  async function buildSignedPayment(
+  async function buildPaymentFor(
     requirements: PaymentRequirements,
   ): Promise<{ header: string; amount: bigint }> {
-    const net = NETWORKS[requirements.network];
-    if (!net) throw new NoUsablePaymentOptionError(`Unknown network ${requirements.network}`);
-
     // Attribute-scoped budget check (#225) — BEFORE simulation, so an
     // out-of-budget payment never even round-trips to the RPC. Independent of
     // (checked in addition to) maxAmount / allowedAssets in createPayment.
     const budgetRequest = budgetRequestFor(requirements);
     await assertBudgetAttributes(budgetAttributes, budgetRequest, deps.budgetAttributeTracker);
 
-    // Build the SEP-41 transfer(from = C-address, to = payTo, amount).
-    const tx = await AssembledTransaction.build({
-      contractId: requirements.asset,
-      method: "transfer",
-      args: [
-        nativeToScVal(deps.signer.address, { type: "address" }),
-        nativeToScVal(requirements.payTo, { type: "address" }),
-        nativeToScVal(parseAmount(requirements.amount), { type: "i128" }),
-      ],
-      networkPassphrase: net.passphrase,
+    return buildSignedPayment(requirements, {
+      signer: deps.signer,
       rpcUrl: deps.rpcUrl,
-      publicKey: deps.simulationSourceAccount,
-      parseResultXdr: (r: unknown) => r,
+      server,
+      simulationSourceAccount: deps.simulationSourceAccount,
+      expirationCeiling,
     });
-
-    const latest = await server.getLatestLedger();
-    const expirationLedger =
-      latest.sequence + expirationOffsetFor(requirements.maxTimeoutSeconds, expirationCeiling);
-
-    if (!tx.built) {
-      throw new Error(
-        "x402: failed to build the transfer transaction (simulation returned nothing).",
-      );
-    }
-    const built = tx.built;
-
-    // What we intend to authorise. `built` came back from the RPC's simulation,
-    // so its auth entries are untrusted input until compared against this.
-    const expected: ExpectedInvocation = {
-      contract: requirements.asset,
-      functionName: "transfer",
-      from: deps.signer.address,
-      to: requirements.payTo,
-      amount: parseAmount(requirements.amount),
-    };
-
-    // Sign every wallet auth entry (V1) via the injected signer.
-    const op = built.operations[0] as { auth?: xdr.SorobanAuthorizationEntry[] };
-    const auth = op.auth ?? [];
-    let signed = 0;
-    for (let i = 0; i < auth.length; i++) {
-      const entry = auth[i]!;
-      if (entry.credentials().switch().name !== "sorobanCredentialsAddress") continue;
-      const addr = Address.fromScAddress(entry.credentials().address().address()).toString();
-      if (addr !== deps.signer.address) continue;
-
-      // Security audit V-1. The credential address only establishes that the
-      // entry is ours to sign; this establishes WHAT it does. Predates the
-      // smart-account work — the classic path has always had this gap.
-      assertAuthEntryInvocation(entry, expected);
-
-      const signedXdr = await deps.signer.signAuthEntry(entry.toXDR("base64"), {
-        networkPassphrase: net.passphrase,
-        expirationLedger,
-      });
-      auth[i] = xdr.SorobanAuthorizationEntry.fromXDR(signedXdr, "base64");
-      signed++;
-    }
-    if (signed === 0) {
-      throw new Error("No wallet auth entry found to sign for the payer address.");
-    }
-    op.auth = auth;
-
-    const payload = {
-      x402Version: 2,
-      accepted: requirements,
-      payload: { transaction: built.toXDR() },
-    };
-    return {
-      header: utf8ToBase64(JSON.stringify(payload)),
-      amount: parseAmount(requirements.amount),
-    };
   }
 
   async function createPayment(
@@ -269,7 +171,7 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
     if (required > opts.maxAmount) {
       throw new MaxAmountExceededError(required, opts.maxAmount, requirements.asset);
     }
-    const { header, amount } = await buildSignedPayment(requirements);
+    const { header, amount } = await buildPaymentFor(requirements);
     return { header, requirements, amount };
   }
 
@@ -298,7 +200,7 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
 
     const decoded = decodePaymentRequired(first);
     const requirements = selectRequirements(decoded, init, ourCaip2);
-    const { header, amount } = await buildSignedPayment(requirements);
+    const { header, amount } = await buildPaymentFor(requirements);
 
     const paid = await doFetch(url, {
       ...baseInit,
@@ -314,7 +216,12 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
       );
     }
 
-    const settlement = readSettlement(paid, requirements, amount, deps.network);
+    const settlement = readSettlement(
+      decodeSettlementHeader(paid),
+      requirements,
+      amount,
+      deps.network,
+    );
 
     // Record spend only now that the facilitator has actually accepted the
     // payment — a request rejected above (over-budget on-chain, or any other
@@ -330,21 +237,4 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
   }
 
   return { fetch: x402Fetch, createPayment };
-}
-
-function readSettlement(
-  res: Response,
-  requirements: PaymentRequirements,
-  amount: bigint,
-  network: Network,
-): X402Response["settlement"] {
-  const decoded = decodeSettlementHeader(res);
-  if (!decoded) return undefined;
-  return {
-    transaction: decoded.transaction,
-    payer: decoded.payer ?? requirements.payTo,
-    asset: requirements.asset,
-    amount,
-    network,
-  };
 }

@@ -140,28 +140,13 @@ describe("createPayment — direct-path guards", () => {
   });
 });
 
-describe("expirationOffsetFor — derived from maxTimeoutSeconds (bug #5)", () => {
-  it("derives a SHORT expiration for a short server timeout (no fixed +12)", () => {
-    // 30s window ≈ 6 ledgers; minus the safety margin (2) = 4. A fixed +12 would
-    // exceed the facilitator's ~6-ledger maxLedger and be rejected.
-    expect(expirationOffsetFor(30)).toBe(4);
-  });
-
-  it("derives a wider expiration for a long timeout", () => {
-    // 120s ≈ 24 ledgers − 2 = 22.
+describe("expirationOffsetFor — re-exported from ./x402-payment (#299)", () => {
+  // Full derivation-math coverage lives in x402-payment.test.ts, next to the
+  // function's new home. This just pins that the re-export from ./x402-client
+  // still works, so existing `import { expirationOffsetFor } from "./x402-client"`
+  // call sites are unaffected by the split.
+  it("is callable via the ./x402-client re-export", () => {
     expect(expirationOffsetFor(120)).toBe(22);
-  });
-
-  it("floors at the minimum for a tiny timeout", () => {
-    expect(expirationOffsetFor(1)).toBe(3); // MIN_EXPIRATION_LEDGERS
-  });
-
-  it("respects an explicit ceiling", () => {
-    expect(expirationOffsetFor(120, 10)).toBe(10);
-  });
-
-  it("defaults to the 120s window when maxTimeoutSeconds is undefined", () => {
-    expect(expirationOffsetFor(undefined)).toBe(22);
   });
 });
 
