@@ -39,6 +39,13 @@ start — pull requests that don't follow them will be closed.
 5. **Questions go to the Telegram group.** Don't open issues for questions —
    ask in [our Telegram](https://t.me/+RWPCKXXJTj45Njk0).
 
+6. **All pull requests modifying source files must include a changeset.**
+   We use changesets to generate our changelog. If your PR modifies files in `src/` or `packages/`, you must add a changeset by running:
+   ```sh
+   npx changeset
+   ```
+   and following the prompts. If your PR contains only documentation, website, or infrastructure changes that do not need a changelog entry, you can ask a maintainer to add the `skip-changeset` label to your PR.
+
 ## Before you open a PR
 
 Make sure the package still typechecks, tests, and builds, and that the pre-release smoke test passes:
