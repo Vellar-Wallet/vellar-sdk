@@ -82,17 +82,53 @@ export function createSessionStore(storage: SessionStorageAdapter): SessionStore
   }));
 }
 
+/**
+ * Default retention window for a session cached in consumer local storage:
+ * 30 days of inactivity. `lastActiveAt` is refreshed on every `touch()`
+ * (idea.md §6.1), so a session in regular use never ages out — this only
+ * discards a session nobody has used in a long time, on the theory that
+ * `restore()` re-authenticating via a fresh passkey ceremony is safer at that
+ * point than trusting month-old cached wallet state. See the README's
+ * "Session cache retention" section for the full rationale.
+ */
+export const DEFAULT_SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+export interface WebStorageAdapterOptions {
+  /**
+   * Discard (and report as absent) a persisted session whose `lastActiveAt`
+   * is older than this, in milliseconds. Enforced on read (`load()`), not on
+   * a timer — nothing runs while the app isn't open. Defaults to
+   * {@link DEFAULT_SESSION_MAX_AGE_MS}; pass `Infinity` to disable expiry
+   * entirely (the pre-#292 behaviour).
+   */
+  maxAgeMs?: number;
+  /** Clock for the age check (defaults to `() => Date.now()`); overridable for tests. */
+  now?: () => number;
+}
+
 /** Storage-backed adapter for web (pass window.localStorage) or any Storage-like object. */
 export function createWebStorageAdapter(
   storage: Pick<Storage, "getItem" | "setItem" | "removeItem">,
   key = "vellar.session",
+  options: WebStorageAdapterOptions = {},
 ): SessionStorageAdapter {
+  const maxAgeMs = options.maxAgeMs ?? DEFAULT_SESSION_MAX_AGE_MS;
+  const now = options.now ?? (() => Date.now());
   return {
     async load() {
       const raw = storage.getItem(key);
       if (raw === null) return null;
       const parsed: unknown = JSON.parse(raw);
-      return isWalletSession(parsed) ? parsed : null;
+      if (!isWalletSession(parsed)) return null;
+      const lastActive = Date.parse(parsed.lastActiveAt);
+      if (Number.isFinite(lastActive) && now() - lastActive > maxAgeMs) {
+        // Past the retention window: treat it as absent rather than restoring
+        // stale wallet state, and drop it so a later load() doesn't re-check
+        // the same expired entry.
+        storage.removeItem(key);
+        return null;
+      }
+      return parsed;
     },
     async save(session) {
       storage.setItem(key, JSON.stringify(session));

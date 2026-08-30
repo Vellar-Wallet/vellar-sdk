@@ -426,6 +426,42 @@ failure is reported to `onDebugLog` (default: a no-op — bring your own logger)
 rather than thrown, and mint always runs before revoke so a revoke failure
 never leaves the wallet with no valid session key. Omit `sessionKeyRotation`
 for the pre-existing behaviour (no rotation).
+
+#### Session cache retention
+
+`createWebStorageAdapter` (used by `createSessionStore` for browser apps)
+persists a `WalletSession` — including its `accountId` and `lastActiveAt` — in
+whatever `Storage`-like object you give it (typically `window.localStorage`).
+That is long-lived, unencrypted, client-side storage, so we recommend treating
+it the way you'd treat any other durable client-side cache:
+
+- **Recommended retention window: 30 days of inactivity.** This is the SDK's
+  default (`DEFAULT_SESSION_MAX_AGE_MS`) — a session whose `lastActiveAt` is
+  older than that is discarded on `load()` rather than restored. A session in
+  regular use never ages out: `touch()` refreshes `lastActiveAt` on activity
+  (idea.md §6.1), so the clock only runs while a user (or agent) has been away.
+- **Enforced on read, not on a timer.** There's no background sweep — nothing
+  runs while the app isn't open. The check happens the next time `restore()`
+  (or `load()` directly) is called, which is when it matters: before any
+  cached wallet state is trusted again.
+- **Configurable.** Pass `maxAgeMs` to tighten or loosen the window, or
+  `Infinity` to opt out of expiry entirely (the pre-#292 behaviour):
+
+  ```ts
+  import { createWebStorageAdapter } from "vellar-sdk";
+
+  const storage = createWebStorageAdapter(window.localStorage, "vellar.session", {
+    maxAgeMs: 7 * 24 * 60 * 60 * 1000, // 7 days, for a stricter app
+  });
+  ```
+
+An expired session is treated as absent — `restore()` reports `disconnected`,
+the same as if nothing had ever been persisted — and the stale entry is
+removed from storage so it isn't re-checked on the next load. This is a
+client-side hygiene measure, not a security boundary: the durable session
+authority is always the passkey/session-key signer, never the cached
+`WalletSession` object itself.
+
 ## API stability
 
 Exports fall into two groups:

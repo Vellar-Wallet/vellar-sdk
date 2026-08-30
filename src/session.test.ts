@@ -317,7 +317,13 @@ describe("createWebStorageAdapter", () => {
 
   it("round-trips a session under the given key", async () => {
     const backing = fakeStorage();
-    const adapter = createWebStorageAdapter(backing, "test.key");
+    // Pin `now` to the fixture's own timestamp — this test is about
+    // serialization round-tripping, not retention (see the "retention"
+    // describe block below), so it must not depend on how old the fixture's
+    // hardcoded lastActiveAt is relative to the real clock.
+    const adapter = createWebStorageAdapter(backing, "test.key", {
+      now: () => Date.parse(session.lastActiveAt),
+    });
     await adapter.save(session);
     expect(backing.map.has("test.key")).toBe(true);
     expect(await adapter.load()).toEqual(session);
@@ -337,6 +343,63 @@ describe("createWebStorageAdapter", () => {
     backing.setItem("vellar.session", "{not json");
     const adapter = createWebStorageAdapter(backing);
     await expect(adapter.load()).rejects.toThrow();
+  });
+
+  describe("retention (#292)", () => {
+    it("discards a session whose lastActiveAt is past the configured maxAgeMs", async () => {
+      const backing = fakeStorage();
+      const adapter = createWebStorageAdapter(backing, "vellar.session", {
+        maxAgeMs: 1000,
+        now: () => Date.parse("2026-07-16T10:00:02.000Z"), // 2s after lastActiveAt
+      });
+      await adapter.save(session); // lastActiveAt: 2026-07-16T10:00:00.000Z
+      expect(await adapter.load()).toBeNull();
+    });
+
+    it("keeps a session whose lastActiveAt is within maxAgeMs", async () => {
+      const backing = fakeStorage();
+      const adapter = createWebStorageAdapter(backing, "vellar.session", {
+        maxAgeMs: 10_000,
+        now: () => Date.parse("2026-07-16T10:00:02.000Z"), // 2s after lastActiveAt
+      });
+      await adapter.save(session);
+      expect(await adapter.load()).toEqual(session);
+    });
+
+    it("removes the expired entry from storage so it isn't re-read", async () => {
+      const backing = fakeStorage();
+      const adapter = createWebStorageAdapter(backing, "vellar.session", {
+        maxAgeMs: 1000,
+        now: () => Date.parse("2026-07-16T10:00:02.000Z"),
+      });
+      await adapter.save(session);
+      await adapter.load();
+      expect(backing.map.has("vellar.session")).toBe(false);
+    });
+
+    it("defaults to the 30-day retention window when maxAgeMs is omitted", async () => {
+      const backing = fakeStorage();
+      const justUnderThirtyDays = createWebStorageAdapter(backing, "vellar.session", {
+        now: () => Date.parse("2026-07-16T10:00:00.000Z") + 29 * 24 * 60 * 60 * 1000,
+      });
+      await justUnderThirtyDays.save(session);
+      expect(await justUnderThirtyDays.load()).toEqual(session);
+
+      const overThirtyDays = createWebStorageAdapter(backing, "vellar.session", {
+        now: () => Date.parse("2026-07-16T10:00:00.000Z") + 31 * 24 * 60 * 60 * 1000,
+      });
+      expect(await overThirtyDays.load()).toBeNull();
+    });
+
+    it("never expires when maxAgeMs is Infinity (opt-out)", async () => {
+      const backing = fakeStorage();
+      const adapter = createWebStorageAdapter(backing, "vellar.session", {
+        maxAgeMs: Infinity,
+        now: () => Date.parse("2026-07-16T10:00:00.000Z") + 365 * 24 * 60 * 60 * 1000,
+      });
+      await adapter.save(session);
+      expect(await adapter.load()).toEqual(session);
+    });
   });
 });
 
