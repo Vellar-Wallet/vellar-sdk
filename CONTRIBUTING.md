@@ -41,13 +41,14 @@ start — pull requests that don't follow them will be closed.
 
 ## Before you open a PR
 
-Make sure the package still typechecks, tests, and builds:
+Make sure the package still typechecks, tests, and builds, and that the pre-release smoke test passes:
 
 ```sh
 npm install
 npm run typecheck
 npm test
 npm run build
+node scripts/smoke-test.mjs
 ```
 
 New code is expected to come with tests.

@@ -107,7 +107,7 @@
     "check:docs": "node scripts/check-doc-snippets.mjs",
     "test": "vitest run",
     "test:integration": "npm run test:integration --workspace @vellar/mcp-x402-payer",
-    "prepublishOnly": "npm run typecheck && npm test && npm run build",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build && node scripts/smoke-test.mjs",
     "verify:merged": "node scripts/verify-merged.mjs"
   },
   "peerDependencies": {
