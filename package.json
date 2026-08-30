@@ -88,6 +88,17 @@
         "types": "./dist/x402-untrusted-vectors.d.cts",
         "default": "./dist/x402-untrusted-vectors.cjs"
       }
+    },
+    "./x402-request-auth": {
+      "source": "./src/x402-request-auth.ts",
+      "import": {
+        "types": "./dist/x402-request-auth.d.ts",
+        "default": "./dist/x402-request-auth.js"
+      },
+      "require": {
+        "types": "./dist/x402-request-auth.d.cts",
+        "default": "./dist/x402-request-auth.cjs"
+      }
     }
   },
   "main": "./dist/index.cjs",

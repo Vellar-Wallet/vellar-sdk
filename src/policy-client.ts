@@ -13,6 +13,44 @@ import {
 // it needs the wallet's kit + backend. Mirrors createHttpWalletBackend /
 // createVerificationClient so all SDK clients look the same.
 
+export type PolicyListStatus = "active" | "draft" | "revoked";
+
+export interface PolicyListFilters {
+  status?: PolicyListStatus;
+  createdAfter?: string;
+  createdBefore?: string;
+}
+
+/** Thrown when list filter params are malformed (e.g. invalid dates). */
+export class PolicyListFilterError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PolicyListFilterError";
+  }
+}
+
+function parseFilterDate(name: string, value: string): void {
+  if (Number.isNaN(Date.parse(value))) {
+    throw new PolicyListFilterError(`invalid ${name}: ${value}`);
+  }
+}
+
+function buildListQuery(filters?: PolicyListFilters): string {
+  if (!filters) return "";
+  const params = new URLSearchParams();
+  if (filters.status) params.set("status", filters.status);
+  if (filters.createdAfter) {
+    parseFilterDate("created_after", filters.createdAfter);
+    params.set("created_after", filters.createdAfter);
+  }
+  if (filters.createdBefore) {
+    parseFilterDate("created_before", filters.createdBefore);
+    params.set("created_before", filters.createdBefore);
+  }
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
 export interface PolicyClientOptions {
   /** Gateway base URL (e.g. https://api.myapp.com). */
   apiUrl: string;
@@ -25,6 +63,8 @@ export interface PolicyClientOptions {
 export interface PolicyClient {
   /** GET /policies/templates — the available policy templates + enforcement. */
   listTemplates(): Promise<PolicyTemplateInfo[]>;
+  /** GET /policies — list generated policies, optionally filtered. */
+  listPolicies(filters?: PolicyListFilters): Promise<GeneratedPolicy[]>;
   /** POST /policies/validate — validate a definition without generating. */
   validate(definition: PolicyDefinition): Promise<ValidationResult>;
   /** POST /policies/generate — validate + produce the deployable artifacts. */
@@ -69,6 +109,9 @@ export function createPolicyClient(options: PolicyClientOptions): PolicyClient {
   return {
     listTemplates() {
       return req<PolicyTemplateInfo[]>("/templates");
+    },
+    listPolicies(filters) {
+      return req<GeneratedPolicy[]>(buildListQuery(filters));
     },
     validate(definition) {
       return req<ValidationResult>("/validate", {
