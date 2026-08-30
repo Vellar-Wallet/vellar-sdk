@@ -51,3 +51,9 @@ npm run build
 ```
 
 New code is expected to come with tests.
+
+## Contract Testing
+
+To ensure that the SDK request and response assumptions stay compatible with the `vellar-facilitator` API shape, we maintain contract tests in `src/contract.test.ts` using Zod schemas. These verify that the payloads, response headers, and challenge payloads of the facilitator endpoints (e.g. `/supported`, `/verify`, `/settle`) conform to expectations.
+
+All contract tests are automatically run during standard test runs (`npm test`) and are wired into the CI pipeline. If you change request/response payloads in `x402-client` or interact with new facilitator endpoints, you must update the Zod schemas in `src/contract.test.ts` to keep contract compliance aligned.
