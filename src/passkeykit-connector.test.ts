@@ -242,6 +242,64 @@ describe("resumeKitConnection", () => {
       resumeKitConnection({ connectWallet, wallet: undefined }, "key-123"),
     ).rejects.toThrow("not a signer");
   });
+
+  it("simulates session expiry followed by reconnect, covering browser and Node-based consumer paths", async () => {
+    class WalletNotConnectedError extends Error {
+      constructor() {
+        super("Wallet not connected");
+        this.name = "WalletNotConnectedError";
+      }
+    }
+
+    const mockWallet = { id: "wallet-active" };
+    const kit: PasskeyKitLike = {
+      createWallet: vi.fn(),
+      connectWallet: vi.fn().mockImplementation(async (opts) => {
+        (kit as any).wallet = mockWallet;
+        return { keyIdBase64: opts?.keyId || "key-123", contractId: "CCONTRACT" };
+      }),
+      sign: vi.fn().mockImplementation(async (tx) => {
+        if (!kit.wallet) {
+          throw new WalletNotConnectedError();
+        }
+        return "signed-xdr";
+      }),
+      wallet: mockWallet,
+    };
+
+    const conn = createPasskeyKitConnector({
+      kit,
+      backend: fakeBackend(),
+      network: "testnet",
+      appName: "Vellar",
+    });
+    await expect(conn.signTransaction({ xdr: "tx-xdr", network: "testnet" })).resolves.toEqual({
+      signedXdr: "signed-xdr",
+    });
+
+    (kit as any).wallet = undefined;
+
+    await expect(conn.signTransaction({ xdr: "tx-xdr", network: "testnet" })).rejects.toBeInstanceOf(
+      WalletNotConnectedError,
+    );
+
+    await resumeKitConnection(kit, "key-123");
+
+    expect(kit.wallet).toBe(mockWallet);
+    await expect(conn.signTransaction({ xdr: "tx-xdr", network: "testnet" })).resolves.toEqual({
+      signedXdr: "signed-xdr",
+    });
+
+    vi.unstubAllGlobals();
+    (kit as any).wallet = undefined;
+
+    await resumeKitConnection(kit, "key-123");
+    expect(kit.wallet).toBe(mockWallet);
+    
+    await expect(conn.signTransaction({ xdr: "tx-xdr", network: "testnet" })).resolves.toEqual({
+      signedXdr: "signed-xdr",
+    });
+  });
 });
 
 describe("defaultSignedToXdr", () => {
