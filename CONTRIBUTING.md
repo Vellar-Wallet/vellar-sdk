@@ -85,3 +85,29 @@ error. Run it in isolation with:
 ```sh
 npx vitest run src/tx-rpc.chaos.test.ts
 ```
+
+### Load test (concurrent payments submissions)
+
+`src/payments.load.test.ts` is an **optional** load test (not part of `npm
+test`) that simulates many concurrent payment submissions through
+`payments-client` and measures latency + error rate at increasing concurrency.
+Run it locally with:
+
+```sh
+npm run test:load
+```
+
+It prints a per-concurrency report (p50/p95 latency, error %, and throughput)
+and asserts that no submission is lost silently. It is also exposed as an
+optional CI job (`load-test`) — trigger it manually via the workflow's "Run
+workflow" button; it does not gate normal PRs.
+
+*Observed behavior & bottlenecks.* The SDK's payment path is a fully
+asynchronous, shared-nothing promise chain, so a single Node process has no
+in-process serialization: with an in-process backend modeled at ~5 ms latency,
+error rate stays 0 and throughput scales roughly with concurrency (≈ `(1000 /
+latency) × concurrency` submissions/s) up to the transport. The real bottleneck
+is therefore the backend/relayer round-trip, not client code — the harness
+models this via `BACKEND_LATENCY_MS` and the `failEveryN` error knob. Expect concrete
+numbers to vary by machine and by real backend; trust `npm run test:load`'s
+report over any fixed figure here.
