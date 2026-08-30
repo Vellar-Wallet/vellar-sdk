@@ -51,3 +51,23 @@ npm run build
 ```
 
 New code is expected to come with tests.
+
+## Testing
+
+The default suite is hermetic — no network, no local stack, no chain:
+
+```sh
+npm test
+```
+
+### Integration harness (client ↔ http-backend)
+
+`src/client-backend-harness.test.ts` wires `client.ts` to a real (loopback) mock
+backend server via `http-backend.ts`, exercising wallet initialization, a
+balance fetch, and a payment submission over the actual gateway transport
+`createHttpWalletBackend` targets. It runs inside `npm test` (the server is
+local only). To run just that harness:
+
+```sh
+npx vitest run src/client-backend-harness.test.ts
+```
