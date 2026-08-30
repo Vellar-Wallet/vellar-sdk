@@ -43,6 +43,14 @@ describe("parseAmount", () => {
     expect(() => parseAmount("1e5")).toThrow(InvalidRequirementsError);
   });
 
+  it("parses zero amount input", () => {
+    expect(parseAmount("0")).toBe(0n);
+  });
+
+  it("rejects negative amount input", () => {
+    expect(() => parseAmount("-1")).toThrow(InvalidRequirementsError);
+  });
+
   it.each(["1.5", "abc", "-5", "", " 12 "])("rejects %o", (bad) => {
     expect(() => parseAmount(bad)).toThrow(InvalidRequirementsError);
   });
@@ -134,6 +142,35 @@ describe("selectRequirements", () => {
       CAIP2_TESTNET,
     );
     expect(picked.amount).toBe("1000000");
+  });
+
+  it("throws on an amount just over the maxAmount limit", () => {
+    expect(() =>
+      selectRequirements(
+        decoded([requirements({ amount: "1000001" })]),
+        { maxAmount: 1_000_000n },
+        CAIP2_TESTNET,
+      ),
+    ).toThrow(MaxAmountExceededError);
+  });
+
+  it("handles a zero amount input correctly in selectRequirements", () => {
+    const picked = selectRequirements(
+      decoded([requirements({ amount: "0" })]),
+      { maxAmount: 1_000_000n },
+      CAIP2_TESTNET,
+    );
+    expect(picked.amount).toBe("0");
+  });
+
+  it("throws on a negative amount input in selectRequirements", () => {
+    expect(() =>
+      selectRequirements(
+        decoded([requirements({ amount: "-5" })]),
+        { maxAmount: 1_000_000n },
+        CAIP2_TESTNET,
+      ),
+    ).toThrow(InvalidRequirementsError);
   });
 
   it("throws when no option is on our network", () => {
