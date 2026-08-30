@@ -176,6 +176,37 @@ try {
 Pass `circuitBreaker: null` to disable it entirely. The underlying
 `createCircuitBreaker` and `CircuitOpenError` are exported for advanced use.
 
+### Session lifecycle
+
+A session persists across reloads (keyId resumption) and can hold long-lived
+resources, so a consumer that mounts and unmounts the wallet — a React
+component, a mobile screen, an extension's background worker — should release
+it on teardown rather than leaving dangling timers.
+
+The session store (`createSessionStore`) exposes a `dispose()` method for this.
+It clears any internal timers/listeners — including the optional background
+refresh polling — and is safe to call more than once or after disconnection:
+
+```ts
+import { createSessionStore, createMemoryStorageAdapter } from "vellar-sdk";
+
+const store = createSessionStore(createMemoryStorageAdapter(), {
+  // Optional: while connected, touch() runs every 60s to keep lastActiveAt fresh.
+  refreshIntervalMs: 60_000,
+});
+await store.getState().start(session);
+
+// In your unmount / shutdown handler:
+function onUnmount() {
+  await store.getState().end();    // clear persisted state (optional)
+  store.getState().dispose();      // stop timers, release listeners
+}
+```
+
+`dispose()` is purely a teardown of the store's internal long-lived resources;
+it does **not** clear persisted state (pair it with `end()` when you want the
+session gone entirely).
+
 
 ### Mainnet
 

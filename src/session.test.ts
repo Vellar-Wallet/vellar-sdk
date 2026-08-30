@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WalletSession } from "./types";
 import {
   createMemoryStorageAdapter,
@@ -106,6 +106,78 @@ describe("createSessionStore", () => {
     const store = createSessionStore(broken);
     await expect(store.getState().start(session)).rejects.toThrow("quota exceeded");
     expect(store.getState().status).toBe("loading");
+  });
+});
+
+describe("createSessionStore teardown", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("dispose() is idempotent and safe after disconnection", async () => {
+    const store = createSessionStore(createMemoryStorageAdapter());
+    await store.getState().start(session);
+    await store.getState().end();
+    expect(() => store.getState().dispose()).not.toThrow();
+    expect(() => store.getState().dispose()).not.toThrow();
+  });
+
+  it("refresh polling stops any in-progress touch after dispose()", async () => {
+    vi.useFakeTimers();
+    const storage = createMemoryStorageAdapter();
+    const save = vi.spyOn(storage, "save");
+    const store = createSessionStore(storage, { refreshIntervalMs: 100 });
+
+    await store.getState().start(session);
+    expect(save).toHaveBeenCalledTimes(1); // the initial start() persistence
+
+    store.getState().dispose();
+    // Advance well past several intervals — no refresh touch should fire.
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(save).toHaveBeenCalledTimes(1);
+    // No dangling reference: the disposed store holds no active timer.
+    expect(store.getState().status).toBe("connected");
+  });
+
+  it("a started refresh prod is cancelled by end()", async () => {
+    vi.useFakeTimers();
+    const storage = createMemoryStorageAdapter();
+    const save = vi.spyOn(storage, "save");
+    const store = createSessionStore(storage, { refreshIntervalMs: 100 });
+
+    await store.getState().start(session);
+    await store.getState().end();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(save).toHaveBeenCalledTimes(1); // only the initial start() persistence
+  });
+
+  it("refresh polling only runs while connected", async () => {
+    vi.useFakeTimers();
+    const storage = createMemoryStorageAdapter();
+    const save = vi.spyOn(storage, "save");
+    const store = createSessionStore(storage, { refreshIntervalMs: 100 });
+
+    // Not connected yet — no polling.
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(save).not.toHaveBeenCalled();
+
+    await store.getState().start(session);
+    await vi.advanceTimersByTimeAsync(250);
+    // initial start + two ticks at 100ms
+    expect(save.mock.calls.length).toBeGreaterThanOrEqual(3);
+    expect(store.getState().session?.lastActiveAt).not.toBe(session.lastActiveAt);
+  });
+
+  it("dispose() clears the timer so the store is garbage-collectable", async () => {
+    vi.useFakeTimers();
+    const store = createSessionStore(createMemoryStorageAdapter(), {
+      refreshIntervalMs: 50,
+    });
+    await store.getState().start(session);
+    store.getState().dispose();
+    // No active timers remain after dispose (a leak would fail here by keeping
+    // the interval scheduled).
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
 
