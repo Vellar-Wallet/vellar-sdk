@@ -93,6 +93,45 @@ const { hash } = await vellar.pay({
 `pay()` simulates **before** the passkey prompt, so failures (e.g. insufficient
 balance) surface without asking the user to sign.
 
+### Network config presets
+
+`TESTNET` above is a complete, ready-to-use `NetworkConfig` — `rpcUrl`,
+`networkPassphrase`, `horizonUrl`, `walletWasmHash`, and `nativeTokenContractId`
+— so you never hand-assemble these values (easy to get wrong, and a mismatched
+passphrase/wasm-hash pair fails in confusing ways deep inside the kit). Use its
+fields together, as shown above, rather than mixing fields from different
+networks into one config.
+
+Switching to mainnet is the same pattern, through `mainnetConfig(...)` instead
+of the bare `MAINNET` constant — see [Mainnet](#mainnet) for why two fields
+must be supplied by you:
+
+```ts
+import { mainnetConfig } from "vellar-sdk";
+
+const network = mainnetConfig({
+  rpcUrl: "https://your-mainnet-soroban-rpc.example.com",
+  walletWasmHash: "…64-char hex hash…",
+});
+
+const vellar = createVellarWallet({
+  network: "mainnet",
+  appName: "My App",
+  kit: new PasskeyKit({
+    rpcUrl: network.rpcUrl,
+    networkPassphrase: network.networkPassphrase,
+    walletWasmHash: network.walletWasmHash,
+  }),
+  sac: new SACClient({
+    rpcUrl: network.rpcUrl,
+    networkPassphrase: network.networkPassphrase,
+  }),
+  backend: createHttpWalletBackend("https://api.myapp.com"),
+  isValidAddress: (a) =>
+    StrKey.isValidEd25519PublicKey(a) || StrKey.isValidContract(a),
+});
+```
+
 ## Your backend
 
 Submission is fee-sponsored, which requires an OpenZeppelin Relayer API key and
