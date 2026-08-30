@@ -36,6 +36,14 @@ vi.mock("@stellar/stellar-sdk", async (importOriginal) => {
     })
   };
 });
+import {
+  BatchBalanceSizeError,
+  createBalanceService,
+  fetchBalancesBatch,
+  formatTokenAmount,
+  MAX_BATCH_BALANCE_SIZE,
+  type BalanceReader,
+} from "./balances";
 
 describe("formatTokenAmount", () => {
   it.each([
@@ -131,3 +139,44 @@ describe("RpcBalanceReader trustline edge cases", () => {
   });
 });
 
+describe("fetchBalancesBatch", () => {
+  it("returns per-item success and failure without aborting the batch", async () => {
+    const reader: BalanceReader = {
+      getTokenBalance: vi.fn().mockImplementation(async (contractId: string) => {
+        if (contractId === "CBAD") throw new Error("rpc down");
+        return 9n;
+      }),
+    };
+
+    await expect(
+      fetchBalancesBatch(reader, "CHOLDER", [{ contractId: "CGOOD" }, { contractId: "CBAD" }]),
+    ).resolves.toEqual([
+      { contractId: "CGOOD", success: true, amount: 9n },
+      { contractId: "CBAD", success: false, error: "rpc down" },
+    ]);
+  });
+
+  it("rejects batches larger than the configured max size", async () => {
+    const tokens = Array.from({ length: MAX_BATCH_BALANCE_SIZE + 1 }, (_, i) => ({
+      contractId: `C${i}`,
+    }));
+    const reader: BalanceReader = { getTokenBalance: vi.fn() };
+
+    await expect(fetchBalancesBatch(reader, "CHOLDER", tokens)).rejects.toBeInstanceOf(
+      BatchBalanceSizeError,
+    );
+    expect(reader.getTokenBalance).not.toHaveBeenCalled();
+  });
+});
+
+describe("createBalanceService.getBalancesBatch", () => {
+  it("delegates to fetchBalancesBatch", async () => {
+    const reader: BalanceReader = {
+      getTokenBalance: vi.fn().mockResolvedValue(1n),
+    };
+    const service = createBalanceService(reader, []);
+    await expect(
+      service.getBalancesBatch("CHOLDER", [{ contractId: "CXLM" }]),
+    ).resolves.toEqual([{ contractId: "CXLM", success: true, amount: 1n }]);
+  });
+});

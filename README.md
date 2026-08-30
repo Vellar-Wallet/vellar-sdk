@@ -284,6 +284,103 @@ for a client without the wallet handle.
 > so a policy-governed payment needs a facilitator configured with a higher
 > ceiling (self-hosted, or a hosted one that allows it).
 
+#### Security: signed requests to the facilitator
+
+The payment payload itself is already signed (the smart-wallet auth entry).
+That proves the **payment** is authentic; it says nothing about the **HTTP
+request** that carries it. Pass `requestSigning` in `x402` config to also
+sign every outgoing facilitator request with HMAC-SHA256 over a canonical
+string (method, path, timestamp, nonce, body), using a shared secret
+provisioned out of band with your facilitator operator:
+
+```ts
+const vellar = createVellarWallet({
+  x402: {
+    signer: createSessionKeySigner({ address: walletCAddress, secretKey: sessionKeySecret }),
+    simulationSourceAccount: aFundedGAccount,
+    requestSigning: { keyId: "your-key-id", secret: process.env.VELLAR_FACILITATOR_SECRET! },
+  },
+});
+```
+
+This is **opt-in** and additive — a facilitator that doesn't verify the
+`X-Vellar-*` headers is unaffected either way, and it does not replace TLS.
+`vellar-sdk/x402-request-auth` also exports `verifyFacilitatorRequest` so a
+facilitator implemented in TypeScript can share the exact same canonical-string
+logic rather than reimplementing it and risking drift. See the module's
+doc comments for what this does and does not cover (it authenticates the
+*request*, not the on-chain payment, which the auth-entry signature already
+covers, and not the facilitator's response).
+
+#### Capability scoping for signers
+
+A session key or passkey signer will sign **any** auth entry addressed to its
+wallet once `x402-client.ts` has confirmed it matches the payment being made.
+Two callers sharing one session key (a multi-tenant agent process, or a signer
+reused across unrelated call sites) have no narrower guard than "everything
+this wallet can do." Pass `capabilities` to either signer to add one:
+
+```ts
+import { createSessionKeySigner } from "vellar-sdk";
+
+const signer = createSessionKeySigner({
+  address: walletCAddress,
+  secretKey: sessionKeySecret,
+  // This key will only ever sign a `transfer` call on `usdcSac` — anything
+  // else throws CapabilityDeniedError before a signature is produced.
+  capabilities: [{ resourceType: usdcSac, action: "transfer" }],
+});
+```
+
+Rules match on resource (contract) and action (function name); either field
+accepts `"*"` for a wildcard. An empty/omitted `capabilities` array is fully
+backward compatible — the signer signs anything it always did. This is a
+**client-side** guard, checked in this process before signing — it narrows
+what the SDK will attempt, but the on-chain `SignerLimits`/Policy mechanism
+(see [Agent keys](#agent-keys)) is still the only check a compromised host
+process can't bypass. See `src/x402-signer-capabilities.ts`'s doc comments for
+the full scope of what this does and does not guarantee.
+
+#### Attribute-based session key budgets
+
+`maxAmount` and the on-chain spending-limit policy bound a session key's
+*total* spend, but neither knows about *who* it's paying. Pass
+`budgetAttributes` in `x402` config to scope the budget by merchant, category,
+and/or time window, checked before a payment is even built:
+
+```ts
+const vellar = createVellarWallet({
+  x402: {
+    signer: createSessionKeySigner({ address: walletCAddress, secretKey: sessionKeySecret }),
+    simulationSourceAccount: aFundedGAccount,
+    budgetAttributes: [
+      // Up to 5 USDC per payment to this merchant, any time.
+      { merchant: knownMerchantAddress, maxAmount: 50_000_000n },
+      // Groceries only, business hours UTC, capped at 20 USDC total per period.
+      {
+        merchant: "*",
+        category: "groceries",
+        maxAmount: 20_000_000n,
+        periodMaxAmount: 200_000_000n,
+        window: { startHourUtc: 9, endHourUtc: 17 },
+      },
+    ],
+  },
+});
+```
+
+`category` is read from the server's `PAYMENT-REQUIRED` response
+(`extra.category`) — this SDK doesn't define categories, your
+facilitator/resource server does. `periodMaxAmount` needs a
+`budgetAttributeTracker` to accumulate spend across calls; the SDK supplies an
+in-memory one automatically when you set `periodMaxAmount` without providing
+your own (process-lifetime only — bring your own tracker for anything that
+must persist or be shared). A request matching no rule, or exceeding the
+matching rule's ceiling, throws `BudgetAttributeDeniedError` before signing.
+Like capability scoping, this is a **client-side** narrowing on top of (never
+instead of) the on-chain policy — see `src/x402-budget-attributes.ts`'s doc
+comments for the full scope.
+
 ### Advanced
 
 The facade is the paved road. For custom flows the package also exports the
@@ -293,6 +390,58 @@ signers (`createSessionKeySigner`, `createPasskeyX402Signer`), the
 `WalletConnector` interface, balances helpers (`vellar-sdk/balances`), and
 RPC-backed readers (`vellar-sdk/rpc`, imported separately so
 `@stellar/stellar-sdk` stays out of bundles that don't read balances).
+
+#### Session key rotation on re-authentication
+
+`createPasskeyKitConnector` accepts an optional `sessionKeyRotation` runtime:
+when set, every successful `connectWallet` (re-authentication) mints a fresh
+agent session key and revokes whichever key rotation last minted for that
+wallet, so a stale key from a previous session doesn't stay valid indefinitely.
+
+```ts
+import { createPasskeyKitConnector } from "vellar-sdk";
+
+const connector = createPasskeyKitConnector({
+  kit,
+  backend,
+  network: "testnet",
+  appName: "Vellar",
+  sessionKeyRotation: {
+    async mint() {
+      // Wire to the same passkey-signed admin plumbing wallet.agents.mint uses.
+      const key = Keypair.random();
+      await vellar.agents.mint({ publicKey: key.publicKey(), grants: [...] });
+      return { publicKey: key.publicKey() };
+    },
+    async revoke(publicKey) {
+      await vellar.agents.revoke(publicKey);
+    },
+  },
+  onDebugLog: (event, details) => console.debug(`[vellar] ${event}`, details),
+});
+```
+
+Rotation is best-effort and never blocks re-authentication: a mint or revoke
+failure is reported to `onDebugLog` (default: a no-op — bring your own logger)
+rather than thrown, and mint always runs before revoke so a revoke failure
+never leaves the wallet with no valid session key. Omit `sessionKeyRotation`
+for the pre-existing behaviour (no rotation).
+## API stability
+
+Exports fall into two groups:
+
+| Group | Import | Guarantee |
+| --- | --- | --- |
+| **Stable v1** | `import { createVellarWallet, TESTNET, … } from "vellar-sdk"` | Breaking changes only in major semver releases (until `2.0`). |
+| **Experimental** | `import { experimental } from "vellar-sdk"` then `experimental.createX402Client`, etc. | May change in any release — x402, agentic payments, and related helpers. |
+
+The stable v1 surface covers the wallet facade, config, backend client, balances,
+payments, policies, agent keys, session store, and transaction status helpers.
+Experimental symbols are also re-exported flat at the package root for backward
+compatibility; treat those flat imports as unstable.
+
+The canonical export lists live in `src/export-surface.ts` and are checked by
+`src/index.exports.test.ts`.
 
 ## License
 
