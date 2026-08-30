@@ -136,6 +136,7 @@ Returns a `VellarWallet`:
 | `MAINNET` / `mainnetConfig()`  | Mainnet config — see [Mainnet](#mainnet) (two values you must supply)                    |
 | `WalletApiError`               | Thrown by the HTTP backend on non-2xx responses (has `status`, `code`)                   |
 | `CircuitOpenError`             | Thrown by the circuit breaker when the facilitator is down — see [Circuit breaking](#circuit-breaking) |
+| `isReachable(rpcUrl)`          | Ping an RPC endpoint for reachability (from `vellar-sdk/rpc`) — see [Health check](#health-check) |
 
 ### Circuit breaking
 
@@ -175,6 +176,26 @@ try {
 
 Pass `circuitBreaker: null` to disable it entirely. The underlying
 `createCircuitBreaker` and `CircuitOpenError` are exported for advanced use.
+
+### Health check
+
+Confirm an RPC endpoint is reachable before performing wallet operations. Import
+`isReachable` from the `vellar-sdk/rpc` subpath (it pulls in
+`@stellar/stellar-sdk`, so it is not re-exported from the root):
+
+```ts
+import { isReachable } from "vellar-sdk/rpc";
+
+const health = await isReachable(config.rpcUrl, { timeoutMs: 3000 });
+if (!health.reachable) {
+  return showOffline(health.error); // typed: { reachable: false, error }
+}
+// { reachable: true, latencyMs } — safe to start the wallet flow
+```
+
+`isReachable` never throws — it resolves to a typed
+`{ reachable: true, latencyMs } | { reachable: false, error }` result, timing
+out after `timeoutMs` (default 5000ms) so a hung endpoint can't block you.
 
 ### Session lifecycle
 
