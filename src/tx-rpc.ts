@@ -1,5 +1,6 @@
 import { rpc, StrKey } from "@stellar/stellar-sdk";
 import type { TxStatus, TxStatusReader } from "./tx-status";
+import { Server } from "./rpc-server";
 
 // RPC-backed pieces of the payment flow (subpath export — see rpc.ts).
 
@@ -9,7 +10,7 @@ export function isValidStellarAddress(address: string): boolean {
 }
 
 export function createRpcTxStatusReader(options: { rpcUrl: string }): TxStatusReader {
-  const server = new rpc.Server(options.rpcUrl);
+  const server = new Server(options.rpcUrl);
   return {
     async getStatus(hash): Promise<TxStatus> {
       const res = await server.getTransaction(hash);

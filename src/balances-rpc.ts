@@ -8,6 +8,7 @@ import {
   TransactionBuilder,
 } from "@stellar/stellar-sdk";
 import type { BalanceReader, TokenInfo } from "./balances";
+import { Server } from "./rpc-server";
 
 // RPC-backed BalanceReader: simulates the token contract's `balance(id)`
 // read — no signature, no fee, works for contract (C...) and classic (G...)
@@ -31,7 +32,7 @@ export interface RpcBalanceReaderOptions {
 }
 
 export function createRpcBalanceReader(options: RpcBalanceReaderOptions): BalanceReader {
-  const server = new rpc.Server(options.rpcUrl);
+  const server = new Server(options.rpcUrl);
 
   return {
     async getTokenBalance(tokenContractId, holder) {

@@ -3,3 +3,4 @@
 // touch the network don't bundle the SDK.
 export * from "./balances-rpc";
 export * from "./tx-rpc";
+export { Server, RpcCircuitBreakerError } from "./rpc-server";

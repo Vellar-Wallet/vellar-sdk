@@ -299,6 +299,12 @@ signers (`createSessionKeySigner`, `createPasskeyX402Signer`), the
 RPC-backed readers (`vellar-sdk/rpc`, imported separately so
 `@stellar/stellar-sdk` stays out of bundles that don't read balances).
 
+### Stellar RPC Retry & Circuit Breaker Policy
+
+When querying Stellar RPC through the SDK (e.g., for checking balances or transaction status via `vellar-sdk/rpc`), requests are run using a wrapped `Server` instead of `@stellar/stellar-sdk`'s raw `rpc.Server`. This wrapper implements:
+- **Exponential Backoff with Jitter**: Failsafe retries up to 3 times (4 attempts total) with exponential delays (100ms base, 1000ms max) and random jitter to spread the load and prevent overloading degraded servers.
+- **Circuit Breaker**: Governed globally per RPC URL. 5 consecutive failures trip the breaker to `OPEN` for a 10-second cooldown period, during which all subsequent requests fail fast with `RpcCircuitBreakerError` to protect the backend. A successful request in `HALF_OPEN` state resets the breaker to `CLOSED`.
+
 ## License
 
 Apache-2.0
