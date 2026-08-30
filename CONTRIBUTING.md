@@ -71,3 +71,17 @@ local only). To run just that harness:
 ```sh
 npx vitest run src/client-backend-harness.test.ts
 ```
+
+### tx-rpc chaos test (network drops mid-poll)
+
+`src/tx-rpc.chaos.test.ts` simulates the RPC network dropping while
+`waitForTransaction` is polling for a transaction. A reader stands in for
+`createRpcTxStatusReader` and throws exactly as the live RPC does on a drop,
+then recovers after a configurable number of failures. The test asserts that
+polling resumes and eventually resolves with the correct final status
+(`success` / `failed`) rather than wedging or bailing on the first transient
+error. Run it in isolation with:
+
+```sh
+npx vitest run src/tx-rpc.chaos.test.ts
+```
