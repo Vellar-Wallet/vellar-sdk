@@ -1,5 +1,6 @@
 import { rpc, StrKey, Transaction } from "@stellar/stellar-sdk";
 import type { TxStatus, TxStatusReader } from "./tx-status";
+import { retryWithBackoff, type RetryOptions } from "./rpc-retry";
 
 // RPC-backed pieces of the payment flow (subpath export — see rpc.ts).
 
@@ -47,6 +48,15 @@ export interface RpcTxSubmitterOptions {
   rateLimit?: RpcRateLimitOptions;
   /** Injected RPC server (for tests). Defaults to a new rpc.Server(rpcUrl). */
   server?: Pick<rpc.Server, "sendTransaction">;
+  /**
+   * Retry `sendTransaction` with exponential backoff on failure, via the
+   * shared ./rpc-retry utility (#297) — a dropped connection or a transient
+   * RPC-node error shouldn't fail the whole submission. Omit for no retry
+   * (the pre-#297 behaviour: one attempt, fail immediately). `isRetryable`
+   * defaults to "retry any thrown error"; narrow it if some failures (e.g. a
+   * malformed transaction) should fail fast instead.
+   */
+  retry?: RetryOptions;
 }
 
 export interface RpcTxSubmitter {
@@ -100,7 +110,10 @@ export function createRpcTxSubmitter(options: RpcTxSubmitterOptions): RpcTxSubmi
         throw new RateLimitError();
       }
       const tx = Transaction.fromXDR(signedXdr, "base64");
-      const res = await server.sendTransaction(tx);
+
+      const send = () => server.sendTransaction(tx);
+      const res = options.retry ? await retryWithBackoff(send, options.retry) : await send();
+
       if (res.status === "ERROR") {
         throw new Error(
           res.errorResult?.toXDR("base64") ?? "sendTransaction failed",

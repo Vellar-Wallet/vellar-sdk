@@ -8,6 +8,7 @@ import {
   TransactionBuilder,
 } from "@stellar/stellar-sdk";
 import type { BalanceReader, TokenInfo } from "./balances";
+import { retryWithBackoff, type RetryOptions } from "./rpc-retry";
 
 // RPC-backed BalanceReader: simulates the token contract's `balance(id)`
 // read — no signature, no fee, works for contract (C...) and classic (G...)
@@ -28,10 +29,19 @@ export function nativeToken(networkPassphrase: string): TokenInfo {
 export interface RpcBalanceReaderOptions {
   rpcUrl: string;
   networkPassphrase: string;
+  /**
+   * Retry the balance simulation with exponential backoff on failure, via the
+   * shared ./rpc-retry utility (#297) — a dropped connection or a transient
+   * RPC-node error shouldn't fail a read that would have succeeded a moment
+   * later. Omit for no retry (the pre-#297 behaviour: one attempt).
+   */
+  retry?: RetryOptions;
+  /** Injected RPC server (for tests). Defaults to a new rpc.Server(rpcUrl). */
+  server?: Pick<rpc.Server, "simulateTransaction">;
 }
 
 export function createRpcBalanceReader(options: RpcBalanceReaderOptions): BalanceReader {
-  const server = new rpc.Server(options.rpcUrl);
+  const server = options.server ?? new rpc.Server(options.rpcUrl);
 
   return {
     async getTokenBalance(tokenContractId, holder) {
@@ -49,7 +59,8 @@ export function createRpcBalanceReader(options: RpcBalanceReaderOptions): Balanc
         .setTimeout(60)
         .build();
 
-      const sim = await server.simulateTransaction(tx);
+      const simulate = () => server.simulateTransaction(tx);
+      const sim = options.retry ? await retryWithBackoff(simulate, options.retry) : await simulate();
       if (!rpc.Api.isSimulationSuccess(sim)) {
         throw new Error(
           `Balance read failed for ${tokenContractId}: ${"error" in sim ? sim.error : "unknown simulation error"}`,
