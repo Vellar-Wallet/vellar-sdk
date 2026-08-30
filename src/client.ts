@@ -6,6 +6,12 @@ import {
   type PasskeyKitLike,
   type WalletBackend,
 } from "./passkeykit-connector";
+import {
+  createCircuitBreakingBackend,
+  createCircuitBreaker,
+  type CircuitBreaker,
+  type CircuitBreakerOptions,
+} from "./circuit-breaker";
 import { createPaymentClient, type PaymentClient, type SacClientLike } from "./payments-client";
 import type { WalletConnector } from "./connector";
 import { createPolicyFacade, type PolicyAttachRuntime, type PolicyFacade } from "./policy-facade";
@@ -96,6 +102,13 @@ export interface VellarWalletConfig {
   };
   /** RPC URL for x402 simulation when `x402.rpcUrl` is not given. */
   rpcUrl?: string;
+  /**
+   * Circuit breaker for calls to the vellar-facilitator backend (create,
+   * connect, and payment submission). Protects consumers from a downstream
+   * outage turning every call into a slow failure. Omit for the defaults
+   * (threshold 5, open 30s); pass `null` to disable the breaker entirely.
+   */
+  circuitBreaker?: CircuitBreakerOptions | null;
 }
 
 export interface PayInput {
@@ -159,9 +172,22 @@ export interface VellarWallet {
 export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
   const signedToXdr = config.signedToXdr ?? defaultSignedToXdr;
 
+  // The backend carries every call the SDK makes to the vellar-facilitator
+  // (deploy submission, reconnect lookup, payment submission). Funnel them
+  // through a circuit breaker so a downstream outage fast-fails instead of
+  // hanging every consumer call. `config.circuitBreaker === null` opts out; any
+  // other value (or omission) uses the defaults or the supplied options.
+  const breaker: CircuitBreaker | null =
+    config.circuitBreaker === null
+      ? null
+      : createCircuitBreaker(config.circuitBreaker ?? {});
+  const backend = breaker
+    ? createCircuitBreakingBackend(config.backend, breaker)
+    : config.backend;
+
   const connector = createPasskeyKitConnector({
     kit: config.kit,
-    backend: config.backend,
+    backend,
     network: config.network,
     appName: config.appName,
     signedToXdr,
@@ -170,7 +196,7 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
   const payments = createPaymentClient({
     kit: config.kit,
     sac: config.sac,
-    backend: config.backend,
+    backend,
     network: config.network,
     isValidAddress: config.isValidAddress,
     signedToXdr,

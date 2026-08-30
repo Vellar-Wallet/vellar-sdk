@@ -135,6 +135,47 @@ Returns a `VellarWallet`:
 | `TESTNET`                      | Testnet config: `rpcUrl`, `networkPassphrase`, `walletWasmHash`, `nativeTokenContractId` |
 | `MAINNET` / `mainnetConfig()`  | Mainnet config — see [Mainnet](#mainnet) (two values you must supply)                    |
 | `WalletApiError`               | Thrown by the HTTP backend on non-2xx responses (has `status`, `code`)                   |
+| `CircuitOpenError`             | Thrown by the circuit breaker when the facilitator is down — see [Circuit breaking](#circuit-breaking) |
+
+### Circuit breaking
+
+`createVellarWallet` wraps every call it makes to the vellar-facilitator backend
+(wallet deploy submission, reconnect lookup, and payment submission) in a
+[circuit breaker](https://en.wikipedia.org/wiki/Circuit_breaker_design_pattern)
+so a downstream outage can never turn every consumer call into a hang or a slow
+failure.
+
+It starts **closed** and simply passes calls through. After `failureThreshold`
+consecutive failures it **opens**: every further call fails immediately (no
+network hop) with a typed `CircuitOpenError` until a cooldown elapses, at which
+point it moves to **half-open** and lets a limited number of trial calls through
+to probe the downstream. A success closes it again; a failure reopens it.
+
+```ts
+import { createVellarWallet, CircuitOpenError } from "vellar-sdk";
+
+const vellar = createVellarWallet({
+  /* …config… */
+  circuitBreaker: {
+    failureThreshold: 5,   // consecutive failures before opening (default 5)
+    openDurationMs: 30_000, // how long it stays open before probing (default 30s)
+    halfOpenMaxCalls: 1,    // trial calls to let through in half-open (default 1)
+  },
+});
+
+try {
+  await vellar.pay({ to, amount, token });
+} catch (err) {
+  if (err instanceof CircuitOpenError) {
+    // The facilitator is down — surface a fast, clear error to the user instead
+    // of blocking indefinitely.
+  }
+}
+```
+
+Pass `circuitBreaker: null` to disable it entirely. The underlying
+`createCircuitBreaker` and `CircuitOpenError` are exported for advanced use.
+
 
 ### Mainnet
 
