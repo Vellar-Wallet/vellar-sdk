@@ -51,3 +51,39 @@ npm run build
 ```
 
 New code is expected to come with tests.
+
+## Integration testing
+
+Hermetic (`npm test`) never touches the network. A separate, deliberate suite
+runs only when you opt in and point it at a **local** stack:
+
+```sh
+npm run test:integration
+```
+
+It makes real payments on testnet against a locally-running facilitator and
+seller (see `packages/mcp-x402-payer/README.md` → "Integration tests" for the
+full provisioning recipe). The harness refuses to talk to a hosted facilitator
+— the first settlement for a resource URL writes a permanent public catalog
+entry — and skips the suite when the environment is unconfigured.
+
+### x402 payment × policy enforcement scenario
+
+`test/integration/layer2.integration.test.ts` and
+`test/integration/sdk-x402-policy.integration.test.ts` cover the same
+end-to-end claim from two angles: payment authorization checked against a
+smart account's on-chain **spending-limit policy**.
+
+- **Within policy** → the payment is authorized and settles on-chain (the
+  settlement hash is re-verified against Horizon, never trusted from the
+  response).
+- **Violating policy** → the payment is **correctly rejected by the chain**.
+  `maxAmount` is deliberately set above the over-cap price so no client-side
+  guard can be the thing that refuses — only the wallet contract's `__check_auth`
+  invoking the policy can.
+
+The MCP variant drives the flow through the payer's `@x402/core` scheme client;
+the SDK variant uses the SDK's own `createX402Client` + `createSessionKeySigner`
+(with the policy-bearing signer) directly. Both require a provisioning step: a
+policy-governed smart account whose session key has a policy contract attached,
+plus an under-cap and an over-cap seller.

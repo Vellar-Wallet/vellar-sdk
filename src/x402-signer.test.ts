@@ -13,6 +13,7 @@ import {
   createPasskeyX402Signer,
   type WebAuthnAssertion,
 } from "./x402-signer";
+import { CapabilityDeniedError, InvalidCapabilityRuleError } from "./x402-signer-capabilities";
 
 const PASSPHRASE = "Test SDF Network ; September 2015";
 const C_ADDRESS = "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4";
@@ -115,6 +116,79 @@ describe("createSessionKeySigner", () => {
       }),
     ).rejects.toThrow(/expects V1 sorobanCredentialsAddress/);
   });
+
+  describe("capability scoping (#224)", () => {
+    it("signs as before when no capabilities are configured (backward compatible)", async () => {
+      const kp = Keypair.random();
+      const signer = createSessionKeySigner({ address: C_ADDRESS, secretKey: kp.secret() });
+      const entry = makeV1AuthEntry(C_ADDRESS); // transfer() on OTHER_C
+      await expect(
+        signer.signAuthEntry(entry.toXDR("base64"), {
+          networkPassphrase: PASSPHRASE,
+          expirationLedger: 1000,
+        }),
+      ).resolves.toBeDefined();
+    });
+
+    it("signs when the invocation matches a configured capability rule", async () => {
+      const kp = Keypair.random();
+      const signer = createSessionKeySigner({
+        address: C_ADDRESS,
+        secretKey: kp.secret(),
+        capabilities: [{ resourceType: OTHER_C, action: "transfer" }],
+      });
+      const entry = makeV1AuthEntry(C_ADDRESS);
+      await expect(
+        signer.signAuthEntry(entry.toXDR("base64"), {
+          networkPassphrase: PASSPHRASE,
+          expirationLedger: 1000,
+        }),
+      ).resolves.toBeDefined();
+    });
+
+    it("refuses to sign an invocation on a resource not in the capability rules", async () => {
+      const kp = Keypair.random();
+      const signer = createSessionKeySigner({
+        address: C_ADDRESS,
+        secretKey: kp.secret(),
+        capabilities: [{ resourceType: C_ADDRESS, action: "transfer" }], // wrong resource
+      });
+      const entry = makeV1AuthEntry(C_ADDRESS); // invocation is on OTHER_C
+      await expect(
+        signer.signAuthEntry(entry.toXDR("base64"), {
+          networkPassphrase: PASSPHRASE,
+          expirationLedger: 1000,
+        }),
+      ).rejects.toBeInstanceOf(CapabilityDeniedError);
+    });
+
+    it("refuses to sign an action not in the capability rules", async () => {
+      const kp = Keypair.random();
+      const signer = createSessionKeySigner({
+        address: C_ADDRESS,
+        secretKey: kp.secret(),
+        capabilities: [{ resourceType: OTHER_C, action: "burn" }], // wrong action
+      });
+      const entry = makeV1AuthEntry(C_ADDRESS); // invocation calls transfer
+      await expect(
+        signer.signAuthEntry(entry.toXDR("base64"), {
+          networkPassphrase: PASSPHRASE,
+          expirationLedger: 1000,
+        }),
+      ).rejects.toBeInstanceOf(CapabilityDeniedError);
+    });
+
+    it("rejects a malformed capability rule at construction, before any sign attempt", () => {
+      const kp = Keypair.random();
+      expect(() =>
+        createSessionKeySigner({
+          address: C_ADDRESS,
+          secretKey: kp.secret(),
+          capabilities: [{ resourceType: "not-a-contract", action: "transfer" }],
+        }),
+      ).toThrow(InvalidCapabilityRuleError);
+    });
+  });
 });
 
 describe("createPasskeyX402Signer", () => {
@@ -158,5 +232,44 @@ describe("createPasskeyX402Signer", () => {
     const struct = val.vec()![1]!.map()!;
     const fields = struct.map((e) => e.key().sym().toString()).sort();
     expect(fields).toEqual(["authenticator_data", "client_data_json", "signature"]);
+  });
+
+  describe("capability scoping (#224)", () => {
+    const assertion: WebAuthnAssertion = {
+      authenticatorData: new Uint8Array(37).fill(1),
+      clientDataJSON: new Uint8Array(50).fill(2),
+      signature: new Uint8Array(64).fill(3),
+      keyId: new Uint8Array(20).fill(9),
+    };
+
+    it("refuses to sign an invocation outside the configured capabilities", async () => {
+      const signer = createPasskeyX402Signer({
+        address: C_ADDRESS,
+        webAuthn: { async sign() { return assertion; } },
+        capabilities: [{ resourceType: OTHER_C, action: "burn" }],
+      });
+      const entry = makeV1AuthEntry(C_ADDRESS); // invocation calls transfer
+      await expect(
+        signer.signAuthEntry(entry.toXDR("base64"), {
+          networkPassphrase: PASSPHRASE,
+          expirationLedger: 2000,
+        }),
+      ).rejects.toBeInstanceOf(CapabilityDeniedError);
+    });
+
+    it("signs when the invocation matches a configured capability rule", async () => {
+      const signer = createPasskeyX402Signer({
+        address: C_ADDRESS,
+        webAuthn: { async sign() { return assertion; } },
+        capabilities: [{ resourceType: OTHER_C, action: "transfer" }],
+      });
+      const entry = makeV1AuthEntry(C_ADDRESS);
+      await expect(
+        signer.signAuthEntry(entry.toXDR("base64"), {
+          networkPassphrase: PASSPHRASE,
+          expirationLedger: 2000,
+        }),
+      ).resolves.toBeDefined();
+    });
   });
 });
