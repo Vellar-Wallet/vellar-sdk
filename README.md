@@ -135,6 +135,99 @@ Returns a `VellarWallet`:
 | `TESTNET`                      | Testnet config: `rpcUrl`, `networkPassphrase`, `walletWasmHash`, `nativeTokenContractId` |
 | `MAINNET` / `mainnetConfig()`  | Mainnet config — see [Mainnet](#mainnet) (two values you must supply)                    |
 | `WalletApiError`               | Thrown by the HTTP backend on non-2xx responses (has `status`, `code`)                   |
+| `CircuitOpenError`             | Thrown by the circuit breaker when the facilitator is down — see [Circuit breaking](#circuit-breaking) |
+| `isReachable(rpcUrl)`          | Ping an RPC endpoint for reachability (from `vellar-sdk/rpc`) — see [Health check](#health-check) |
+
+### Circuit breaking
+
+`createVellarWallet` wraps every call it makes to the vellar-facilitator backend
+(wallet deploy submission, reconnect lookup, and payment submission) in a
+[circuit breaker](https://en.wikipedia.org/wiki/Circuit_breaker_design_pattern)
+so a downstream outage can never turn every consumer call into a hang or a slow
+failure.
+
+It starts **closed** and simply passes calls through. After `failureThreshold`
+consecutive failures it **opens**: every further call fails immediately (no
+network hop) with a typed `CircuitOpenError` until a cooldown elapses, at which
+point it moves to **half-open** and lets a limited number of trial calls through
+to probe the downstream. A success closes it again; a failure reopens it.
+
+```ts
+import { createVellarWallet, CircuitOpenError } from "vellar-sdk";
+
+const vellar = createVellarWallet({
+  /* …config… */
+  circuitBreaker: {
+    failureThreshold: 5,   // consecutive failures before opening (default 5)
+    openDurationMs: 30_000, // how long it stays open before probing (default 30s)
+    halfOpenMaxCalls: 1,    // trial calls to let through in half-open (default 1)
+  },
+});
+
+try {
+  await vellar.pay({ to, amount, token });
+} catch (err) {
+  if (err instanceof CircuitOpenError) {
+    // The facilitator is down — surface a fast, clear error to the user instead
+    // of blocking indefinitely.
+  }
+}
+```
+
+Pass `circuitBreaker: null` to disable it entirely. The underlying
+`createCircuitBreaker` and `CircuitOpenError` are exported for advanced use.
+
+### Health check
+
+Confirm an RPC endpoint is reachable before performing wallet operations. Import
+`isReachable` from the `vellar-sdk/rpc` subpath (it pulls in
+`@stellar/stellar-sdk`, so it is not re-exported from the root):
+
+```ts
+import { isReachable } from "vellar-sdk/rpc";
+
+const health = await isReachable(config.rpcUrl, { timeoutMs: 3000 });
+if (!health.reachable) {
+  return showOffline(health.error); // typed: { reachable: false, error }
+}
+// { reachable: true, latencyMs } — safe to start the wallet flow
+```
+
+`isReachable` never throws — it resolves to a typed
+`{ reachable: true, latencyMs } | { reachable: false, error }` result, timing
+out after `timeoutMs` (default 5000ms) so a hung endpoint can't block you.
+
+### Session lifecycle
+
+A session persists across reloads (keyId resumption) and can hold long-lived
+resources, so a consumer that mounts and unmounts the wallet — a React
+component, a mobile screen, an extension's background worker — should release
+it on teardown rather than leaving dangling timers.
+
+The session store (`createSessionStore`) exposes a `dispose()` method for this.
+It clears any internal timers/listeners — including the optional background
+refresh polling — and is safe to call more than once or after disconnection:
+
+```ts
+import { createSessionStore, createMemoryStorageAdapter } from "vellar-sdk";
+
+const store = createSessionStore(createMemoryStorageAdapter(), {
+  // Optional: while connected, touch() runs every 60s to keep lastActiveAt fresh.
+  refreshIntervalMs: 60_000,
+});
+await store.getState().start(session);
+
+// In your unmount / shutdown handler:
+function onUnmount() {
+  await store.getState().end();    // clear persisted state (optional)
+  store.getState().dispose();      // stop timers, release listeners
+}
+```
+
+`dispose()` is purely a teardown of the store's internal long-lived resources;
+it does **not** clear persisted state (pair it with `end()` when you want the
+session gone entirely).
+
 
 ### Mainnet
 
