@@ -1,83 +1,59 @@
-import { afterAll, beforeAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createServer, type Server } from "node:http";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createVellarWallet } from "./client";
 import { createHttpWalletBackend } from "./http-backend";
 import type { PasskeyKitLike } from "./passkeykit-connector";
 
 // Integration harness: wires `client.ts` (createVellarWallet) to a mock backend
-// server via `http-backend.ts` (createHttpWalletBackend). It spins up a real
-// local HTTP server implementing the gateway endpoints the SDK speaks, so the
-// client's full init + submission path is exercised end to end against the
-// transport it would use in production — without any external network.
+// server via `http-backend.ts` (createHttpWalletBackend). The "server" is a
+// path-routing mock fetch injected as the backend's `fetchImpl`, so the client's
+// full init / submission / balance path runs over the exact transport
+// createHttpWalletBackend uses in production — without any Node types (the SDK
+// stays browser-safe) or external network.
 //
-// Run as part of `npm test` (it is hermetic: a loopback server, no chain, no
-// external service). See CONTRIBUTING.md for local-run instructions.
+// Run as part of `npm test` (it is hermetic). See CONTRIBUTING.md for local-run
+// instructions.
 
+const API_URL = "https://mock-backend.test";
 const CONTRACT = "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4";
 
-interface MockGateway {
-  url: string;
-  server: Server;
-  /** Every request path the harness observed, in order. */
-  calls: string[];
-}
+type MockFetch = typeof fetch;
 
-function startMockGateway(): Promise<MockGateway> {
-  return new Promise((resolve) => {
-    const calls: string[] = [];
-    const server = createServer((req, res) => {
-      const chunks: Buffer[] = [];
-      req.on("data", (c: Buffer) => chunks.push(c));
-      req.on("end", () => {
-        const body = chunks.length ? JSON.parse(chunks.join("")) : {};
-        const url = req.url ?? "";
-        calls.push(`${req.method} ${url}`);
-
-        if (url === "/wallet/create") {
-          res.writeHead(200, { "content-type": "application/json" });
-          res.end(JSON.stringify({ sessionId: "sess-create" }));
-        } else if (url === "/wallet/connect") {
-          res.writeHead(200, { "content-type": "application/json" });
-          res.end(JSON.stringify({ contractId: CONTRACT, sessionId: "sess-connect" }));
-        } else if (url === "/wallet/submit") {
-          res.writeHead(200, { "content-type": "application/json" });
-          res.end(JSON.stringify({ hash: "txhash-submit" }));
-        } else if (url === "/wallet/balance") {
-          res.writeHead(200, { "content-type": "application/json" });
-          res.end(
-            JSON.stringify({
-              contractId: body.contractId,
-              balances: [{ symbol: "XLM", amount: "10000000" }],
-            }),
-          );
-        } else {
-          res.writeHead(404);
-          res.end();
-        }
+/** A path-routing mock "server" standing in for the gateway base URL. */
+function makeMockServer(store: { calls: string[] }): MockFetch {
+  const server = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    const path = new URL(String(input)).pathname;
+    const method = init?.method ?? "GET";
+    store.calls.push(`${method} ${path}`);
+    let body: Record<string, unknown> = {};
+    if (init?.body) body = JSON.parse(String(init.body));
+    const json = (data: unknown, status = 200) =>
+      new Response(JSON.stringify(data), {
+        status,
+        headers: { "content-type": "application/json" },
       });
-    });
-
-    server.listen(0, "127.0.0.1", () => {
-      const addr = server.address();
-      const port = typeof addr === "object" && addr ? addr.port : 0;
-      resolve({ url: `http://127.0.0.1:${port}`, server, calls });
-    });
-  });
+    if (path === "/wallet/create") {
+      return json({ sessionId: "sess-create" });
+    }
+    if (path === "/wallet/connect") {
+      return json({ contractId: CONTRACT, sessionId: "sess-connect" });
+    }
+    if (path === "/wallet/submit") {
+      return json({ hash: "txhash-submit" });
+    }
+    if (path === "/wallet/balance") {
+      return json({
+        contractId: body["contractId"],
+        balances: [{ symbol: "XLM", amount: "10000000" }],
+      });
+    }
+    return new Response(null, { status: 404 });
+  };
+  return server as MockFetch;
 }
 
 const token = { contractId: "CTOKEN", symbol: "XLM", decimals: 7 };
 
 describe("client.ts ↔ http-backend.ts integration harness", () => {
-  let gateway: MockGateway;
-
-  beforeAll(async () => {
-    gateway = await startMockGateway();
-  });
-
-  afterAll(() => {
-    gateway.server.close();
-  });
-
   beforeEach(() => {
     // connect() runs a passkey (WebAuthn) ceremony guard; simulate the browser.
     vi.stubGlobal("window", {});
@@ -95,11 +71,13 @@ describe("client.ts ↔ http-backend.ts integration harness", () => {
         contractId: CONTRACT,
         signedTx: "deploy-xdr",
       })),
-      connectWallet: vi.fn(async (opts?: { getContractId?: (keyId: string) => Promise<string | undefined> }) => {
-        // The connector resolves the contract id through the backend lookup.
-        await opts?.getContractId?.("key123");
-        return { keyIdBase64: "key123", contractId: CONTRACT };
-      }),
+      connectWallet: vi.fn(
+        async (opts?: { getContractId?: (keyId: string) => Promise<string | undefined> }) => {
+          // The connector resolves the contract id through the backend lookup.
+          await opts?.getContractId?.("key123");
+          return { keyIdBase64: "key123", contractId: CONTRACT };
+        },
+      ),
       sign: vi.fn(async (tx: unknown) => tx),
       wallet: undefined,
     } as unknown as PasskeyKitLike;
@@ -114,21 +92,22 @@ describe("client.ts ↔ http-backend.ts integration harness", () => {
   }
 
   function build() {
+    const calls: string[] = [];
     const kit = fakeKit();
     const sac = fakeSac();
     const wallet = createVellarWallet({
       network: "testnet",
       appName: "Test App",
       kit,
-      backend: createHttpWalletBackend(gateway.url),
+      backend: createHttpWalletBackend(API_URL, makeMockServer({ calls })),
       sac,
       isValidAddress: () => true,
     });
-    return { wallet, kit, sac };
+    return { wallet, kit, sac, calls, server: makeMockServer({ calls }) };
   }
 
   it("initializes the wallet through the mock backend and sets the session", async () => {
-    const { wallet, kit } = build();
+    const { wallet, kit, calls } = build();
 
     const session = await wallet.connect();
 
@@ -137,14 +116,14 @@ describe("client.ts ↔ http-backend.ts integration harness", () => {
     expect(wallet.session).toBe(session);
     // The connector resolved the contract id via the backend's /wallet/connect.
     expect(kit.connectWallet).toHaveBeenCalledOnce();
-    expect(gateway.calls).toContain("POST /wallet/connect");
+    expect(calls).toContain("POST /wallet/connect");
   });
 
   it("fetches a balance from the backend after wallet initialization", async () => {
-    const { wallet } = build();
+    const { wallet, server, calls } = build();
 
     const session = await wallet.connect();
-    const res = await fetch(`${gateway.url}/wallet/balance`, {
+    const res = await server(`${API_URL}/wallet/balance`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ contractId: session.accountId }),
@@ -156,18 +135,18 @@ describe("client.ts ↔ http-backend.ts integration harness", () => {
     expect(data.balances).toHaveLength(1);
     expect(data.balances[0]!.symbol).toBe("XLM");
     // Both the init call and the balance fetch went through the harness server.
-    expect(gateway.calls).toContain("POST /wallet/balance");
+    expect(calls).toContain("POST /wallet/balance");
   });
 
   it("submits a payment through the mock backend after initialization", async () => {
-    const { wallet, kit, sac } = build();
+    const { wallet, kit, sac, calls } = build();
 
     await wallet.connect();
     const result = await wallet.pay({ to: "CDEST", amount: 5n, token });
 
     expect(sac.getSACClient).toHaveBeenCalledWith("CTOKEN");
     expect(kit.sign).toHaveBeenCalledOnce();
-    expect(gateway.calls).toContain("POST /wallet/submit");
+    expect(calls).toContain("POST /wallet/submit");
     expect(result.hash).toBe("txhash-submit");
   });
 });
