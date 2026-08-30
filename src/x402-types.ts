@@ -79,6 +79,10 @@ export interface X402FetchInit extends X402PayOptions {
   body?: BodyInit | null;
   /** Passed through to the underlying fetch (signal, credentials, …). */
   requestInit?: Omit<RequestInit, "method" | "headers" | "body">;
+  /** Timeout in milliseconds for the initial discovery request. */
+  timeoutMs?: number;
+  /** Fallback response when the discovery call times out. */
+  fallbackResponse?: Response;
 }
 
 /** A signed, ready-to-send payment payload (the `PAYMENT-SIGNATURE` header value). */
@@ -109,6 +113,8 @@ export interface X402Response {
   paid: boolean;
   /** Present when `paid` — the on-chain settlement. */
   settlement?: X402Settlement;
+  /** True when the discovery call timed out and a fallback was used. */
+  isFallback?: boolean;
 }
 
 /** The public x402 facade on the wallet handle. */

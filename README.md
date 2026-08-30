@@ -249,13 +249,16 @@ const vellar = createVellarWallet({
   },
 });
 
-const { response, paid, settlement } = await vellar.x402.fetch("https://api.example.com/paid", {
+const { response, paid, settlement, isFallback } = await vellar.x402.fetch("https://api.example.com/paid", {
   maxAmount: 1_000_000n, // hard per-request ceiling in the asset's base units
   // allowedAssets: [usdcSac],   // optional — restrict which asset(s) you'll pay in
+  timeoutMs: 5000,              // optional — timeout for initial discovery request in ms
+  fallbackResponse: myFallback, // optional — custom response on timeout
 });
 
+if (isFallback) console.log("discovery timed out, returned fallback (may be partial)");
 if (paid) console.log("settled on-chain:", settlement.transaction);
-const data = await response.json(); // the unlocked resource
+const data = await response.json(); // the unlocked resource (or fallback)
 ```
 
 Two signers ship, both satisfying the same `SmartAccountX402Signer` interface:
@@ -277,6 +280,8 @@ Errors are typed: `MaxAmountExceededError`, `DisallowedAssetError`,
 (the facilitator rejected it — e.g. an over-budget payment blocked by the policy),
 and `X402NotConfiguredError` (no `x402` config). Lower-level: `createX402Client`
 for a client without the wallet handle.
+
+If the initial request to discover payment requirements (the discovery call) times out (configured via `timeoutMs`), the request does not fail. Instead, the client returns either the custom `fallbackResponse` or a default 504 Gateway Timeout Response, with `isFallback: true` on the result so consumers know data may be partial.
 
 > **Facilitator note:** a policy-governed payment runs the policy inside
 > `__check_auth`, which costs more resource fee than a plain transfer. Hosted

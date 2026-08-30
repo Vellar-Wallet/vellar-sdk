@@ -176,3 +176,60 @@ describe("body replay (bug #3)", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 });
+
+describe("x402 fetch — timeout and fallback", () => {
+  it("returns default fallback response on timeout", async () => {
+    const fetchImpl = vi.fn(async (url, init) => {
+      if (init?.signal) {
+        await new Promise((resolve, reject) => {
+          const onAbort = () => reject(new DOMException("The user aborted a request.", "AbortError"));
+          if (init.signal.aborted) {
+            onAbort();
+          } else {
+            init.signal.addEventListener("abort", onAbort);
+          }
+        });
+      }
+      return new Response("ok", { status: 200 });
+    });
+
+    const c = client(fetchImpl);
+    const out = await c.fetch("https://res.test/paid", {
+      maxAmount: 10n,
+      timeoutMs: 10,
+    });
+
+    expect(out.paid).toBe(false);
+    expect(out.isFallback).toBe(true);
+    expect(out.response.status).toBe(504);
+    const body = await out.response.json();
+    expect(body.partial).toBe(true);
+  });
+
+  it("returns custom fallback response on timeout", async () => {
+    const fetchImpl = vi.fn(async (url, init) => {
+      if (init?.signal) {
+        await new Promise((resolve, reject) => {
+          init.signal.addEventListener("abort", () => {
+            reject(new DOMException("The user aborted a request.", "AbortError"));
+          });
+        });
+      }
+      return new Response("ok", { status: 200 });
+    });
+
+    const customRes = new Response("custom fallback data", { status: 200 });
+    const c = client(fetchImpl);
+    const out = await c.fetch("https://res.test/paid", {
+      maxAmount: 10n,
+      timeoutMs: 10,
+      fallbackResponse: customRes,
+    });
+
+    expect(out.paid).toBe(false);
+    expect(out.isFallback).toBe(true);
+    expect(out.response).toBe(customRes);
+    const text = await out.response.text();
+    expect(text).toBe("custom fallback data");
+  });
+});

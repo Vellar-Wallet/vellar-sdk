@@ -228,7 +228,52 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
       body: init.body ?? undefined,
     };
 
-    const first = await doFetch(url, baseInit);
+    let first: Response;
+    let timedOut = false;
+
+    if (init.timeoutMs !== undefined && init.timeoutMs > 0) {
+      const controller = new AbortController();
+      const signal = controller.signal;
+      const timeoutId = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, init.timeoutMs);
+
+      const callerSignal = init.requestInit?.signal;
+      if (callerSignal) {
+        if (callerSignal.aborted) {
+          controller.abort();
+        } else {
+          callerSignal.addEventListener("abort", () => controller.abort());
+        }
+      }
+
+      try {
+        first = await doFetch(url, { ...baseInit, signal });
+      } catch (err: any) {
+        if (timedOut || err.name === "AbortError") {
+          const fallbackRes = init.fallbackResponse ?? new Response(
+            JSON.stringify({ error: "Discovery timed out", partial: true }),
+            {
+              status: 504,
+              statusText: "Gateway Timeout",
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+          return {
+            response: fallbackRes,
+            paid: false,
+            isFallback: true,
+          };
+        }
+        throw err;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    } else {
+      first = await doFetch(url, baseInit);
+    }
+
     if (first.status !== 402) {
       return { response: first, paid: false };
     }
