@@ -137,6 +137,7 @@ Returns a `VellarWallet`:
 | `WalletApiError`               | Thrown by the HTTP backend on non-2xx responses (has `status`, `code`)                   |
 | `CircuitOpenError`             | Thrown by the circuit breaker when the facilitator is down — see [Circuit breaking](#circuit-breaking) |
 | `isReachable(rpcUrl)`          | Ping an RPC endpoint for reachability (from `vellar-sdk/rpc`) — see [Health check](#health-check) |
+| `createSessionStore(storage, opts?)` | Session store with pluggable storage and a retention window — see [Session retention](#session-retention) |
 
 ### Circuit breaking
 
@@ -473,6 +474,65 @@ matching rule's ceiling, throws `BudgetAttributeDeniedError` before signing.
 Like capability scoping, this is a **client-side** narrowing on top of (never
 instead of) the on-chain policy — see `src/x402-budget-attributes.ts`'s doc
 comments for the full scope.
+
+### Session retention
+
+`createSessionStore` caches session state — the smart-account address, the public
+passkey credential id, and `createdAt` / `lastActiveAt` timestamps — through the
+storage adapter you give it (`localStorage` on the web, `browser.storage` in an
+extension).
+
+**Recommended retention window: 30 days of inactivity**, which is the SDK
+default (`DEFAULT_SESSION_MAX_AGE_MS`).
+
+That number is a balance. Cached session state is **not a credential**: it holds
+no key material and cannot authorize anything on its own — every signature still
+requires a live WebAuthn ceremony against the passkey. What it does carry is a
+durable link between a browser profile and an on-chain account, which is why it
+should not sit in `localStorage` indefinitely on a shared or long-lived device.
+30 days keeps "open the app, still signed in" true for ordinary use while
+bounding how long an abandoned profile keeps pointing at an account.
+
+The window is **enforced by the SDK on read**. `restore()` measures the cached
+entry's age from its `lastActiveAt` and, if it is past the max age, discards it
+and clears it from storage rather than resuming it — so expired state is evicted,
+not merely ignored:
+
+```ts
+import { createSessionStore, createWebStorageAdapter } from "vellar-sdk";
+
+const store = createSessionStore(createWebStorageAdapter(window.localStorage), {
+  // Shorter window for a shared-device deployment. Defaults to 30 days.
+  maxAgeMs: 12 * 60 * 60 * 1000, // 12 hours
+});
+
+await store.getState().restore();
+store.getState().status; // "disconnected" if the cached state had aged out
+```
+
+Because age is measured from `lastActiveAt` — which `touch()` refreshes on user
+activity — the window is an **idle** timeout, not a hard cap on session lifetime:
+an actively used session keeps renewing, while an untouched one ages out.
+
+Notes on the behavior:
+
+- **Choose a shorter window for a stricter posture.** Shared kiosks, custodial
+  dashboards, or anything on a device with multiple users should shorten it; a
+  few hours is reasonable.
+- **`maxAgeMs: Infinity`** opts out of expiry entirely. Only appropriate when the
+  storage adapter is itself ephemeral (e.g. `createMemoryStorageAdapter()`).
+- **A non-positive or `NaN` `maxAgeMs` throws a `RangeError`** at construction,
+  so a misconfigured window fails at wiring rather than silently disabling expiry.
+- **Unparseable `lastActiveAt` is treated as expired.** If the age cannot be
+  bounded, the entry is discarded — that is exactly what the retention window is
+  for.
+- **A future `lastActiveAt`** (clock skew) is never expired; its age is clamped
+  at zero rather than going negative.
+- **`isSessionExpired(session, maxAgeMs?, now?)`** is exported if you need to
+  apply the same rule yourself.
+
+Clearing state is still explicit elsewhere: `end()` clears storage on sign-out.
+Retention is the backstop for the sessions that are simply never returned to.
 
 ### Advanced
 

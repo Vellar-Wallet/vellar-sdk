@@ -4,17 +4,24 @@ import {
   createMemoryStorageAdapter,
   createSessionStore,
   createWebStorageAdapter,
+  DEFAULT_SESSION_MAX_AGE_MS,
+  isSessionExpired,
   isWalletSession,
   type SessionStorageAdapter,
 } from "./session";
 
+// `lastActiveAt` is deliberately "just now" rather than a fixed date: cached
+// session state is subject to a retention window (see DEFAULT_SESSION_MAX_AGE_MS),
+// so a hardcoded past timestamp would silently age out and make restore() tests
+// fail as the calendar moves. Tests that assert on literal timestamps pass an
+// explicit `now` to touch() instead of relying on this fixture's value.
 const session: WalletSession = {
   accountId: "CACCOUNT123",
   network: "testnet",
   connected: true,
   authMethod: "passkey",
   createdAt: "2026-07-16T10:00:00.000Z",
-  lastActiveAt: "2026-07-16T10:00:00.000Z",
+  lastActiveAt: new Date().toISOString(),
 };
 
 describe("createSessionStore", () => {
@@ -178,6 +185,9 @@ describe("createSessionStore teardown", () => {
     // No active timers remain after dispose (a leak would fail here by keeping
     // the interval scheduled).
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
 describe("createSessionStore — refresh & expiry edge cases", () => {
   it("refreshes lastActiveAt just before session expiry (boundary condition)", async () => {
     const storage = createMemoryStorageAdapter();
@@ -187,13 +197,14 @@ describe("createSessionStore — refresh & expiry edge cases", () => {
     // Assume a 15-minute session lifetime (900,000 ms).
     // Refresh 1 millisecond before the 15-minute expiry threshold.
     const startTime = new Date(session.lastActiveAt).getTime();
-    const justBeforeExpiry = new Date(startTime + 15 * 60 * 1000 - 1); // 10:14:59.999Z
+    const justBeforeExpiry = new Date(startTime + 15 * 60 * 1000 - 1);
+    const expected = justBeforeExpiry.toISOString();
 
     await store.getState().touch(justBeforeExpiry);
 
     expect(store.getState().status).toBe("connected");
-    expect(store.getState().session?.lastActiveAt).toBe("2026-07-16T10:14:59.999Z");
-    expect((await storage.load())?.lastActiveAt).toBe("2026-07-16T10:14:59.999Z");
+    expect(store.getState().session?.lastActiveAt).toBe(expected);
+    expect((await storage.load())?.lastActiveAt).toBe(expected);
   });
 
   it("supports multiple rolling refreshes just before consecutive expiry windows", async () => {
@@ -423,5 +434,135 @@ describe("isWalletSession", () => {
     ["non-boolean connected", { ...session, connected: "yes" }],
   ])("rejects %s", (_label, value) => {
     expect(isWalletSession(value)).toBe(false);
+  });
+});
+
+describe("cached session retention", () => {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  /** A session last active `ageMs` before `now`. */
+  function agedSession(ageMs: number, now = Date.now()): WalletSession {
+    return { ...session, lastActiveAt: new Date(now - ageMs).toISOString() };
+  }
+
+  it("defaults to a 30-day retention window", () => {
+    expect(DEFAULT_SESSION_MAX_AGE_MS).toBe(30 * DAY_MS);
+  });
+
+  it("restore() discards cached state older than the max age", async () => {
+    const storage = createMemoryStorageAdapter();
+    await storage.save(agedSession(2 * DAY_MS));
+    const store = createSessionStore(storage, { maxAgeMs: DAY_MS });
+    await store.getState().restore();
+    expect(store.getState().status).toBe("disconnected");
+    expect(store.getState().session).toBeNull();
+  });
+
+  it("restore() evicts expired state from storage so it is not read again", async () => {
+    const storage = createMemoryStorageAdapter();
+    await storage.save(agedSession(2 * DAY_MS));
+    const store = createSessionStore(storage, { maxAgeMs: DAY_MS });
+    await store.getState().restore();
+    expect(await storage.load()).toBeNull();
+  });
+
+  it("restore() resumes cached state inside the max age", async () => {
+    const storage = createMemoryStorageAdapter();
+    const fresh = agedSession(DAY_MS / 2);
+    await storage.save(fresh);
+    const store = createSessionStore(storage, { maxAgeMs: DAY_MS });
+    await store.getState().restore();
+    expect(store.getState().status).toBe("connected");
+    expect(store.getState().session).toEqual(fresh);
+  });
+
+  it("restore() applies the 30-day default when no max age is configured", async () => {
+    const storage = createMemoryStorageAdapter();
+    await storage.save(agedSession(DEFAULT_SESSION_MAX_AGE_MS + 60_000));
+    const store = createSessionStore(storage);
+    await store.getState().restore();
+    expect(store.getState().status).toBe("disconnected");
+
+    await storage.save(agedSession(DEFAULT_SESSION_MAX_AGE_MS - 60_000));
+    const stillValid = createSessionStore(storage);
+    await stillValid.getState().restore();
+    expect(stillValid.getState().status).toBe("connected");
+  });
+
+  it("expiry is measured from lastActiveAt, so touch() extends retention", async () => {
+    const storage = createMemoryStorageAdapter();
+    // Created long ago, but active moments ago: an idle window, not a hard cap.
+    await storage.save({ ...agedSession(60_000), createdAt: "2020-01-01T00:00:00.000Z" });
+    const store = createSessionStore(storage, { maxAgeMs: DAY_MS });
+    await store.getState().restore();
+    expect(store.getState().status).toBe("connected");
+  });
+
+  it("restore() discards cached state with an unparseable lastActiveAt", async () => {
+    const storage = createMemoryStorageAdapter();
+    await storage.save({ ...session, lastActiveAt: "not-a-date" });
+    const store = createSessionStore(storage);
+    await store.getState().restore();
+    expect(store.getState().status).toBe("disconnected");
+    expect(await storage.load()).toBeNull();
+  });
+
+  it("restore() still disconnects when evicting expired state fails", async () => {
+    const broken: SessionStorageAdapter = {
+      load: vi.fn().mockResolvedValue(agedSession(2 * DAY_MS)),
+      save: vi.fn(),
+      clear: vi.fn().mockRejectedValue(new Error("read-only storage")),
+    };
+    const store = createSessionStore(broken, { maxAgeMs: DAY_MS });
+    await store.getState().restore();
+    expect(store.getState().status).toBe("disconnected");
+    expect(store.getState().session).toBeNull();
+  });
+
+  it("maxAgeMs: Infinity opts out of expiry", async () => {
+    const storage = createMemoryStorageAdapter();
+    const ancient = agedSession(10 * 365 * DAY_MS);
+    await storage.save(ancient);
+    const store = createSessionStore(storage, { maxAgeMs: Infinity });
+    await store.getState().restore();
+    expect(store.getState().status).toBe("connected");
+    expect(store.getState().session).toEqual(ancient);
+  });
+
+  it.each([
+    ["zero", 0],
+    ["negative", -1],
+    ["NaN", NaN],
+  ])("rejects a %s maxAgeMs at construction", (_label, value) => {
+    expect(() => createSessionStore(createMemoryStorageAdapter(), { maxAgeMs: value })).toThrow(
+      RangeError,
+    );
+  });
+
+  describe("isSessionExpired", () => {
+    const now = new Date("2026-07-16T10:00:00.000Z");
+
+    it("is false exactly at the boundary and true just past it", () => {
+      const atBoundary = { ...session, lastActiveAt: new Date(now.getTime() - DAY_MS).toISOString() };
+      expect(isSessionExpired(atBoundary, DAY_MS, now)).toBe(false);
+      const pastBoundary = {
+        ...session,
+        lastActiveAt: new Date(now.getTime() - DAY_MS - 1).toISOString(),
+      };
+      expect(isSessionExpired(pastBoundary, DAY_MS, now)).toBe(true);
+    });
+
+    it("treats a future lastActiveAt (clock skew) as not expired", () => {
+      const skewed = { ...session, lastActiveAt: new Date(now.getTime() + DAY_MS).toISOString() };
+      expect(isSessionExpired(skewed, DAY_MS, now)).toBe(false);
+    });
+
+    it("defaults to the 30-day window", () => {
+      const old = {
+        ...session,
+        lastActiveAt: new Date(now.getTime() - DEFAULT_SESSION_MAX_AGE_MS - 1).toISOString(),
+      };
+      expect(isSessionExpired(old, undefined, now)).toBe(true);
+    });
   });
 });

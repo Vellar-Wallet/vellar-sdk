@@ -12,6 +12,24 @@ export interface SessionStorageAdapter {
   clear(): Promise<void>;
 }
 
+/**
+ * Recommended retention window for cached session state: **30 days** of
+ * inactivity.
+ *
+ * Cached session state is low-sensitivity (a public smart-account address, a
+ * public passkey credential id, timestamps) — it is *not* a credential, and it
+ * cannot authorize anything on its own; every signature still needs a live
+ * WebAuthn ceremony. What it does carry is a durable link between a browser
+ * profile and an on-chain account, so it should not sit in `localStorage`
+ * forever on a shared or long-lived device.
+ *
+ * 30 days keeps "open the app, still signed in" true for ordinary use while
+ * bounding how long an abandoned profile keeps pointing at an account. Consumers
+ * with a stricter posture (shared kiosks, custodial dashboards) should shorten
+ * it — a few hours is reasonable — via `createSessionStore(storage, { maxAgeMs })`.
+ */
+export const DEFAULT_SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
 export type SessionStatus = "loading" | "connected" | "disconnected";
 
 export interface SessionState {
@@ -45,6 +63,16 @@ export interface CreateSessionStoreOptions {
    * `dispose()`.
    */
   refreshIntervalMs?: number;
+  /**
+   * Maximum age of cached session state, in milliseconds, measured from its
+   * `lastActiveAt`. Enforced on read: `restore()` discards (and clears from
+   * storage) anything older than this instead of resuming it.
+   *
+   * Defaults to {@link DEFAULT_SESSION_MAX_AGE_MS} (30 days). Pass `Infinity`
+   * to opt out of expiry entirely — only appropriate when the storage adapter
+   * itself is ephemeral. Must be a positive number; anything else throws.
+   */
+  maxAgeMs?: number;
 }
 
 export function isWalletSession(value: unknown): value is WalletSession {
@@ -61,10 +89,48 @@ export function isWalletSession(value: unknown): value is WalletSession {
   );
 }
 
+/**
+ * Has cached session state outlived its retention window?
+ *
+ * Age is measured from `lastActiveAt` (refreshed by `touch()`), so the window is
+ * an *idle* timeout, not a hard cap on session lifetime. Session state whose
+ * `lastActiveAt` is unparseable is treated as expired: an unreadable timestamp
+ * means the age cannot be bounded, and cached state we cannot age out is exactly
+ * what the retention window exists to prevent.
+ *
+ * A `lastActiveAt` in the future (clock skew, or a doctored storage entry) is
+ * never expired — its age is clamped at zero rather than going negative.
+ */
+export function isSessionExpired(
+  session: WalletSession,
+  maxAgeMs: number = DEFAULT_SESSION_MAX_AGE_MS,
+  now: Date = new Date(),
+): boolean {
+  if (maxAgeMs === Infinity) return false;
+  const lastActive = Date.parse(session.lastActiveAt);
+  if (Number.isNaN(lastActive)) return true;
+  const ageMs = Math.max(0, now.getTime() - lastActive);
+  return ageMs > maxAgeMs;
+}
+
+function resolveMaxAgeMs(maxAgeMs: number | undefined): number {
+  if (maxAgeMs === undefined) return DEFAULT_SESSION_MAX_AGE_MS;
+  if (typeof maxAgeMs !== "number" || Number.isNaN(maxAgeMs) || maxAgeMs <= 0) {
+    throw new RangeError(
+      `maxAgeMs must be a positive number of milliseconds (or Infinity to disable expiry), got ${String(maxAgeMs)}`,
+    );
+  }
+  return maxAgeMs;
+}
+
 export function createSessionStore(
   storage: SessionStorageAdapter,
   options: CreateSessionStoreOptions = {},
 ): SessionStore {
+  // Validate the retention window up front so a misconfigured maxAgeMs fails at
+  // wiring time rather than silently on the first restore().
+  const maxAgeMs = resolveMaxAgeMs(options.maxAgeMs);
+
   // Long-lived resources owned by the store: the optional refresh-polling
   // interval plus a disposed latch so a torn-down store never schedules new
   // work. `dispose()` clears both; nothing in the store keeps a reference to
@@ -122,12 +188,25 @@ export function createSessionStore(
     async restore() {
       try {
         const stored = await storage.load();
-        if (stored && isWalletSession(stored)) {
-          set({ session: stored, status: "connected" });
-          startRefresh();
-        } else {
+        if (!stored || !isWalletSession(stored)) {
           set({ session: null, status: "disconnected" });
+          return;
         }
+        if (isSessionExpired(stored, maxAgeMs)) {
+          // Past the retention window: discard it rather than resume it, and
+          // evict it from storage so an abandoned profile stops carrying the
+          // account link around. A clear failure here is not fatal — the
+          // in-memory decision (disconnected) still holds.
+          try {
+            await storage.clear();
+          } catch {
+            // Best-effort eviction; read-only or full storage must not brick startup.
+          }
+          set({ session: null, status: "disconnected" });
+          return;
+        }
+        set({ session: stored, status: "connected" });
+        startRefresh();
       } catch {
         // Unreadable storage must not brick the app on startup.
         set({ session: null, status: "disconnected" });
