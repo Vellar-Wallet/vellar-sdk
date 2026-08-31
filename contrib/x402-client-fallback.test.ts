@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createX402ClientWithFallback } from "./x402-client-fallback";
-import { C_ADDRESS, SIM_SOURCE, requirements, response402 } from "../src/x402-test-fixtures";
+import { C_ADDRESS, SIM_SOURCE } from "../src/x402-test-fixtures";
 import type { SmartAccountX402Signer } from "../src/index";
 
 const stubSigner: SmartAccountX402Signer = {
