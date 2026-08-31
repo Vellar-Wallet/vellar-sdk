@@ -81,3 +81,40 @@ We implement a resilient wrapper for Stellar RPC servers inside [contrib/rpc-ser
 To integrate this into the core SDK:
 1. Re-export the wrapped `Server` class and `RpcCircuitBreakerError` from `src/rpc.ts`.
 2. Swap the instantiation of `new rpc.Server(...)` for `new Server(...)` inside `src/balances-rpc.ts` and `src/tx-rpc.ts`.
+
+---
+
+## 5. Data Retention Guidance for Cached Session State (#292)
+
+We implement the retention window inside [contrib/session-retention.ts](contrib/session-retention.ts),
+with the full guidance in [contrib/session-retention.md](contrib/session-retention.md) and tests in
+[contrib/session-retention.test.ts](contrib/session-retention.test.ts).
+
+### Recommended Window
+- **30 days of inactivity** (`DEFAULT_SESSION_MAX_AGE_MS`). Cached session state is not a credential
+  (no key material; every signature still needs a live WebAuthn ceremony), but it is a durable link
+  between a browser profile and an on-chain account, so it should not persist indefinitely.
+- **Idle, not absolute**: age is measured from `lastActiveAt`, which `touch()` refreshes, so an
+  active session renews while an abandoned one ages out.
+- Shorten it for stricter deployments — a few hours for shared kiosks or custodial dashboards.
+  See the deployment table in the guidance doc.
+
+### Enforcement on Read
+- **`withSessionRetention(adapter, { maxAgeMs })`** wraps any `SessionStorageAdapter`. On `load()`,
+  state older than `maxAgeMs` yields `null` **and is cleared from the underlying storage** — expired
+  state is evicted, not merely ignored.
+- Wrapping the adapter rather than the store applies the window to every read path and composes with
+  any adapter without the core store knowing retention exists.
+- **`isSessionExpired(session, maxAgeMs?, now?)`** exposes the same rule as a pure helper.
+- Unparseable `lastActiveAt` counts as expired; a future one (clock skew) never does; a failed
+  eviction still reports expiry; a non-positive or `NaN` `maxAgeMs` throws a `RangeError` at wiring.
+
+### Integration into Core
+See [contrib/session-retention.md](contrib/session-retention.md) for the step-by-step recipe and the
+proposed `README.md` section. In short:
+1. Move `DEFAULT_SESSION_MAX_AGE_MS` and `isSessionExpired` into `src/session.ts`; export both from `src/index.ts`.
+2. Add `maxAgeMs?: number` to `CreateSessionStoreOptions` and enforce it in `restore()`.
+3. Add the proposed "Session retention" section to the root `README.md`.
+
+> Note: `src/session.test.ts` does not currently parse on `dev` (an unterminated `it(` block in the
+> teardown suite), which must be fixed before these tests can be ported there.
