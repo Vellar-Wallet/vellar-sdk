@@ -35,7 +35,17 @@ export async function waitForTransaction(
 
   const deadline = now() + timeoutMs;
   for (;;) {
-    const status = await reader.getStatus(hash);
+    let status: TxStatus;
+    try {
+      status = await reader.getStatus(hash);
+    } catch {
+      // Transient network drop mid-poll (e.g. the RPC reader threw): back off
+      // and keep polling instead of bailing — recovery eventually resolves.
+      // Only a drop that outlives the whole deadline surfaces as a timeout.
+      if (now() + intervalMs > deadline) throw new TransactionTimeoutError(hash, timeoutMs);
+      await sleep(intervalMs);
+      continue;
+    }
     if (status !== "pending") return status;
     if (now() + intervalMs > deadline) throw new TransactionTimeoutError(hash, timeoutMs);
     await sleep(intervalMs);

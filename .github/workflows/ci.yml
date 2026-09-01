@@ -4,6 +4,7 @@ on:
   push:
     branches: [main, drips]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   ci:
@@ -25,3 +26,19 @@ jobs:
       - run: npm run check:docs
       - run: npm test
       - run: npm run build
+
+  # OPTIONAL load test job — measures concurrent payment-submission latency and
+  # error rate at increasing concurrency. Deliberately NOT run on every
+  # push/PR (it is slower and load-timing sensitive); trigger it manually with
+  # the "Run workflow" button (workflow_dispatch). See CONTRIBUTING.md.
+  load-test:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:load

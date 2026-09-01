@@ -52,6 +52,65 @@ npm run build
 
 New code is expected to come with tests.
 
+## Testing
+
+The default suite is hermetic — no network, no local stack, no chain:
+
+```sh
+npm test
+```
+
+### Integration harness (client ↔ http-backend)
+
+`src/client-backend-harness.test.ts` wires `client.ts` to a real (loopback) mock
+backend server via `http-backend.ts`, exercising wallet initialization, a
+balance fetch, and a payment submission over the actual gateway transport
+`createHttpWalletBackend` targets. It runs inside `npm test` (the server is
+local only). To run just that harness:
+
+```sh
+npx vitest run src/client-backend-harness.test.ts
+```
+
+### tx-rpc chaos test (network drops mid-poll)
+
+`src/tx-rpc.chaos.test.ts` simulates the RPC network dropping while
+`waitForTransaction` is polling for a transaction. A reader stands in for
+`createRpcTxStatusReader` and throws exactly as the live RPC does on a drop,
+then recovers after a configurable number of failures. The test asserts that
+polling resumes and eventually resolves with the correct final status
+(`success` / `failed`) rather than wedging or bailing on the first transient
+error. Run it in isolation with:
+
+```sh
+npx vitest run src/tx-rpc.chaos.test.ts
+```
+
+### Load test (concurrent payments submissions)
+
+`src/payments.load.test.ts` is an **optional** load test (not part of `npm
+test`) that simulates many concurrent payment submissions through
+`payments-client` and measures latency + error rate at increasing concurrency.
+Run it locally with:
+
+```sh
+npm run test:load
+```
+
+It prints a per-concurrency report (p50/p95 latency, error %, and throughput)
+and asserts that no submission is lost silently. It is also exposed as an
+optional CI job (`load-test`) — trigger it manually via the workflow's "Run
+workflow" button; it does not gate normal PRs.
+
+*Observed behavior & bottlenecks.* The SDK's payment path is a fully
+asynchronous, shared-nothing promise chain, so a single Node process has no
+in-process serialization: with an in-process backend modeled at ~5 ms latency,
+error rate stays 0 and throughput scales roughly with concurrency (≈ `(1000 /
+latency) × concurrency` submissions/s) up to the transport. The real bottleneck
+is therefore the backend/relayer round-trip, not client code — the harness
+models this via `BACKEND_LATENCY_MS` and the `failEveryN` error knob. Expect concrete
+numbers to vary by machine and by real backend; trust `npm run test:load`'s
+report over any fixed figure here.
 ## Integration testing
 
 Hermetic (`npm test`) never touches the network. A separate, deliberate suite
