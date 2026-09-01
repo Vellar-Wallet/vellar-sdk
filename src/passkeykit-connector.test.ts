@@ -196,6 +196,41 @@ describe("connectWallet", () => {
   });
 });
 
+describe("network handling", () => {
+  function kitWithMismatch() {
+    const kit = fakeKit();
+    return { kit, connector: createPasskeyKitConnector({
+      kit,
+      backend: fakeBackend(),
+      network: "testnet",
+      appName: "Vellar",
+      now: () => new Date("2026-07-16T15:00:00.000Z"),
+    }) };
+  }
+
+  it("rejects createWallet with network mismatch", async () => {
+    const { kit, connector } = kitWithMismatch();
+    await expect(connector.createWallet({ network: "mainnet" })).rejects.toBeInstanceOf(
+      WalletNetworkMismatchError,
+    );
+    expect(kit.createWallet).not.toHaveBeenCalled();
+  });
+
+  it("rejects connectWallet with network mismatch", async () => {
+    await expect(connector().connectWallet("mainnet")).rejects.toBeInstanceOf(
+      WalletNetworkMismatchError,
+    );
+  });
+
+  it("rejects signTransaction with network mismatch", async () => {
+    const { kit, connector } = kitWithMismatch();
+    await expect(
+      connector.signTransaction({ xdr: "tx-xdr", network: "mainnet" }),
+    ).rejects.toBeInstanceOf(WalletNetworkMismatchError);
+    expect(kit.sign).not.toHaveBeenCalled();
+  });
+});
+
 describe("signTransaction", () => {
   it("signs and returns the XDR", async () => {
     const kit = fakeKit();

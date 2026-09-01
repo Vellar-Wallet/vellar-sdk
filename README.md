@@ -284,6 +284,22 @@ for a client without the wallet handle.
 > so a policy-governed payment needs a facilitator configured with a higher
 > ceiling (self-hosted, or a hosted one that allows it).
 
+### Network Policy
+
+The SDK uses the `Network` type (`"testnet"` or `"mainnet"`) to ensure operations
+happen on the correct Stellar network. The `WalletConnector` and related components
+enforce network matching:
+
+- **`createWallet(network)`** and **`connectWallet(network)`** require the network
+  to match the connector's configured network. A mismatch throws
+  `WalletNetworkMismatchError`.
+- **`signTransaction(input)`** also validates the network before signing.
+- The network is a fundamental part of the wallet's identity — changing networks
+  requires re-deploying the smart account or using a different key.
+
+This policy ensures callers operate on the intended network and prevents
+accidental mainnet deployment from a testnet-configured wallet, or vice versa.
+
 ### Advanced
 
 The facade is the paved road. For custom flows the package also exports the
