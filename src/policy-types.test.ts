@@ -38,6 +38,16 @@ describe("SpendingConstructor", () => {
     const s: SpendingConstructor = { dailyLimitStroops: "100", windowSeconds: 0 };
     expect(s.windowSeconds).toBe(0);
   });
+
+  it("accepts large windowSeconds value", () => {
+    const s: SpendingConstructor = { dailyLimitStroops: "1000000", windowSeconds: 999999999 };
+    expect(s.windowSeconds).toBe(999999999);
+  });
+
+  it("accepts empty string dailyLimitStroops", () => {
+    const s: SpendingConstructor = { dailyLimitStroops: "", windowSeconds: 86400 };
+    expect(s.dailyLimitStroops).toBe("");
+  });
 });
 
 describe("VerifiedRecipientConstructor", () => {
@@ -49,6 +59,16 @@ describe("VerifiedRecipientConstructor", () => {
   it("accepts custom registry", () => {
     const v: VerifiedRecipientConstructor = { registry: "my-registry.stellar" };
     expect(v.registry).toBe("my-registry.stellar");
+  });
+
+  it("accepts registry with subdomain", () => {
+    const v: VerifiedRecipientConstructor = { registry: "sub.registry.example" };
+    expect(v.registry).toBe("sub.registry.example");
+  });
+
+  it("accepts registry with numeric characters", () => {
+    const v: VerifiedRecipientConstructor = { registry: "registry123.example" };
+    expect(v.registry).toBe("registry123.example");
   });
 });
 

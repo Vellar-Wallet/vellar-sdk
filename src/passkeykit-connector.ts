@@ -97,6 +97,42 @@ export class PasskeyBrowserRequiredError extends Error {
   }
 }
 
+/** Rate limit error thrown when too many authentication attempts are made. */
+export class RateLimitError extends Error {
+  constructor(attempt: number, maxAttempts: number) {
+    super(
+      `Rate limit exceeded: ${attempt} authentication attempt${attempt !== 1 ? "s" : ""} made, maximum is ${maxAttempts}`,
+    );
+    this.name = "RateLimitError";
+  }
+}
+
+/** Maximum authentication attempts before rate limiting activates. */
+const MAX_AUTH_ATTEMPTS = 5;
+
+/** Tracks authentication attempt counts keyed on connector identifier. */
+export const attemptCache = new Map<string, number>();
+
+/** Resets the attempt counter for a given connector identifier. */
+export function resetAttemptCount(key: string): void {
+  attemptCache.set(key, 0);
+}
+
+/** Increments and returns the current attempt count for a connector. */
+export function incrementAttemptCount(key: string): number {
+  const current = (attemptCache.get(key) ?? 0) + 1;
+  attemptCache.set(key, current);
+  return current;
+}
+
+/** Checks if the connector has exceeded the rate limit for authentication attempts. */
+export function checkRateLimit(key: string): void {
+  const count = incrementAttemptCount(key);
+  if (count > MAX_AUTH_ATTEMPTS) {
+    throw new RateLimitError(count, MAX_AUTH_ATTEMPTS);
+  }
+}
+
 /**
  * Passkey ceremonies die deep inside the kit with a raw WebAuthnError when run
  * outside a browser; this guard fails first, with the actionable message.
