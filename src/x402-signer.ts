@@ -25,6 +25,39 @@ import {
   xdr,
 } from "@stellar/stellar-sdk";
 import type { SmartAccountX402Signer } from "./x402-types";
+import {
+  assertCapability,
+  assertValidCapabilityRules,
+  type CapabilityRule,
+} from "./x402-signer-capabilities";
+
+// ── signer audit hook ──────────────────────────────────────────────────────────
+//
+// Every signer action a consumer cares about for audit logging is enumerated
+// here so callers can hook them all without magic strings. The SDK fires
+// `onSignerAction` (when configured) for each action with the actor context
+// and the outcome, so a host can ship a tamper-evident audit trail of who
+// authorized (or was denied) which payment.
+
+/** The complete set of signer actions that warrant an audit hook. */
+export type X402SignerAction = "authorize" | "deny";
+
+/** Payload passed to {@link X402SignerActionHook} for every signer action. */
+export interface X402SignerActionEvent {
+  /** Which signer action occurred. */
+  action: X402SignerAction;
+  /** The C-address actor performing (or attempting) the action. */
+  actor: string;
+  /** Whether the action succeeded or errored out. */
+  outcome: "success" | "error";
+  /** The network passphrase the action ran against. */
+  networkPassphrase: string;
+  /** Present when `outcome` is `"error"` — the thrown value. */
+  error?: unknown;
+}
+
+/** A consumer-supplied audit sink invoked for every signer action. */
+export type X402SignerActionHook = (event: X402SignerActionEvent) => void | Promise<void>;
 
 // ── raw ScVal builders (byte-identical to the wallet contract spec; verified) ──
 //
@@ -116,6 +149,26 @@ function policySignature(): xdr.ScVal {
 }
 
 /**
+ * Read the resource type (contract) + action (function name) a decoded auth
+ * entry's root invocation authorizes, for a {@link CapabilityRequest}. Returns
+ * `undefined` when the root invocation isn't a contract call (nothing for a
+ * capability rule to match against) — checked entries are always contract
+ * calls in practice (x402-client only signs SEP-41 `transfer`), but a
+ * structural signer must not crash on an unexpected shape.
+ */
+function capabilityRequestFor(
+  entry: xdr.SorobanAuthorizationEntry,
+): { resourceType: string; action: string } | undefined {
+  const fn = entry.rootInvocation().function();
+  if (fn.switch().name !== "sorobanAuthorizedFunctionTypeContractFn") return undefined;
+  const call = fn.contractFn();
+  return {
+    resourceType: Address.fromScAddress(call.contractAddress()).toString(),
+    action: call.functionName().toString(),
+  };
+}
+
+/**
  * Set the entry's signature to the smart-wallet map `Vec[Map[key → sig]]`.
  *
  * Soroban requires map keys in ScVal order. Both key variants are `scvVec`
@@ -169,6 +222,19 @@ export interface SessionKeySignerConfig {
    * than a missing co-signer. Omit only for an unrestricted key.
    */
   policies?: readonly string[];
+  /**
+   * Audit hook fired for every signer action (`authorize` on success, `deny` on
+   * error). Pass a consumer-side sink (e.g. one that ships to an append-only log)
+   * to keep a tamper-evident record of who authorized or was denied which payment.
+   */
+  onSignerAction?: X402SignerActionHook;
+   * Client-side capability scoping (#224): restrict which resource
+   * type (contract) + action (function name) combinations this signer will
+   * sign, independent of the on-chain policy. Omit for no scoping (signs
+   * anything x402-client.ts hands it, as before). See x402-signer-capabilities.ts
+   * for what this does and does not guarantee.
+   */
+  capabilities?: readonly CapabilityRule[];
 }
 
 /**
@@ -190,11 +256,36 @@ export function createSessionKeySigner(config: SessionKeySignerConfig): SmartAcc
     }
   }
 
+  const onAction = config.onSignerAction;
+  const fire = (
+    action: X402SignerAction,
+    outcome: "success" | "error",
+    networkPassphrase: string,
+    error?: unknown,
+  ) => onAction?.({ action, actor: config.address, outcome, networkPassphrase, error });
+  const capabilities = config.capabilities ?? [];
+  assertValidCapabilityRules(capabilities);
+
   return {
     address: config.address,
     async signAuthEntry(entryXdr, { networkPassphrase, expirationLedger }) {
+      try {
+        const entry = xdr.SorobanAuthorizationEntry.fromXDR(entryXdr, "base64");
+        assertEntryAddress(entry, config.address);
+        const payload = payloadHashForEntry(entry, networkPassphrase, expirationLedger);
+        const signature = keypair.sign(payload);
+        setSignatureMap(entry, ed25519SignerKey(rawPk), ed25519Signature(signature), policies);
+        const signed = entry.toXDR("base64");
+        await fire("authorize", "success", networkPassphrase);
+        return signed;
+      } catch (err) {
+        await fire("deny", "error", networkPassphrase, err);
+        throw err;
+      }
       const entry = xdr.SorobanAuthorizationEntry.fromXDR(entryXdr, "base64");
       assertEntryAddress(entry, config.address);
+      const request = capabilityRequestFor(entry);
+      if (request) assertCapability(capabilities, request);
       const payload = payloadHashForEntry(entry, networkPassphrase, expirationLedger);
       const signature = keypair.sign(payload);
       setSignatureMap(entry, ed25519SignerKey(rawPk), ed25519Signature(signature), policies);
@@ -230,6 +321,14 @@ export interface PasskeyX402SignerConfig {
   /** Policy contracts this signer's `SignerLimits` require — see
    * {@link SessionKeySignerConfig.policies}. Same trap applies here. */
   policies?: readonly string[];
+  /**
+   * Audit hook fired for every signer action (`authorize` on success, `deny` on
+   * error). See {@link SessionKeySignerConfig.onSignerAction}.
+   */
+  onSignerAction?: X402SignerActionHook;
+  /** Client-side capability scoping (#224) — see
+   * {@link SessionKeySignerConfig.capabilities}. Same semantics apply here. */
+  capabilities?: readonly CapabilityRule[];
 }
 
 /**
@@ -244,11 +343,41 @@ export function createPasskeyX402Signer(config: PasskeyX402SignerConfig): SmartA
   if (!isContractAddress(config.address)) {
     throw new Error(`passkey signer address must be a contract (C…): got ${config.address}`);
   }
+  const onAction = config.onSignerAction;
+  const fire = (
+    action: X402SignerAction,
+    outcome: "success" | "error",
+    networkPassphrase: string,
+    error?: unknown,
+  ) => onAction?.({ action, actor: config.address, outcome, networkPassphrase, error });
+  const capabilities = config.capabilities ?? [];
+  assertValidCapabilityRules(capabilities);
+
   return {
     address: config.address,
     async signAuthEntry(entryXdr, { networkPassphrase, expirationLedger }) {
+      try {
+        const entry = xdr.SorobanAuthorizationEntry.fromXDR(entryXdr, "base64");
+        assertEntryAddress(entry, config.address);
+        const payload = payloadHashForEntry(entry, networkPassphrase, expirationLedger);
+        const assertion = await config.webAuthn.sign(new Uint8Array(payload));
+        setSignatureMap(
+          entry,
+          secp256r1SignerKey(assertion.keyId),
+          secp256r1Signature(assertion),
+          config.policies ?? [],
+        );
+        const signed = entry.toXDR("base64");
+        await fire("authorize", "success", networkPassphrase);
+        return signed;
+      } catch (err) {
+        await fire("deny", "error", networkPassphrase, err);
+        throw err;
+      }
       const entry = xdr.SorobanAuthorizationEntry.fromXDR(entryXdr, "base64");
       assertEntryAddress(entry, config.address);
+      const request = capabilityRequestFor(entry);
+      if (request) assertCapability(capabilities, request);
       const payload = payloadHashForEntry(entry, networkPassphrase, expirationLedger);
       const assertion = await config.webAuthn.sign(new Uint8Array(payload));
       setSignatureMap(
