@@ -51,10 +51,38 @@ describe("waitForTransaction", () => {
     ).rejects.toBeInstanceOf(TransactionTimeoutError);
   });
 
-  it("propagates reader errors", async () => {
-    const reader: TxStatusReader = { getStatus: vi.fn().mockRejectedValue(new Error("rpc down")) };
-    await expect(waitForTransaction(reader, "h", { sleep: instantSleep })).rejects.toThrow(
-      "rpc down",
-    );
+  it("keeps polling through transient reader errors and recovers", async () => {
+    let calls = 0;
+    const reader: TxStatusReader = {
+      getStatus: vi.fn().mockImplementation(async () => {
+        calls += 1;
+        if (calls <= 2) throw new Error("rpc down"); // drop mid-poll, then recover
+        return calls <= 3 ? "pending" : "success";
+      }),
+    };
+    await expect(
+      waitForTransaction(reader, "h", { sleep: instantSleep, intervalMs: 10, timeoutMs: 1000 }),
+    ).resolves.toBe("success");
+    expect(reader.getStatus).toHaveBeenCalledTimes(4);
+  });
+
+  it("throws TransactionTimeoutError when the network stays down past the deadline", async () => {
+    let time = 0;
+    const reader: TxStatusReader = {
+      getStatus: vi.fn().mockRejectedValue(new Error("rpc down")),
+    };
+    const sleep = vi.fn().mockImplementation(async (ms: number) => {
+      time += ms;
+    });
+    await expect(
+      waitForTransaction(reader, "h", {
+        timeoutMs: 50,
+        intervalMs: 20,
+        sleep,
+        now: () => time,
+      }),
+    ).rejects.toBeInstanceOf(TransactionTimeoutError);
+    // It polled (attempted) repeatedly rather than bailing on the first error.
+    expect(reader.getStatus).toHaveBeenCalledTimes(3);
   });
 });

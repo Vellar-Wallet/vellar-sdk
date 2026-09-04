@@ -135,6 +135,99 @@ Returns a `VellarWallet`:
 | `TESTNET`                      | Testnet config: `rpcUrl`, `networkPassphrase`, `walletWasmHash`, `nativeTokenContractId` |
 | `MAINNET` / `mainnetConfig()`  | Mainnet config — see [Mainnet](#mainnet) (two values you must supply)                    |
 | `WalletApiError`               | Thrown by the HTTP backend on non-2xx responses (has `status`, `code`)                   |
+| `CircuitOpenError`             | Thrown by the circuit breaker when the facilitator is down — see [Circuit breaking](#circuit-breaking) |
+| `isReachable(rpcUrl)`          | Ping an RPC endpoint for reachability (from `vellar-sdk/rpc`) — see [Health check](#health-check) |
+
+### Circuit breaking
+
+`createVellarWallet` wraps every call it makes to the vellar-facilitator backend
+(wallet deploy submission, reconnect lookup, and payment submission) in a
+[circuit breaker](https://en.wikipedia.org/wiki/Circuit_breaker_design_pattern)
+so a downstream outage can never turn every consumer call into a hang or a slow
+failure.
+
+It starts **closed** and simply passes calls through. After `failureThreshold`
+consecutive failures it **opens**: every further call fails immediately (no
+network hop) with a typed `CircuitOpenError` until a cooldown elapses, at which
+point it moves to **half-open** and lets a limited number of trial calls through
+to probe the downstream. A success closes it again; a failure reopens it.
+
+```ts
+import { createVellarWallet, CircuitOpenError } from "vellar-sdk";
+
+const vellar = createVellarWallet({
+  /* …config… */
+  circuitBreaker: {
+    failureThreshold: 5,   // consecutive failures before opening (default 5)
+    openDurationMs: 30_000, // how long it stays open before probing (default 30s)
+    halfOpenMaxCalls: 1,    // trial calls to let through in half-open (default 1)
+  },
+});
+
+try {
+  await vellar.pay({ to, amount, token });
+} catch (err) {
+  if (err instanceof CircuitOpenError) {
+    // The facilitator is down — surface a fast, clear error to the user instead
+    // of blocking indefinitely.
+  }
+}
+```
+
+Pass `circuitBreaker: null` to disable it entirely. The underlying
+`createCircuitBreaker` and `CircuitOpenError` are exported for advanced use.
+
+### Health check
+
+Confirm an RPC endpoint is reachable before performing wallet operations. Import
+`isReachable` from the `vellar-sdk/rpc` subpath (it pulls in
+`@stellar/stellar-sdk`, so it is not re-exported from the root):
+
+```ts
+import { isReachable } from "vellar-sdk/rpc";
+
+const health = await isReachable(config.rpcUrl, { timeoutMs: 3000 });
+if (!health.reachable) {
+  return showOffline(health.error); // typed: { reachable: false, error }
+}
+// { reachable: true, latencyMs } — safe to start the wallet flow
+```
+
+`isReachable` never throws — it resolves to a typed
+`{ reachable: true, latencyMs } | { reachable: false, error }` result, timing
+out after `timeoutMs` (default 5000ms) so a hung endpoint can't block you.
+
+### Session lifecycle
+
+A session persists across reloads (keyId resumption) and can hold long-lived
+resources, so a consumer that mounts and unmounts the wallet — a React
+component, a mobile screen, an extension's background worker — should release
+it on teardown rather than leaving dangling timers.
+
+The session store (`createSessionStore`) exposes a `dispose()` method for this.
+It clears any internal timers/listeners — including the optional background
+refresh polling — and is safe to call more than once or after disconnection:
+
+```ts
+import { createSessionStore, createMemoryStorageAdapter } from "vellar-sdk";
+
+const store = createSessionStore(createMemoryStorageAdapter(), {
+  // Optional: while connected, touch() runs every 60s to keep lastActiveAt fresh.
+  refreshIntervalMs: 60_000,
+});
+await store.getState().start(session);
+
+// In your unmount / shutdown handler:
+function onUnmount() {
+  await store.getState().end();    // clear persisted state (optional)
+  store.getState().dispose();      // stop timers, release listeners
+}
+```
+
+`dispose()` is purely a teardown of the store's internal long-lived resources;
+it does **not** clear persisted state (pair it with `end()` when you want the
+session gone entirely).
+
 
 ### Mainnet
 
@@ -309,6 +402,58 @@ signers (`createSessionKeySigner`, `createPasskeyX402Signer`), the
 `WalletConnector` interface, balances helpers (`vellar-sdk/balances`), and
 RPC-backed readers (`vellar-sdk/rpc`, imported separately so
 `@stellar/stellar-sdk` stays out of bundles that don't read balances).
+
+#### Session key rotation on re-authentication
+
+`createPasskeyKitConnector` accepts an optional `sessionKeyRotation` runtime:
+when set, every successful `connectWallet` (re-authentication) mints a fresh
+agent session key and revokes whichever key rotation last minted for that
+wallet, so a stale key from a previous session doesn't stay valid indefinitely.
+
+```ts
+import { createPasskeyKitConnector } from "vellar-sdk";
+
+const connector = createPasskeyKitConnector({
+  kit,
+  backend,
+  network: "testnet",
+  appName: "Vellar",
+  sessionKeyRotation: {
+    async mint() {
+      // Wire to the same passkey-signed admin plumbing wallet.agents.mint uses.
+      const key = Keypair.random();
+      await vellar.agents.mint({ publicKey: key.publicKey(), grants: [...] });
+      return { publicKey: key.publicKey() };
+    },
+    async revoke(publicKey) {
+      await vellar.agents.revoke(publicKey);
+    },
+  },
+  onDebugLog: (event, details) => console.debug(`[vellar] ${event}`, details),
+});
+```
+
+Rotation is best-effort and never blocks re-authentication: a mint or revoke
+failure is reported to `onDebugLog` (default: a no-op — bring your own logger)
+rather than thrown, and mint always runs before revoke so a revoke failure
+never leaves the wallet with no valid session key. Omit `sessionKeyRotation`
+for the pre-existing behaviour (no rotation).
+## API stability
+
+Exports fall into two groups:
+
+| Group | Import | Guarantee |
+| --- | --- | --- |
+| **Stable v1** | `import { createVellarWallet, TESTNET, … } from "vellar-sdk"` | Breaking changes only in major semver releases (until `2.0`). |
+| **Experimental** | `import { experimental } from "vellar-sdk"` then `experimental.createX402Client`, etc. | May change in any release — x402, agentic payments, and related helpers. |
+
+The stable v1 surface covers the wallet facade, config, backend client, balances,
+payments, policies, agent keys, session store, and transaction status helpers.
+Experimental symbols are also re-exported flat at the package root for backward
+compatibility; treat those flat imports as unstable.
+
+The canonical export lists live in `src/export-surface.ts` and are checked by
+`src/index.exports.test.ts`.
 
 ## License
 
