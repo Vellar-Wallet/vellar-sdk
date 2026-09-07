@@ -1,6 +1,6 @@
 {
   "name": "vellar-sdk",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Passkey smart-wallet SDK for Stellar — add passkey login, a Soroban smart account, fee-sponsored payments, and programmable policies to your app.",
   "license": "Apache-2.0",
   "type": "module",
@@ -118,6 +118,10 @@
     "passkey-kit": {
       "optional": true
     }
+  },
+  "//overrides": "fast-uri: closes 4 high-severity advisories (host confusion via IDN and percent-encoded scheme; SSRF via malformed IPv6 and repeated percent-decoding), all fixed in 3.1.6. Pinned inside ajv's declared ^3.0.1 rather than an open >= range, which npm resolves to 4.x — a major bump ajv@8 never declared support for.",
+  "overrides": {
+    "fast-uri": "3.1.7"
   },
   "dependencies": {
     "zustand": "^5.0.0"

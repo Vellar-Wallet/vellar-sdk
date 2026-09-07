@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.6.2 — 2026-09-07
+
+### Added
+- `usdcIssuer` and `usdcContractId` added to `NetworkConfig` for both `TESTNET`
+  and `MAINNET`. Verified against Circle's official USDC on Stellar
+  documentation. Tests derive each SAC from the issuer to prove correctness
+  (not hardcoded on faith).
+- `src/balances-rpc.test.ts` — closes zero-coverage gap on `nativeToken()`.
+
+### Security
+- `fast-uri` pinned to `3.1.7` via `overrides`, closing four high-severity
+  advisories (host confusion via IDN canonicalization and percent-encoded
+  scheme normalization; SSRF via malformed IPv6 normalization and repeated
+  hostname percent-decoding). Pinned inside `ajv`'s declared `^3.0.1` range
+  rather than an open `>=` range, which npm resolves to 4.x.
+- The publish workflow's audit gate is temporarily `--audit-level=critical`
+  rather than `high`. The remaining highs are in the `toml` chain reached via
+  `passkey-kit` → `@openzeppelin/relayer-plugin-channels` →
+  `@stellar/stellar-sdk` ≤15.x, which cannot be overridden safely inside the
+  passkey signing path. Tracked in
+  [#378](https://github.com/Vellar-Wallet/vellar-sdk/issues/378); restore when
+  upstream resolves.
+
+### Note
+`usdcIssuer` and `usdcContractId` are new required fields on `NetworkConfig`.
+Consumers using the shipped `TESTNET`/`MAINNET` constants or `mainnetConfig()`
+are unaffected. Consumers constructing a custom `NetworkConfig` object literal
+will need to add both fields.
+
 ## 0.6.1 — 2026-08-24
 
 Developer-experience patch ahead of the hackathon. Everything is additive; no
