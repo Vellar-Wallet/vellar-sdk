@@ -13,6 +13,11 @@ export interface NetworkConfig {
   walletWasmHash: string;
   /** Native asset (XLM) SAC contract id on this network. */
   nativeTokenContractId: string;
+  /** Circle's USDC issuer (G…) on this network. Pin it to tell real Circle
+   * USDC from an impostor asset that also calls itself "USDC". */
+  usdcIssuer: string;
+  /** USDC SAC contract id on this network, derived from {@link usdcIssuer}. */
+  usdcContractId: string;
 }
 
 export const TESTNET: NetworkConfig = {
@@ -22,6 +27,12 @@ export const TESTNET: NetworkConfig = {
   horizonUrl: "https://horizon-testnet.stellar.org",
   walletWasmHash: "fdefad64b96837147e1c333e51f537b696eab925e9f147e63d597c04e3c903f0",
   nativeTokenContractId: "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+  // Derived from Circle's official USDC issuer for this network. Verify against:
+  // https://www.circle.com/multi-chain-usdc/stellar
+  // A wrong contractId fails loudly (simulation error). A wrong issuer silently
+  // accepts impostor assets.
+  usdcIssuer: "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+  usdcContractId: "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
 };
 
 // ---------------------------------------------------------------------------
@@ -32,11 +43,14 @@ export const TESTNET: NetworkConfig = {
 // mainnet" wall for the values that ARE knowable, and forces the two that are
 // not to be supplied explicitly rather than guessed.
 //
-// Three fields are published by SDF / derivable and are filled below:
+// Five fields are published by SDF / Circle / derivable and are filled below:
 //   - networkPassphrase      (the canonical mainnet passphrase)
 //   - horizonUrl             (SDF's public mainnet Horizon)
 //   - nativeTokenContractId  (the XLM SAC id — deterministic, derived from the
 //     asset + mainnet passphrase; config.test verifies the derivation)
+//   - usdcIssuer             (Circle's published mainnet USDC issuer)
+//   - usdcContractId         (the USDC SAC id — deterministic, derived from the
+//     issuer + mainnet passphrase; config.test verifies the derivation)
 //
 // Two fields are DEPLOYMENT / PROVIDER-specific and are intentionally left
 // blank, because a wrong value fails SILENTLY (a bad wasm hash breaks wallet
@@ -63,6 +77,12 @@ export const MAINNET: NetworkConfig = {
   horizonUrl: "https://horizon.stellar.org",
   walletWasmHash: "",
   nativeTokenContractId: "CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA",
+  // Derived from Circle's official USDC issuer for this network. Verify against:
+  // https://www.circle.com/multi-chain-usdc/stellar
+  // A wrong contractId fails loudly (simulation error). A wrong issuer silently
+  // accepts impostor assets.
+  usdcIssuer: "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+  usdcContractId: "CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75",
 };
 
 export class MainnetConfigError extends Error {
@@ -77,7 +97,7 @@ export class MainnetConfigError extends Error {
  * cannot verify for you — your Soroban RPC provider URL and the passkey-kit
  * mainnet smart-wallet wasm hash (verified against the deployment manifest for
  * your passkey-kit version). The verified fields (passphrase, Horizon, native
- * XLM SAC id) are filled in. Throws if either required value is missing or
+ * XLM SAC id, USDC issuer and SAC id) are filled in. Throws if either required value is missing or
  * malformed, so a broken mainnet config can never be constructed silently.
  */
 export function mainnetConfig(opts: { rpcUrl: string; walletWasmHash: string }): NetworkConfig {
