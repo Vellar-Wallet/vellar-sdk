@@ -84,8 +84,8 @@ interface Backend {
 ```
 
 These forward to your server, which holds the relayer/sponsor credentials and
-submits to the network. See [Installation](./installation.md) and
-[How It Works](./how-it-works.md).
+submits to the network. See [Installation](./getting-started/installation.md) and
+[How It Works](./getting-started/how-it-works.md).
 
 ## Returns
 

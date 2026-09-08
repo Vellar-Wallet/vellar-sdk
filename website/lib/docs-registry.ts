@@ -21,13 +21,19 @@ export const DOC_PAGES: DocPage[] = [
   { slug: "hackathon", title: "Vellar × Stellar Hackathon", nav: "Hackathon", section: "Hackathon",
     description: "Hackathon tracks, judging criteria, and starter ideas for building on Vellar's x402 payment stack." },
 
-  // Getting Started
-  { slug: "introduction", title: "Introduction", nav: "Introduction", section: "Getting Started",
-    description: "What Vellar is: a hosted x402 facilitator with Bazaar discovery, on-chain spending/provenance policies, and a passkey smart wallet for Stellar." },
-  { slug: "installation", title: "Installation", nav: "Installation", section: "Getting Started",
-    description: "Install vellar-sdk from npm and set up its peer dependencies." },
-  { slug: "quickstart", title: "Quickstart", nav: "Quickstart", section: "Getting Started",
-    description: "Create a passkey smart wallet and make a fee-sponsored payment in a few minutes." },
+  // Getting Started — restructured pages under content/docs/getting-started.
+  { slug: "getting-started/introduction", title: "Introduction", nav: "Introduction",
+    section: "Getting Started",
+    description: "What Vellar is and where to start." },
+  { slug: "getting-started/how-it-works", title: "How It Works", nav: "How It Works",
+    section: "Getting Started",
+    description: "Passkeys, smart accounts, and the payment loop." },
+  { slug: "getting-started/installation", title: "Installation", nav: "Installation",
+    section: "Getting Started",
+    description: "Install the SDK and understand what your backend supplies." },
+  { slug: "getting-started/quickstart", title: "Quickstart", nav: "Quickstart",
+    section: "Getting Started",
+    description: "Create a wallet and make a payment in five minutes." },
 
   // x402 Payments — the core of the platform
   { slug: "x402", title: "x402 Agentic Payments", nav: "x402 Payments", section: "x402 Payments",
@@ -44,8 +50,6 @@ export const DOC_PAGES: DocPage[] = [
     description: "Deploy and attach spending-limit and verified-only policies enforced inside the wallet's __check_auth." },
 
   // Wallet & Passkeys — one pillar, not the whole story
-  { slug: "how-it-works", title: "How It Works", nav: "How it works", section: "Wallet & Passkeys",
-    description: "Passkey onboarding, Soroban smart-contract accounts, sponsored submission, and programmable policies." },
   { slug: "wallet-methods", title: "Wallet Methods", nav: "Wallet methods", section: "Wallet & Passkeys",
     description: "Every method on the wallet handle: create, connect, pay, balances, transaction status, and sessions." },
   { slug: "security", title: "Security", nav: "Security", section: "Wallet & Passkeys",
@@ -62,22 +66,6 @@ export const DOC_PAGES: DocPage[] = [
     description: "Configuration reference for createVellarWallet and the runtime seams it accepts." },
   { slug: "advanced", title: "Advanced Usage", nav: "Advanced", section: "Reference",
     description: "Lower-level building blocks the SDK exports for custom transports and integrations." },
-
-  // Getting Started (new) — restructured pages under content/docs/getting-started.
-  // Registered alongside the existing flat pages for the review period; the old
-  // pages are removed and this section renamed in a follow-up.
-  { slug: "getting-started/introduction", title: "Introduction", nav: "Introduction",
-    section: "Getting Started (new)",
-    description: "What Vellar is and where to start." },
-  { slug: "getting-started/how-it-works", title: "How It Works", nav: "How It Works",
-    section: "Getting Started (new)",
-    description: "Passkeys, smart accounts, and the payment loop." },
-  { slug: "getting-started/installation", title: "Installation", nav: "Installation",
-    section: "Getting Started (new)",
-    description: "Install the SDK and understand what your backend supplies." },
-  { slug: "getting-started/quickstart", title: "Quickstart", nav: "Quickstart",
-    section: "Getting Started (new)",
-    description: "Create a wallet and make a payment in five minutes." },
 ];
 
 /** Sections in sidebar order, derived from DOC_PAGES. */

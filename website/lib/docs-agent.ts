@@ -16,8 +16,8 @@ export const SITE_URL = "https://docs.vellar.xyz";
  * references. Shares one implementation with the HTML renderer so the two
  * cannot drift apart on which link forms they understand.
  */
-export function rewriteLinksAbsolute(raw: string): string {
-  return rewriteRelativeLinks(raw, `${SITE_URL}/docs`);
+export function rewriteLinksAbsolute(raw: string, fromSlug = ""): string {
+  return rewriteRelativeLinks(raw, `${SITE_URL}/docs`, fromSlug);
 }
 
 /**
@@ -38,7 +38,7 @@ export function pagePreamble(page: DocPage): string {
 
 /** A single page formatted for an agent: preamble + absolute links, H1 kept. */
 export function toAgentMarkdown(page: DocPage, raw: string): string {
-  return pagePreamble(page) + rewriteLinksAbsolute(raw);
+  return pagePreamble(page) + rewriteLinksAbsolute(raw, page.slug);
 }
 
 /** The llms.txt index: title, blurb, and a link per page grouped by section. */
@@ -82,7 +82,7 @@ export function buildLlmsFull(
   const body = pages
     .map(
       (p) =>
-        `<!-- Source: ${SITE_URL}/docs/${p.slug} -->\n\n${rewriteLinksAbsolute(read(p.slug))}`,
+        `<!-- Source: ${SITE_URL}/docs/${p.slug} -->\n\n${rewriteLinksAbsolute(read(p.slug), p.slug)}`,
     )
     .join("\n\n---\n\n");
   return `${header}\n${body}\n`;

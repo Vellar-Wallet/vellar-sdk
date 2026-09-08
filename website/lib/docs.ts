@@ -22,20 +22,34 @@ export function readDocSource(slug: string): string {
 /**
  * Rewrite in-repo relative markdown links to routes under `base`.
  *
- * Three authored forms are supported, each optionally carrying an #anchor:
- *   ./foo.md              → <base>/foo            (sibling page)
- *   ../section/foo.md     → <base>/section/foo    (page in another section dir)
- *   ../foo.md             → <base>/foo            (page at the docs root)
+ * Links are resolved against `fromSlug` — the slug of the page being rendered —
+ * exactly the way a relative path works on disk, so a link means the same thing
+ * whether the page sits at the docs root or inside a section directory:
  *
- * Slugs can carry digits (x402), so the character class is [a-z0-9-]. Shared by
- * the HTML renderer and the agent-facing copies so both stay consistent — a
- * link form handled in only one of them renders correctly on the site while
- * arriving raw in llms.txt.
+ *   from "x402"                  ./facilitator.md          → <base>/facilitator
+ *   from "getting-started/setup" ./quickstart.md           → <base>/getting-started/quickstart
+ *   from "getting-started/setup" ../x402.md                → <base>/x402
+ *   from "x402"                  ./getting-started/intro.md → <base>/getting-started/intro
+ *
+ * Path segments can carry digits (x402), so the class is [a-z0-9-]; an optional
+ * #anchor is preserved. Shared by the HTML renderer and the agent-facing copies
+ * so both stay consistent — a link form handled in only one of them renders
+ * correctly on the site while arriving raw in llms.txt.
  */
-export function rewriteRelativeLinks(raw: string, base: string): string {
-  return raw
-    .replace(/\]\(\.\.\/([a-z0-9-]+)\/([a-z0-9-]+)\.md(#[a-z0-9-]+)?\)/gi, `](${base}/$1/$2$3)`)
-    .replace(/\]\((?:\.\.|\.)\/([a-z0-9-]+)\.md(#[a-z0-9-]+)?\)/gi, `](${base}/$1$2)`);
+export function rewriteRelativeLinks(raw: string, base: string, fromSlug = ""): string {
+  const dir = fromSlug.includes("/") ? fromSlug.slice(0, fromSlug.lastIndexOf("/")) : "";
+  return raw.replace(
+    /\]\((\.{1,2}\/(?:[a-z0-9-]+\/)*[a-z0-9-]+)\.md(#[a-z0-9-]+)?\)/gi,
+    (_m, rel: string, anchor = "") => {
+      const segments = dir ? dir.split("/") : [];
+      for (const part of rel.split("/")) {
+        if (part === ".") continue;
+        else if (part === "..") segments.pop();
+        else segments.push(part);
+      }
+      return `](${base}/${segments.join("/")}${anchor})`;
+    },
+  );
 }
 
 export function getDocMarkdown(slug: string): string {
@@ -44,5 +58,5 @@ export function getDocMarkdown(slug: string): string {
   // top-level "# Title" — the page renders its own title from the registry.
   // Both sibling (./foo.md) and parent-relative (../section/foo.md) forms are
   // handled; the latter is how a page inside a section directory links out.
-  return rewriteRelativeLinks(raw, "/docs").replace(/^#\s+.+\n/, "");
+  return rewriteRelativeLinks(raw, "/docs", slug).replace(/^#\s+.+\n/, "");
 }
