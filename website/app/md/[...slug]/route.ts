@@ -7,15 +7,15 @@ import { DOC_PAGES } from "@/lib/docs-registry";
 export const dynamic = "force-static";
 
 export function generateStaticParams() {
-  return DOC_PAGES.map((p) => ({ slug: p.slug }));
+  return DOC_PAGES.map((p) => ({ slug: p.slug.split("/") }));
 }
 
 export async function GET(
   _req: Request,
-  { params }: { params: Promise<{ slug: string }> },
+  { params }: { params: Promise<{ slug: string[] }> },
 ) {
   const { slug } = await params;
-  const markdown = getAgentMarkdown(slug);
+  const markdown = getAgentMarkdown(slug.join("/"));
   if (!markdown) return new Response("Not found", { status: 404 });
   return new Response(markdown, {
     headers: { "Content-Type": "text/markdown; charset=utf-8" },

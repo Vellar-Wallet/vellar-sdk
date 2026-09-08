@@ -5,17 +5,19 @@
 // The pure transforms take content as arguments (no fs) so they are unit-
 // testable; the get* wrappers below bind them to the filesystem.
 
-import { readDocSource } from "./docs";
+import { readDocSource, rewriteRelativeLinks } from "./docs";
 import { DOC_PAGES, DOC_SECTIONS, getDocPage, type DocPage } from "./docs-registry";
 
 export const SITE_URL = "https://docs.vellar.xyz";
 
 /**
- * Rewrite in-repo relative links (./foo.md, ./foo.md#anchor) to absolute
- * site URLs, so a copied page still lets an agent follow references.
+ * Rewrite in-repo relative links (./foo.md, ../section/foo.md, either with an
+ * #anchor) to absolute site URLs, so a copied page still lets an agent follow
+ * references. Shares one implementation with the HTML renderer so the two
+ * cannot drift apart on which link forms they understand.
  */
 export function rewriteLinksAbsolute(raw: string): string {
-  return raw.replace(/\]\(\.\/([a-z0-9-]+)\.md(#[a-z0-9-]+)?\)/gi, `](${SITE_URL}/docs/$1$2)`);
+  return rewriteRelativeLinks(raw, `${SITE_URL}/docs`);
 }
 
 /**

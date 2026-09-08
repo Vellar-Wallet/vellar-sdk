@@ -62,6 +62,22 @@ export const DOC_PAGES: DocPage[] = [
     description: "Configuration reference for createVellarWallet and the runtime seams it accepts." },
   { slug: "advanced", title: "Advanced Usage", nav: "Advanced", section: "Reference",
     description: "Lower-level building blocks the SDK exports for custom transports and integrations." },
+
+  // Getting Started (new) — restructured pages under content/docs/getting-started.
+  // Registered alongside the existing flat pages for the review period; the old
+  // pages are removed and this section renamed in a follow-up.
+  { slug: "getting-started/introduction", title: "Introduction", nav: "Introduction",
+    section: "Getting Started (new)",
+    description: "What Vellar is and where to start." },
+  { slug: "getting-started/how-it-works", title: "How It Works", nav: "How It Works",
+    section: "Getting Started (new)",
+    description: "Passkeys, smart accounts, and the payment loop." },
+  { slug: "getting-started/installation", title: "Installation", nav: "Installation",
+    section: "Getting Started (new)",
+    description: "Install the SDK and understand what your backend supplies." },
+  { slug: "getting-started/quickstart", title: "Quickstart", nav: "Quickstart",
+    section: "Getting Started (new)",
+    description: "Create a wallet and make a payment in five minutes." },
 ];
 
 /** Sections in sidebar order, derived from DOC_PAGES. */

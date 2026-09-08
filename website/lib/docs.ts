@@ -19,12 +19,30 @@ export function readDocSource(slug: string): string {
   return readFileSync(join(CONTENT_DIR, `${slug}.md`), "utf8");
 }
 
+/**
+ * Rewrite in-repo relative markdown links to routes under `base`.
+ *
+ * Three authored forms are supported, each optionally carrying an #anchor:
+ *   ./foo.md              → <base>/foo            (sibling page)
+ *   ../section/foo.md     → <base>/section/foo    (page in another section dir)
+ *   ../foo.md             → <base>/foo            (page at the docs root)
+ *
+ * Slugs can carry digits (x402), so the character class is [a-z0-9-]. Shared by
+ * the HTML renderer and the agent-facing copies so both stay consistent — a
+ * link form handled in only one of them renders correctly on the site while
+ * arriving raw in llms.txt.
+ */
+export function rewriteRelativeLinks(raw: string, base: string): string {
+  return raw
+    .replace(/\]\(\.\.\/([a-z0-9-]+)\/([a-z0-9-]+)\.md(#[a-z0-9-]+)?\)/gi, `](${base}/$1/$2$3)`)
+    .replace(/\]\((?:\.\.|\.)\/([a-z0-9-]+)\.md(#[a-z0-9-]+)?\)/gi, `](${base}/$1$2)`);
+}
+
 export function getDocMarkdown(slug: string): string {
   const raw = readDocSource(slug);
-  // Rewrite in-repo relative links (./foo.md, ./foo.md#anchor) to /docs routes,
-  // and strip the leading top-level "# Title" — the page renders its own title
-  // from the registry. Slugs can carry digits (x402), so the class is [a-z0-9-].
-  return raw
-    .replace(/\]\(\.\/([a-z0-9-]+)\.md(#[a-z0-9-]+)?\)/gi, "](/docs/$1$2)")
-    .replace(/^#\s+.+\n/, "");
+  // Rewrite in-repo relative links to /docs routes, and strip the leading
+  // top-level "# Title" — the page renders its own title from the registry.
+  // Both sibling (./foo.md) and parent-relative (../section/foo.md) forms are
+  // handled; the latter is how a page inside a section directory links out.
+  return rewriteRelativeLinks(raw, "/docs").replace(/^#\s+.+\n/, "");
 }

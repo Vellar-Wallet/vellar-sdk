@@ -5,24 +5,26 @@ import { DOC_PAGES, getDocMarkdown, getDocPage } from "@/lib/docs";
 import { CopyForAgentButton } from "../copy-button";
 import { Markdown } from "../markdown";
 
-// Statically generate one page per doc in the registry.
+// Statically generate one page per doc in the registry. A catch-all route, so
+// a nested slug ("getting-started/quickstart") arrives as path segments.
 export function generateStaticParams() {
-  return DOC_PAGES.map((p) => ({ slug: p.slug }));
+  return DOC_PAGES.map((p) => ({ slug: p.slug.split("/") }));
 }
 
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ slug: string }>;
+  params: Promise<{ slug: string[] }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const page = getDocPage(slug);
+  const page = getDocPage(slug.join("/"));
   if (!page) return { title: "Docs — Vellar SDK" };
   return { title: `${page.title} — Vellar SDK`, description: page.description };
 }
 
-export default async function DocPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
+export default async function DocPage({ params }: { params: Promise<{ slug: string[] }> }) {
+  const { slug: segments } = await params;
+  const slug = segments.join("/");
   const page = getDocPage(slug);
   if (!page) notFound();
 
