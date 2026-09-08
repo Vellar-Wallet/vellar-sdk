@@ -1,4 +1,4 @@
-# @vellar/mcp-x402-payer
+# vellar-mcp-x402-payer
 
 An MCP server that lets an AI agent **pay** for [x402](https://x402.org) (HTTP-402)
 resources on Stellar. It runs locally beside the agent over stdio and holds
@@ -73,7 +73,7 @@ tells the model that retrying with a larger `max_amount` will not help.
 ## Install
 
 ```sh
-npm install @vellar/mcp-x402-payer
+npm install vellar-mcp-x402-payer
 ```
 
 ## Configure
@@ -116,7 +116,7 @@ different decimals and would fail **open** on a cheaply-denominated asset.
   "mcpServers": {
     "vellar-x402-payer": {
       "command": "npx",
-      "args": ["-y", "@vellar/mcp-x402-payer"],
+      "args": ["-y", "vellar-mcp-x402-payer"],
       "env": {
         "VELLAR_X402_SECRET_FILE": "/run/secrets/x402-payer-key",
         "VELLAR_X402_ASSETS": "CBIN4HTPJM2QLJ32DTRO6OCLIMM7TR7D74JDIPVQYLNYGL7SBWOXH5ND:5000000",

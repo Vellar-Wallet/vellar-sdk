@@ -29,6 +29,41 @@ refuses the transaction if it tries — this isn't a promise the facilitator
 makes, it's a bound the contract enforces regardless of what the facilitator
 does.
 
+### For sellers
+
+To accept metered payments, register the `upto` scheme on your resource server:
+
+```ts
+import { UptoStellarScheme } from "@x402/stellar/upto/server";
+
+server.register("stellar:testnet",
+  new UptoStellarScheme({
+    contractId: "CDHPA64M73TUTEM4MMHIWIXINBQXH7JJXFGZMGH22VJWFJFROMR6QV2S"
+  })
+);
+```
+
+Declare the route's `amount` as the **ceiling** — the maximum the buyer
+authorizes, not what you charge:
+
+```ts
+amount: "1000000",  // buyer authorizes up to 1.0 USDC
+```
+
+After serving the resource, supply the actual metered amount in
+`extra.actualAmount`:
+
+```ts
+extra: { actualAmount: "250000" }  // buyer pays 0.25 USDC
+```
+
+**Omit `actualAmount` and the facilitator settles the full ceiling** — a silent
+overcharge, not an error.
+
+`wallet.x402` cannot pay `upto` yet. Sellers accepting only `upto` cannot be
+paid by SDK buyers today. Advertise both schemes until `upto` wallet support
+lands.
+
 ## Using it
 
 `GET /supported` now advertises both schemes for `stellar:testnet`:

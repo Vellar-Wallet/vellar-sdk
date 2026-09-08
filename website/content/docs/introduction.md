@@ -89,6 +89,10 @@ wallet-infrastructure experts, teams who want programmable, on-chain security
 bypassed, and anyone building AI agents that need to transact under limits
 they can trust.
 
+Adding payments to an endpoint you already have? The [VS Code
+extension](./vscode.md) gates a route with x402 in one command, without
+leaving your editor.
+
 ## Status
 
 Early and evolving. **Testnet-ready**; mainnet is gated on remaining

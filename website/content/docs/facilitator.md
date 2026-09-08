@@ -130,12 +130,75 @@ Soroban smart accounts are supported.
 | `POST /verify` | Verify a payment by re-simulation (runs the payer's `__check_auth`, including any policy) |
 | `POST /settle` | Submit on-chain, fee-sponsored |
 | `GET /supported` | Advertised scheme, network, extensions, signer addresses |
-| `GET /discovery/resources` | List cataloged x402 resources — filters: `type`, `payTo`, `scheme`, `network`, `extensions`, `verified_only`; `limit`/`offset` pagination |
-| `GET /discovery/search` | Keyword search over the catalog — token-scored relevance ranking (not semantic); `query` plus the same filters as list, cursor pagination |
+| `GET /discovery/resources` | List cataloged x402 resources — [full reference](#get-discoveryresources) |
+| `GET /discovery/search` | Keyword search over the catalog — token-scored relevance ranking (not semantic); [full reference](#get-discoverysearch) |
 | `GET /health` | Liveness; also reports `catalogFrozen` if the catalog has stopped accepting writes |
 
 Wire-compatible with the canonical x402 clients — `HTTPFacilitatorClient`
 and the `withBazaar` extension work unmodified.
+
+### areFeesSponsored
+
+`areFeesSponsored: true` in a kind's `extra` object means the facilitator pays
+the Stellar network fee from its own sponsor account. The buyer needs no XLM —
+this is what makes a zero-XLM smart account payable.
+
+Both schemes on the Vellar facilitator advertise `areFeesSponsored: true`.
+Confirmed from the live `/supported` response:
+
+```json
+{"x402Version":2,"scheme":"exact","network":"stellar:testnet",
+ "extra":{"areFeesSponsored":true}}
+{"x402Version":2,"scheme":"upto","network":"stellar:testnet",
+ "extra":{"uptoContract":"CDHPA64M…QV2S","areFeesSponsored":true}}
+```
+
+The SDK reads this during option selection and throws
+`NoUsablePaymentOptionError` if no option advertises it. Clients building their
+own transport must perform the same check.
+
+### GET /discovery/resources
+
+| Parameter | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `type` | string | — | |
+| `payTo` | string | — | |
+| `scheme` | string | — | `exact` or `upto` |
+| `network` | string | — | |
+| `extensions` | string | — | |
+| `asset` | string | — | max 56 chars |
+| `verified_only` | `"true"` | — | 400 if no verdict source |
+| `limit` | number | 20 | max 100 |
+| `offset` | number | 0 | |
+
+Response:
+
+```json
+{
+  "x402Version": 2,
+  "items": [...],
+  "pagination": {"limit":20,"offset":0,"total":8}
+}
+```
+
+### GET /discovery/search
+
+Same filters except no `offset` and no `asset`. `query` is required — an empty
+string returns 400. Cursor-paginated.
+
+Response:
+
+```json
+{
+  "x402Version": 2,
+  "resources": [...],
+  "partialResults": true,
+  "pagination": {"limit":20,"cursor":"<base64url or null>"}
+}
+```
+
+Pass `pagination.cursor` as `cursor` in the next request. A null cursor means no
+more results. The cursor is invalidated if filters change between pages.
 
 `/verify` and `/settle` accept two schemes: `exact` (price known and signed
 upfront — what everything on this page assumes) and the experimental
@@ -160,6 +223,10 @@ const server = new x402ResourceServer(
 ).register("stellar:testnet", new ExactStellarScheme());
 ```
 
+> **Adding a gate to an endpoint you already have?** The [VS Code
+> extension](./vscode.md) injects this wiring into a route you pick, in one
+> command — same boilerplate, without writing it by hand.
+
 Declare the **bazaar discovery extension** on a route and your resource is
 cataloged automatically after its first settled payment — no registration
 step — making it findable by agents:
@@ -175,6 +242,33 @@ server.registerExtension(bazaarResourceServerExtension);
 //     output: { example: { quote: "..." } },
 //   })
 ```
+
+### Route templates
+
+A `routeTemplate` declares the URL shape of a parameterized route so agents can
+construct a call rather than replay a fixed URL:
+
+```ts
+extensions: declareDiscoveryExtension({
+  routeTemplate: "/inspect/{address}",
+  input: { address: "GABC..." },
+  inputSchema: {
+    properties: {
+      address: { type: "string", description: "Stellar address" }
+    }
+  },
+  output: { example: { balance: "10.0" } },
+})
+```
+
+Validation is handled by `extractDiscoveryInfo` from `@x402/extensions`. Invalid
+or unsafe templates are dropped silently — cataloging never affects settlement.
+A dropped template surfaces as `schema_validation_failed` in the
+[`extension-responses`](#extension-responses-header) header.
+
+Templated routes are kept in the catalog but are permanently
+`ownerVerified: false` — they are not fetchable URLs, so Layer 2 verification
+cannot confirm them.
 
 Listing metadata is sanitized at ingest (matching the upstream
 `@x402/extensions` rules): `serviceName` must be printable ASCII, max 64
@@ -204,6 +298,30 @@ into your payment payload** — that echo is what tells the facilitator to
 catalog the resource. Skip it and the payment settles fine, but nothing gets
 listed, with no error on either side.
 
+### extension-responses header
+
+On a successful `/settle`, the facilitator returns a lowercase
+`extension-responses` header. Its value is a JSON object keyed by extension
+name:
+
+```json
+{"bazaar":{"cataloged":true}}
+{"bazaar":{"cataloged":false,"reason":"unbound_payto"}}
+```
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `bazaar.cataloged` | boolean | Whether the resource entered the catalog |
+| `bazaar.reason` | string (omitted when cataloged) | Why cataloging was skipped |
+
+Reason values: `no_discovery_extension`, `invalid_payto`,
+`ownership_tombstone_mismatch`, `unbound_payto`, `schema_validation_failed`,
+`binding_refused`, `invalid_tool_name`, `cataloging_error`.
+
+The header is absent on non-settle paths (400s, 402 challenges). Clients that
+echoed `required.extensions` should read this header to confirm cataloging
+happened — a settlement can succeed while cataloging fails.
+
 ## Discovery (Bazaar)
 
 Agents can find payable resources instead of being hardcoded with URLs. Each
@@ -222,10 +340,39 @@ const { items } = await bazaar.listResources({ network: "stellar:testnet" });
 const { resources } = await bazaar.search({ query: "weather data api" });
 ```
 
-For AI agents there is also an **MCP discovery server** exposing
-`x402_list_resources` and `x402_search_resources` as tools — see the
-[repo README](https://github.com/Vellar-Wallet/vellar-facilitator#mcp-discovery-server-for-ai-agents)
-for the client config.
+### MCP discovery server
+
+The facilitator ships `vellar-facilitator-discovery`, an MCP stdio server
+exposing Bazaar as agent tools. AI agents can search for payable resources
+without hardcoded URLs.
+
+```json
+{
+  "mcpServers": {
+    "vellar-x402-discovery": {
+      "command": "npx",
+      "args": ["tsx", "src/mcp.ts"],
+      "cwd": "/path/to/vellar-facilitator",
+      "env": {
+        "FACILITATOR_URL": "https://vellar-facilitator.onrender.com"
+      }
+    }
+  }
+}
+```
+
+**`x402_list_resources`** — list cataloged resources. Parameters: `type`
+(`http` | `mcp`), `payTo`, `network`, `limit` (1–100), `verified_only`,
+`offset`.
+
+**`x402_search_resources`** — keyword search. Parameters: `query` (required),
+the same filters, and `cursor` for pagination.
+
+The facilitator runs on a free tier — the first tool call after idle may take up
+to a minute.
+
+Paying for what you find is a separate server that holds a key — see the
+[MCP payer](./mcp-payer.md).
 
 ## Running the full loop
 

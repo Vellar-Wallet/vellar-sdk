@@ -47,6 +47,7 @@ interface VellarWalletConfig {
 | `policyAttach?` | `PolicyAttachRuntime` | Passkey-attach runtime for `wallet.policies.deploy()`; without it read/generate/simulate work but deploy throws. See [Policies](./policies.md#enabling-policies). |
 | `agentKeys?` | `AgentKeyRuntime` | Passkey-signed wallet-admin runtime for `wallet.agents` (mint/revoke agent session keys). See [Agent Keys](./agent-keys.md). |
 | `x402?` | `{ signer, simulationSourceAccount, rpcUrl?, fetchImpl?, expirationLedgerOffset? }` | Enables `wallet.x402` agentic payments. A valid RPC URL is required (here or top-level `rpcUrl`) — from 0.6.1, construction throws `X402NotConfiguredError` otherwise. See [x402](./x402.md#enabling-x402). |
+| `x402.expirationLedgerOffset?` | `number` | Number of ledgers added to the current ledger when setting auth entry expiration. Raise for flows with slow human confirmation; lower to shrink the replay window. See [Auth entry expiration](./x402.md#auth-entry-expiration). |
 | `rpcUrl?` | `string` | RPC URL for x402 simulation when `x402.rpcUrl` isn't given, e.g. `https://soroban-testnet.stellar.org`. |
 
 <!-- TODO(docs): this page documents createVellarWallet's config only. Real,

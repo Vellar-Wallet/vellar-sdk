@@ -51,6 +51,12 @@ export const DOC_PAGES: DocPage[] = [
   { slug: "security", title: "Security", nav: "Security", section: "Wallet & Passkeys",
     description: "The wallet and SDK security model: no key custody, no silent signing, and the on-chain policy guarantees." },
 
+  // Tools
+  { slug: "vscode", title: "VS Code Extension", nav: "VS Code extension", section: "Tools",
+    description: "Add x402 payment gating to an HTTP endpoint in one command from VS Code." },
+  { slug: "mcp-payer", title: "MCP Payer", nav: "MCP payer", section: "Tools",
+    description: "An MCP server that lets an AI agent pay for x402 resources, with process-level and on-chain budget layers." },
+
   // Reference
   { slug: "api-reference", title: "API Reference", nav: "createVellarWallet", section: "Reference",
     description: "Configuration reference for createVellarWallet and the runtime seams it accepts." },
