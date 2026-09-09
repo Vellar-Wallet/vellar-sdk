@@ -123,7 +123,7 @@ const { response, paid, settlement } = await vellar.x402.fetch(
   },
 );
 
-if (paid) {
+if (paid && settlement) {
   console.log("settled on-chain:", settlement.transaction);
 }
 const data = await response.json(); // the unlocked resource

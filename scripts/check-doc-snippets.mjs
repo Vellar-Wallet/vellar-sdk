@@ -21,7 +21,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const PAGES = ["website/content/docs/quickstart.md"];
+const PAGES = ["website/content/docs/getting-started/quickstart.md"];
 
 const outDir = path.join(root, ".doc-snippets");
 rmSync(outDir, { recursive: true, force: true });
