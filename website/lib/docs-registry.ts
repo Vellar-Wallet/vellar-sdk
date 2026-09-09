@@ -35,6 +35,20 @@ export const DOC_PAGES: DocPage[] = [
     section: "Getting Started",
     description: "Create a wallet and make a payment in five minutes." },
 
+  // Buyers — the paying side of the x402 loop.
+  { slug: "buyers/pay-for-a-resource", title: "Pay for a Resource",
+    nav: "Pay for a Resource", section: "Buyers",
+    description: "Pay an x402 resource from a Vellar smart account." },
+  { slug: "buyers/sign-and-pay", title: "Sign and Pay", nav: "Sign and Pay",
+    section: "Buyers",
+    description: "How the x402 payment loop works step by step." },
+  { slug: "buyers/discover-services", title: "Discover Services",
+    nav: "Discover Services", section: "Buyers",
+    description: "Search the Bazaar to find x402 resources." },
+  { slug: "buyers/spend-controls", title: "Spend Controls", nav: "Spend Controls",
+    section: "Buyers",
+    description: "maxAmount vs the on-chain spending-limit policy." },
+
   // x402 Payments — the core of the platform
   { slug: "x402", title: "x402 Agentic Payments", nav: "x402 Payments", section: "x402 Payments",
     description: "Pay HTTP-402 resources from a smart account with wallet.x402.fetch() — the give-your-agent-a-budget-not-your-keys flow." },
