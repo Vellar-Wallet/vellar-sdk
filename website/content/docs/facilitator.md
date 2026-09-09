@@ -153,7 +153,7 @@ Confirmed from the live `/supported` response:
 {"x402Version":2,"scheme":"exact","network":"stellar:testnet",
  "extra":{"areFeesSponsored":true}}
 {"x402Version":2,"scheme":"upto","network":"stellar:testnet",
- "extra":{"uptoContract":"CDHPA64M…QV2S","areFeesSponsored":true}}
+ "extra":{"uptoContract":"CCZL7CTRS…4YQAN","areFeesSponsored":true}}
 ```
 
 The SDK reads this during option selection and throws

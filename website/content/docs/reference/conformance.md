@@ -180,17 +180,11 @@ hash is reproducible from that tree rather than only from the deployed
 artifact. Build it with rustc 1.96.0 and stellar-cli 26.1.0, targeting
 `wasm32v1-none`.
 
-> **Note:** The hosted facilitator has not been redeployed against this contract
-> yet, so `GET /supported` still advertises the earlier
-> `CDHPA64M73TUTEM4MMHIWIXINBQXH7JJXFGZMGH22VJWFJFROMR6QV2S`. Read that field
-> rather than assuming either value.
-
 The facilitator repo also retains `contracts/upto-stellar/`, a vendored
 Apache-2.0 copy of rail402's contract at commit
 `ff504b85ac065369dc985759afe4164a4541d861`, kept for reference. Its wasm hashes
-to `c276b905981eab91704ce9b9046ebb4867b164dd7e4ba0e0ecda841527d398a9`, which is
-what the hosted facilitator serves today. The same source built by its upstream
-author, testnet contract
+to `c276b905981eab91704ce9b9046ebb4867b164dd7e4ba0e0ecda841527d398a9`. The same
+source built by its upstream author, testnet contract
 `CCMM3FMGEH7FHRYXZ3WQDQCTIWDXGZBGW7D4UT7NKH34SUQACYC3U54X`, hashes to
 `a19f563e764dfd52a0d229c063e7ac1a1b36f6a976f552a8e19b91ee8e4ef84a` instead,
 because it was built with stellar CLI 27.0.0, the version stamped in its wasm

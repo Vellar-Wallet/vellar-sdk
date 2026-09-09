@@ -54,9 +54,7 @@ verifiable:
 | Wasm sha256 | `92365d9e5effe046a1db5b959bd2357672aef3f4b2137653c8095a0764d1f6c8` | `c276b905981eab91704ce9b9046ebb4867b164dd7e4ba0e0ecda841527d398a9` |
 | Deployed | 2026-09-09 | 2026-08-21 |
 
-> **Note:** The hosted facilitator has not been redeployed against
-> `upto-vellar` yet, so it still serves the `upto-stellar` contract id in
-> `GET /supported`. Read that field rather than assuming either value.
+`upto-vellar` is what the hosted facilitator serves in `GET /supported`.
 
 ## Version signals in these docs
 

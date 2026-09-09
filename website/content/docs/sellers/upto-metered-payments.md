@@ -31,7 +31,7 @@ import { UptoStellarScheme } from "@x402/stellar/upto/server";
 server.register(
   "stellar:testnet",
   new UptoStellarScheme({
-    contractId: "CDHPA64M73TUTEM4MMHIWIXINBQXH7JJXFGZMGH22VJWFJFROMR6QV2S",
+    contractId: "CCZL7CTRS6GWEYXDYD54DZM3OUHQW2S2A4KSU75SH275P3SFZLL4YQAN",
   })
 );
 ```
@@ -104,7 +104,7 @@ server
   .register(
     "stellar:testnet",
     new UptoStellarScheme({
-      contractId: "CDHPA64M73TUTEM4MMHIWIXINBQXH7JJXFGZMGH22VJWFJFROMR6QV2S",
+      contractId: "CCZL7CTRS6GWEYXDYD54DZM3OUHQW2S2A4KSU75SH275P3SFZLL4YQAN",
     })
   );
 ```

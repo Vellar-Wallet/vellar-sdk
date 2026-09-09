@@ -38,7 +38,7 @@ import { UptoStellarScheme } from "@x402/stellar/upto/server";
 
 server.register("stellar:testnet",
   new UptoStellarScheme({
-    contractId: "CDHPA64M73TUTEM4MMHIWIXINBQXH7JJXFGZMGH22VJWFJFROMR6QV2S"
+    contractId: "CCZL7CTRS6GWEYXDYD54DZM3OUHQW2S2A4KSU75SH275P3SFZLL4YQAN"
   })
 );
 ```
@@ -76,7 +76,7 @@ lands.
       "scheme": "upto",
       "network": "stellar:testnet",
       "extra": {
-        "uptoContract": "CDHPA64M73TUTEM4MMHIWIXINBQXH7JJXFGZMGH22VJWFJFROMR6QV2S",
+        "uptoContract": "CCZL7CTRS6GWEYXDYD54DZM3OUHQW2S2A4KSU75SH275P3SFZLL4YQAN",
         "areFeesSponsored": true
       }
     }
@@ -196,11 +196,6 @@ page — every value below is independently checkable.
 | Deployed | 2026-09-09, from the facilitator repo's own sponsor account |
 | First settlement | `be33bb71b0a2c74c465bf0243c45e081bc7c5b66a337e2d8a5c0bbb82f54ede6`, ledger 4587956, 0.01 USDC settled against a 0.05 USDC ceiling |
 
-> **Note:** The hosted facilitator has not been redeployed against this contract
-> yet, so `GET /supported` still advertises the earlier
-> `CDHPA64M73TUTEM4MMHIWIXINBQXH7JJXFGZMGH22VJWFJFROMR6QV2S`. Read that field
-> rather than assuming either value.
-
 The on-chain wasm hash is the sha256 of the wasm, so anyone can rebuild and
 compare:
 
@@ -216,9 +211,8 @@ Built with rustc 1.96.0 and stellar-cli 26.1.0, targeting `wasm32v1-none`.
 The facilitator repo also retains `contracts/upto-stellar/`, a vendored
 Apache-2.0 copy of [rail402](https://github.com/tolgayayci/rail402)'s contract
 at commit `ff504b85ac065369dc985759afe4164a4541d861`, kept for reference. Its
-wasm hashes to `c276b905981eab91704ce9b9046ebb4867b164dd7e4ba0e0ecda841527d398a9`,
-and that is what the hosted facilitator serves today. The same source built by
-its upstream author, testnet contract
+wasm hashes to `c276b905981eab91704ce9b9046ebb4867b164dd7e4ba0e0ecda841527d398a9`.
+The same source built by its upstream author, testnet contract
 `CCMM3FMGEH7FHRYXZ3WQDQCTIWDXGZBGW7D4UT7NKH34SUQACYC3U54X`, hashes to
 `a19f563e764dfd52a0d229c063e7ac1a1b36f6a976f552a8e19b91ee8e4ef84a` instead,
 because it was built with stellar CLI 27.0.0, the version stamped in its wasm
