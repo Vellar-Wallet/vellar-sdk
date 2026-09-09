@@ -160,32 +160,29 @@ a {
   color: var(--sun);
 }
 
-/* Body: sidebar + content */
+/* Body: sidebar + content. Full-bleed — the sidebar is pinned to the viewport's
+   left edge the way a docs site expects, so no centering max-width here. The
+   reading measure is held by .docs-article instead, not by narrowing the shell. */
 .docs-body {
   display: flex;
   align-items: flex-start;
-  max-width: 1200px;
-  margin: 0 auto;
 }
+/* Flush-left rail. The border is a plain border-right, NOT the two-layer
+   clip-path trick used elsewhere: that draws its fill with an
+   `inset: 0` ::before, which in a scrolling container sizes to the visible box
+   rather than the scroll height — so once the nav overflowed, everything below
+   the first viewport lost its fill and showed the bare border colour. */
 .docs-sidebar {
   position: sticky;
-  top: 76px;
+  top: 64px;
   flex-shrink: 0;
-  width: 250px;
-  height: calc(100vh - 64px - 24px);
-  margin: 12px 0 12px 12px;
+  width: 268px;
+  height: calc(100vh - 64px);
   overflow-y: auto;
-  padding: 24px 14px;
-  background: var(--line-strong); /* the 1px border */
-  clip-path: var(--side-clip);
-}
-.docs-sidebar::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
+  overscroll-behavior: contain;
+  padding: 28px 20px 40px 24px;
   background: var(--paper);
-  clip-path: var(--side-clip-in);
+  border-right: 1px solid var(--line-strong);
 }
 .docs-nav-group {
   margin-bottom: 22px;
@@ -241,8 +238,12 @@ a {
   min-width: 0;
   padding: 40px clamp(20px, 5vw, 64px) 96px;
 }
+/* The shell is full-bleed, so the reading measure lives here. Centring inside
+   the content column keeps line length comfortable on a wide display instead of
+   pinning the text to the sidebar with dead space on the right. */
 .docs-article {
-  max-width: 760px;
+  max-width: 860px;
+  margin: 0 auto;
 }
 .docs-title {
   font-family: var(--display);

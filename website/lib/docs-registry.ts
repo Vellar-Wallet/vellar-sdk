@@ -18,9 +18,6 @@ export interface DocPage {
 // passkey-wallet SDK: Getting Started → x402 Payments (the core) →
 // Agents & Provenance → Wallet & Passkeys → Reference.
 export const DOC_PAGES: DocPage[] = [
-  { slug: "hackathon", title: "Vellar × Stellar Hackathon", nav: "Hackathon", section: "Hackathon",
-    description: "Hackathon tracks, judging criteria, and starter ideas for building on Vellar's x402 payment stack." },
-
   // Getting Started — restructured pages under content/docs/getting-started.
   { slug: "getting-started/introduction", title: "Introduction", nav: "Introduction",
     section: "Getting Started",
@@ -103,6 +100,10 @@ export const DOC_PAGES: DocPage[] = [
     description: "Every error, its cause, whether retrying is safe, and which ones mean money already moved." },
   { slug: "reference/conformance", title: "Conformance", nav: "Conformance", section: "Reference",
     description: "Wire-level verification with real settlement hashes you can check against Horizon yourself." },
+
+  // Hackathon — a dated event page, kept last so it never fronts the docs.
+  { slug: "hackathon", title: "Vellar × Stellar Hackathon", nav: "Hackathon", section: "Hackathon",
+    description: "Hackathon tracks, judging criteria, and starter ideas for building on Vellar's x402 payment stack." },
 ];
 
 /** Sections in sidebar order, derived from DOC_PAGES. */
