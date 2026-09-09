@@ -11,9 +11,10 @@
 // path-mapped to ./src. passkey-kit and @stellar/stellar-sdk resolve from
 // node_modules like any import.
 //
-// Only pages whose snippets are self-contained-in-order belong in PAGES —
-// most other pages' snippets reference free variables (`kit`, `sac`, ...) by
-// design and cannot typecheck standalone.
+// Pages whose snippets are self-contained-in-order need nothing else. A page
+// whose snippets reference free variables by design (`kit`, `sac`, ...) can
+// still be checked by giving it a PREAMBLES entry that declares those names
+// with their real SDK types — see the comment on PREAMBLES.
 
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -21,7 +22,55 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const PAGES = ["website/content/docs/getting-started/quickstart.md"];
+const PAGES = [
+  "website/content/docs/getting-started/quickstart.md",
+  "website/content/docs/x402.md",
+  "website/content/docs/buyers/pay-for-a-resource.md",
+];
+
+// Ambient declarations injected ahead of a page's snippets, for pages that
+// illustrate a shape rather than a runnable program. Every type here is the
+// REAL exported SDK type, never a hand-written approximation: a preamble that
+// declared `sac: string` would typecheck happily while the docs drifted from
+// `SacClientLike`, which is the drift this whole script exists to catch.
+//
+// Keep these minimal. A name belongs here only when the page deliberately
+// leaves it undeclared; anything a reader is meant to copy should be in the
+// snippet itself, where it gets checked.
+const X402_CONFIG_PREAMBLE = `
+declare const kit: import("vellar-sdk").PasskeyKitLike;
+declare const sac: import("vellar-sdk").SacClientLike;
+declare const backend: import("vellar-sdk").WalletBackend & {
+  submitTransaction(input: {
+    signedXdr: string;
+    network: import("vellar-sdk").Network;
+  }): Promise<{ hash: string }>;
+};
+declare const isValidAddress: (address: string) => boolean;
+declare const walletCAddress: string;
+declare const sessionKeySecret: string;
+declare const aFundedGAccount: string;
+`.trim();
+
+const PREAMBLES = {
+  "website/content/docs/x402.md": X402_CONFIG_PREAMBLE,
+  // The closing block inspects a settlement on its own, without the
+  // destructuring that introduced it two blocks earlier — each later block is
+  // wrapped in its own function, so the binding does not carry over.
+  "website/content/docs/buyers/pay-for-a-resource.md": [
+    X402_CONFIG_PREAMBLE,
+    `declare const settlement: import("vellar-sdk").X402Settlement;`,
+  ].join("\n"),
+};
+
+// A preamble for a page that is no longer in PAGES silently stops applying, so
+// the next person to add that page back gets a wall of errors the map was
+// written to prevent. Fail on the stale key instead.
+const orphaned = Object.keys(PREAMBLES).filter((page) => !PAGES.includes(page));
+if (orphaned.length > 0) {
+  console.error(`PREAMBLES has entries for pages not in PAGES: ${orphaned.join(", ")}`);
+  process.exit(1);
+}
 
 const outDir = path.join(root, ".doc-snippets");
 rmSync(outDir, { recursive: true, force: true });
@@ -57,10 +106,13 @@ for (const page of PAGES) {
   const file = [
     `// GENERATED from ${page} by scripts/check-doc-snippets.mjs — do not edit.`,
     [...imports].join("\n"),
+    PREAMBLES[page] ?? "",
     first,
     ...wrapped,
     "export {};",
-  ].join("\n\n");
+  ]
+    .filter((part) => part.length > 0)
+    .join("\n\n");
 
   const name = path.basename(page, ".md") + ".snippets.ts";
   writeFileSync(path.join(outDir, name), file);
