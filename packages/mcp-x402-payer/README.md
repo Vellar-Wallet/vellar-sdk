@@ -362,7 +362,8 @@ escape hatch exists for exactly this case, but `signAuthEntries` closes it off.
 Reproduced live against a deployed smart account.
 
 Filed upstream as
-[x402-foundation/x402#3159](https://github.com/x402-foundation/x402/issues/3159).
+[x402-foundation/x402#3158](https://github.com/x402-foundation/x402/issues/3158)
+(#3159 is a duplicate filed one hour later and closed).
 
 **We are not waiting on it.** `x402Client.register()` accepts any
 `SchemeNetworkClient`, so this package registers its own
