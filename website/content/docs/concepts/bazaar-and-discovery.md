@@ -55,13 +55,18 @@ signed), but the catalog entry is not updated. Two consequences follow:
   you the entry once the URL is bound.
 - The legitimate owner reclaims a listing by settling once more.
 
-This was validated with a controlled A/B test. Pre-fix, transaction
-`d56dc927a7c7c019...` shows a second settlement for the same URL from a
-different `payTo` overwriting the catalog entry and inheriting the legitimate
-seller's trust stats. Post-fix, transaction `a909e4748c83f559...` shows the
-identical attack refused by the ownership binding: the catalog entry was
-unchanged. Both payments succeeded on-chain. "Blocked" here means the catalog
-protected the legitimate seller, not that the payment failed.
+This was validated with a controlled A/B test on 2026-08-08. Pre-fix,
+transaction
+`d56dc927a7c7c019197017b6a3dd92c198d9dce0d9d35749d8dbc896d0c4160d`
+(ledger 4040689) shows a second settlement for the same URL from a different
+`payTo` overwriting the catalog entry and inheriting the legitimate seller's
+trust stats. Post-fix, transaction
+`a909e4748c83f55972d6cee3286b8627c304b231037c7daae51d869bf17f1d38`
+(ledger 4040706) shows the identical attack refused by the ownership binding:
+the catalog entry was unchanged. Both payments succeeded on-chain. "Blocked"
+here means the catalog protected the legitimate seller, not that the payment
+failed. The full four-transaction record, including the merchant A settlements
+either side, is in [Conformance](../reference/conformance.md).
 
 > **Note:** On the hosted free-tier instance the first-settler race reopens
 > after each restart, because the ownership bindings are not persisted. See

@@ -219,7 +219,8 @@ Stellar ledger. It shows `upto` settlements correctly today, verified rather
 than assumed: three settlements against the hosted facilitator each appear on
 [the feed](https://explorer.vellar.xyz) with `scheme: upto`,
 `settled by: vellar`, and the metered actual amount displayed, not the
-signed ceiling — `be728773…` (0.0555 USDC of a 0.15 ceiling), `f558307e…`
+signed ceiling — `be72877332bbd7f8d38511cccf00620fb20869cfedbc7530588ca856ac646d9a`
+(ledger 4252896, 0.0555 USDC of a 0.15 ceiling), `f558307e…`
 (0.0312 of 0.08), and `12f0fa5c…` (0.0417 of 0.12); full tx hashes and the
 Horizon-confirmed record in the facilitator repo's
 [`docs/upto-deployment.md`](https://github.com/Vellar-Wallet/vellar-facilitator/blob/main/docs/upto-deployment.md).

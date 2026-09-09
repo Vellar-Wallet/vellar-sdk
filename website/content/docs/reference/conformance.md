@@ -186,13 +186,34 @@ resource URL they do not own, taking over that URL's catalog entry. It was
 reproduced and then blocked in a controlled A/B test, with both halves settled
 on-chain.
 
-**Pre-fix, tx `d56dc927a7c7c019...`.** A second settlement for the same URL from
-a different `payTo` overwrote the catalog entry and inherited the legitimate
-seller's accumulated trust stats.
+The test ran as two pairs on 2026-08-08, ninety seconds apart. In each pair,
+settle #1 is a legitimate payment to merchant A, and settle #2 is the hijack
+attempt from a different `payTo` against the same resource URL.
 
-**Post-fix, tx `a909e4748c83f559...`.** The identical attack was refused by the
-trust-on-first-use ownership binding. The payment still settled and the attacker
-received their funds from the buyer, but the catalog entry was unchanged.
+| Half | Role | Tx hash | Ledger |
+|---|---|---|---|
+| Pre-fix | settle #1, merchant A | `f7ea48f3070e9ad7e04bb61ffc95433ec4b0fac59befa74078ffad985603d0a2` | 4040686 |
+| Pre-fix | settle #2, the hijack | `d56dc927a7c7c019197017b6a3dd92c198d9dce0d9d35749d8dbc896d0c4160d` | 4040689 |
+| Post-fix | settle #1, merchant A | `c16af8224c474901b8fbf513b839926ddfb50707dc283a19f5f8629a24f028b3` | 4040704 |
+| Post-fix | settle #2, the hijack | `a909e4748c83f55972d6cee3286b8627c304b231037c7daae51d869bf17f1d38` | 4040706 |
+
+All four are `successful: true`, each charged `fee_charged` 23,067 stroops to the
+sponsor account `GBOC2UOB7UI3LW2JDRSJQVCGI7SN7QD7AWELYCSNFY6GEWD4EPED6U3Y`, and
+all four are stamped between 21:22 and 21:24 UTC on 2026-08-08.
+
+**Pre-fix.** The second settlement overwrote merchant A's catalog entry and
+inherited the accumulated trust stats along with it.
+
+**Post-fix.** The identical attack was refused by the trust-on-first-use
+ownership binding. The payment still settled and the attacker received their
+funds from the buyer, but the catalog entry was unchanged.
+
+Verify any of the four the same way as every other hash on this page:
+
+```sh
+curl -s "https://horizon-testnet.stellar.org/transactions/d56dc927a7c7c019197017b6a3dd92c198d9dce0d9d35749d8dbc896d0c4160d" \
+  | python3 -c 'import json,sys; d=json.load(sys.stdin); print("successful:", d["successful"]); print("ledger:", d["ledger"]); print("fee_charged:", d["fee_charged"]); print("fee_account:", d["fee_account"])'
+```
 
 > ⚠️ **"Blocked" does not mean the payment failed.** Both payments succeeded
 > on-chain. Blocked means the catalog protected the legitimate seller's entry
