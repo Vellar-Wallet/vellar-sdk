@@ -234,18 +234,6 @@ shasum -a 256 target/wasm32v1-none/release/x402_upto_vellar.wasm
 Built with rustc 1.96.0 and stellar-cli 26.1.0, targeting `wasm32v1-none`. See
 [upto](../upto.md).
 
-The facilitator repo also retains `contracts/upto-stellar/`, a vendored
-Apache-2.0 upstream contract kept for reference, whose wasm hashes to
-`c276b905981eab91704ce9b9046ebb4867b164dd7e4ba0e0ecda841527d398a9`. It is not
-the contract verified above. The same source built by its upstream author, testnet
-contract `CCMM3FMGEH7FHRYXZ3WQDQCTIWDXGZBGW7D4UT7NKH34SUQACYC3U54X`, hashes to
-`a19f563e764dfd52a0d229c063e7ac1a1b36f6a976f552a8e19b91ee8e4ef84a` instead,
-because it was built with stellar CLI 27.0.0, the version stamped in its wasm
-metadata, while ours was built with stellar CLI 26.1.0 and rustc 1.96.0; the CLI
-writes its version into the wasm's `contractmetav0` section and the newer
-toolchain emits different code, so the two artifacts cannot share a hash even
-though their contract interface and protocol sections are byte-identical.
-
 ## The F11 security finding
 
 The ownership-hijack vulnerability was reproduced and then fixed in a controlled

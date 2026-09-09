@@ -83,10 +83,6 @@ If the two hashes match, the code holding your ceiling is the code you can read.
 
 The `upto` settlement contract deployed by Vellar (`CCZL7CTRS...`) is Vellar's own implementation, written from the x402 `upto` scheme specification. The design brief at `contracts/upto-vellar/DESIGN.md` in the facilitator repo was committed before the first line of Rust.
 
-The facilitator repo also retains `contracts/upto-stellar/`, a vendored copy of an Apache-2.0 upstream contract, kept for reference. It is not the deployed contract.
-
-Its wasm hashes to `c276b905981eab91704ce9b9046ebb4867b164dd7e4ba0e0ecda841527d398a9`. The same source built by its upstream author, testnet contract `CCMM3FMGEH7FHRYXZ3WQDQCTIWDXGZBGW7D4UT7NKH34SUQACYC3U54X`, hashes to `a19f563e764dfd52a0d229c063e7ac1a1b36f6a976f552a8e19b91ee8e4ef84a` instead, because it was built with stellar CLI 27.0.0, the version stamped in its wasm metadata, while ours was built with stellar CLI 26.1.0 and rustc 1.96.0; the CLI writes its version into the wasm's `contractmetav0` section and the newer toolchain emits different code, so the two artifacts cannot share a hash even though their contract interface and protocol sections are byte-identical.
-
 ## The authorization tree
 
 A Soroban authorization is a tree, and for `upto` it has two nodes.
