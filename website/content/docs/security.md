@@ -2,10 +2,10 @@
 
 This covers the **wallet and SDK** security model. The payment layer adds its
 own on-chain guarantees: spending and verified-only policies enforced inside
-`__check_auth` (see [policies & provenance](./policies.md)), so a compromised
+`__check_auth` (see [policies & provenance](./agent-tooling/policies.md)), so a compromised
 agent key can't spend past its per-window cap or pay unverified code even if
 the client is fully compromised. (The cap is a fixed-window guardrail — see
-[Honesty](./policies.md#honesty) for its exact bound.)
+[Honesty](./reference/honesty.md) for its exact bound.)
 
 The SDK is designed so the secure default is the *only* path. The guarantees:
 
@@ -51,7 +51,10 @@ skip.
 
 Be aware while the SDK is pre-`1.0`:
 
-- **Testnet-focused.** Mainnet use is pending a formal security review.
-- The underlying policy contract is **not yet audited** for mainnet.
+- **Testnet only.** Vellar runs on stellar:testnet only. Mainnet is gated on two
+  remaining items: a persistent-disk deployment and a funded pubnet sponsor
+  account. The pre-mainnet security review of the facilitator is complete. The
+  spending-limit policy contract has **not yet been audited** for mainnet, and
+  that audit is a separate gating item.
 - You are responsible for securing your own backend (the submission surface) —
   rate limiting, auth, and abuse protection are your app's concern.

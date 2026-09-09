@@ -52,11 +52,11 @@ are starting points, not the ceiling, the strongest submissions will surprise
 us.
 
 **Key SDK surface:** `createVellarWallet`, `.create()`, `.connect()`, `.pay()`.
-See [Quickstart](./quickstart.md).
+See [Quickstart](./getting-started/quickstart.md).
 
 **Config you need:** point `backend` at the hosted testnet gateway,
 `createHttpWalletBackend("https://vellar-backend.onrender.com")` — the
-[Quickstart](./quickstart.md#1-create-the-client) shows the full client setup.
+[Quickstart](./getting-started/quickstart.md#1-create-the-client) shows the full client setup.
 
 ### Track 2, Policy Builder
 
@@ -71,11 +71,11 @@ These are starting points, not the ceiling, the strongest submissions will
 surprise us.
 
 **Key SDK surface:** `wallet.policies` (templates, generate, simulate, deploy).
-See [Policies](./policies.md).
+See [Policies](./agent-tooling/policies.md).
 
 **Config you need:** `apiUrl: "https://vellar-backend.onrender.com"` in
 `createVellarWallet` (the same host as the wallet backend) — see
-[Enabling policies](./policies.md#enabling-policies), which includes a
+[Enabling policies](./agent-tooling/policies.md#enabling-policies), which includes a
 zero-context smoke test you can paste before writing any wallet code.
 
 ### Track 3, x402 Agent Payments
@@ -97,7 +97,7 @@ starting points, not the ceiling, the strongest submissions will surprise us.
 signer, a Friendbot-funded `G...` account as `simulationSourceAccount`, and
 `rpcUrl: "https://soroban-testnet.stellar.org"` — copy it from
 [Enabling x402](./x402.md#enabling-x402). Mint the session key per
-[Agent Keys](./agent-keys.md), and discover payable resources through the
+[Agent Keys](./agent-tooling/agent-keys.md), and discover payable resources through the
 [facilitator's Bazaar](./facilitator.md). Want to test against a live seller
 without running your own? The demo seller accepts testnet USDC — see
 [Paying the deployed demo seller](./facilitator.md#paying-the-deployed-demo-seller).
@@ -351,19 +351,20 @@ with a pinned message, this page wins.
 
 **The first request is hanging / everything seems down.** The hosted backend
 and facilitator sleep when idle (free instances). The first request after a
-quiet spell can take 30–90 seconds, occasionally ~2 minutes, while they
-wake. Retry — after that everything is fast. Not a bug in your code.
+quiet spell takes roughly 45 seconds (measured) while they wake. Allow up to
+120 seconds in your timeout and retry — after that everything is fast. Not a
+bug in your code.
 
 **How do I get a funded testnet account?** Friendbot, free:
 `curl "https://friendbot.stellar.org?addr=G...YOURKEY"`. You only need it
 for x402's `simulationSourceAccount` (never charged) — wallet creation and
-payments are fee-sponsored. See the [Quickstart](./quickstart.md#0-install).
+payments are fee-sponsored. See the [Quickstart](./getting-started/quickstart.md#0-install).
 
 **`vellar.create()` crashes in my Node script.** Passkeys are WebAuthn,
 browser-only. For Node, CLIs, and agents use the session-key path: mint an
 agent key (browser session, or `provision-testnet.mjs`), then
 `createSessionKeySigner` + `wallet.x402`. The `PasskeyBrowserRequiredError`
-you'll see says exactly this. See [Agent Keys](./agent-keys.md).
+you'll see says exactly this. See [Agent Keys](./agent-tooling/agent-keys.md).
 
 **Can I build on passkey-signed x402?** No — it does not settle on any
 deployed facilitator. Build on the session-key (agent) path. See
@@ -387,9 +388,9 @@ that entry only, not the demo seller.
 
 ## Getting Started
 
-1. Read [Introduction](./introduction.md) and [Quickstart](./quickstart.md).
-2. `npm install vellar-sdk @stellar/stellar-sdk`, see [Installation](./installation.md).
-3. Point your backend at the hosted gateway: `VELLAR_API_URL=https://vellar-backend.onrender.com`, see [How It Works](./how-it-works.md) for why a backend is needed.
+1. Read [Introduction](./getting-started/introduction.md) and [Quickstart](./getting-started/quickstart.md).
+2. `npm install vellar-sdk @stellar/stellar-sdk`, see [Installation](./getting-started/installation.md).
+3. Point your backend at the hosted gateway: `VELLAR_API_URL=https://vellar-backend.onrender.com`, see [How It Works](./getting-started/how-it-works.md) for why a backend is needed.
 4. Pick a track above and scope the **smallest strong version** of your idea.
 5. Build. Ask questions in [Telegram](https://t.me/+JvRMWLJMWS0xYTBk).
 6. Test your core flow on testnet, end to end, before recording your demo.
@@ -418,7 +419,7 @@ that entry only, not the demo seller.
 
 Ask in [Telegram](https://t.me/+JvRMWLJMWS0xYTBk), that's the live support
 channel for the whole weekend. For SDK questions, start with
-[Quickstart](./quickstart.md), [Wallet Methods](./wallet-methods.md), and
+[Quickstart](./getting-started/quickstart.md), [Wallet Methods](./wallet-methods.md), and
 [Security](./security.md).
 
 *Build fast. Build honest. Good luck.*

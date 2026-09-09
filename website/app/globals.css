@@ -160,32 +160,72 @@ a {
   color: var(--sun);
 }
 
-/* Body: sidebar + content */
+/* Section tabs: a full-width band between the topbar and the sidebar. Each tab
+   swaps the whole sidebar. Sticky below the 64px topbar, at a lower z-index so
+   it slides under the topbar rather than over it. */
+.docs-tabrow {
+  position: sticky;
+  top: 64px;
+  z-index: 19;
+  display: flex;
+  align-items: flex-end;
+  height: 48px;
+  padding: 0 24px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+}
+.docs-tab {
+  display: inline-flex;
+  align-items: center;
+  height: 48px;
+  padding: 0 16px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  border-bottom: 2px solid transparent;
+  /* pull the underline onto the row's own 1px rule so they read as one line */
+  margin-bottom: -1px;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+.docs-tab:hover {
+  color: var(--ink);
+}
+.docs-tab.active {
+  color: var(--ink);
+  font-weight: 700;
+  border-bottom-color: var(--sun);
+}
+.docs-tab:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -4px;
+}
+
+/* Body: sidebar + content. Full-bleed — the sidebar is pinned to the viewport's
+   left edge the way a docs site expects, so no centering max-width here. The
+   reading measure is held by .docs-article instead, not by narrowing the shell. */
 .docs-body {
   display: flex;
   align-items: flex-start;
-  max-width: 1200px;
-  margin: 0 auto;
 }
+/* Flush-left rail. The border is a plain border-right, NOT the two-layer
+   clip-path trick used elsewhere: that draws its fill with an
+   `inset: 0` ::before, which in a scrolling container sizes to the visible box
+   rather than the scroll height — so once the nav overflowed, everything below
+   the first viewport lost its fill and showed the bare border colour. */
 .docs-sidebar {
   position: sticky;
-  top: 76px;
+  /* 64px topbar + 48px tab row */
+  top: 112px;
   flex-shrink: 0;
-  width: 250px;
-  height: calc(100vh - 64px - 24px);
-  margin: 12px 0 12px 12px;
+  width: 268px;
+  height: calc(100vh - 112px);
   overflow-y: auto;
-  padding: 24px 14px;
-  background: var(--line-strong); /* the 1px border */
-  clip-path: var(--side-clip);
-}
-.docs-sidebar::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
+  overscroll-behavior: contain;
+  padding: 28px 20px 40px 24px;
   background: var(--paper);
-  clip-path: var(--side-clip-in);
+  border-right: 1px solid var(--line-strong);
 }
 .docs-nav-group {
   margin-bottom: 22px;
@@ -241,8 +281,12 @@ a {
   min-width: 0;
   padding: 40px clamp(20px, 5vw, 64px) 96px;
 }
+/* The shell is full-bleed, so the reading measure lives here. Centring inside
+   the content column keeps line length comfortable on a wide display instead of
+   pinning the text to the sidebar with dead space on the right. */
 .docs-article {
-  max-width: 760px;
+  max-width: 860px;
+  margin: 0 auto;
 }
 .docs-title {
   font-family: var(--display);
@@ -336,6 +380,44 @@ a {
   font-size: 13px;
   line-height: 1.6;
 }
+/* Mermaid diagrams: a paper panel, not the inverted ink one code blocks get.
+   The SVG scrolls inside its own box so a wide sequence diagram never makes
+   the page scroll sideways. */
+.docs-mermaid {
+  margin: 22px 0;
+  padding: 20px;
+  background: var(--paper-tint);
+  border: 1px solid var(--line);
+  clip-path: var(--clip-card);
+  overflow-x: auto;
+}
+.docs-mermaid svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+/* Pre-render and no-JS fallback: the diagram source, legible rather than styled
+   as a finished picture. */
+.docs-mermaid-source {
+  margin: 22px 0;
+  padding: 18px 20px;
+  background: var(--paper-tint);
+  border: 1px solid var(--line);
+  clip-path: var(--clip-card);
+  overflow-x: auto;
+  font-family: var(--mono-stack);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+.docs-mermaid-source code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+}
+
 .docs-prose table {
   width: 100%;
   border-collapse: collapse;
@@ -443,10 +525,11 @@ a {
   }
   .docs-sidebar {
     position: fixed;
-    top: 64px;
+    /* clears the topbar and the tab row, same as the desktop rail */
+    top: 112px;
     left: 0;
     z-index: 55;
-    height: calc(100vh - 64px);
+    height: calc(100vh - 112px);
     width: 260px;
     margin: 0;
     clip-path: none;

@@ -87,7 +87,7 @@ throws (before any signing) if `to` fails `isValidAddress`.
 Programmable on-chain account policies — list templates, generate artifacts,
 simulate, and deploy (attach a policy with a single passkey signature). Requires
 `apiUrl` in the config; `deploy` additionally requires a `policyAttach` runtime.
-See [Policies](./policies.md).
+See [Policies](./agent-tooling/policies.md).
 
 ## `connector` / `payments`
 

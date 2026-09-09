@@ -14,9 +14,11 @@ verify it, submits it on-chain, and sponsors the network fee.
 > **Status: testnet, pre-production.** Open for anyone to build against. It
 > runs on a free tier for now, so the first request after idle can take up to
 > a minute (cold start) — and the catalog does not survive that sleep (see
-> [Limits](#limits-and-operational-caveats)). The pre-mainnet security review
-> is complete; mainnet is now gated on a persistent-disk deployment and a
-> funded pubnet sponsor account. Source:
+> [Limits](#limits-and-operational-caveats)). Vellar runs on stellar:testnet
+> only. Mainnet is gated on two remaining items: a persistent-disk deployment
+> and a funded pubnet sponsor account. The pre-mainnet security review of the
+> facilitator is complete. The spending-limit policy contract has not yet been
+> audited for mainnet, and that audit is a separate gating item. Source:
 > [Vellar-Wallet/vellar-facilitator](https://github.com/Vellar-Wallet/vellar-facilitator).
 
 ## Bring your own payment asset
@@ -38,7 +40,7 @@ node provision-testnet.mjs
 
 Creates all four in roughly 40 seconds to 3 minutes and prints a
 paste-ready env block. Pass it an `AGENT_PUBLIC` to also provision a Vellar
-smart-account wallet for the buyer side — see [Agent keys](./agent-keys.md)
+smart-account wallet for the buyer side — see [Agent keys](./agent-tooling/agent-keys.md)
 for generating that keypair without the secret ever touching a command line
 or a file.
 
@@ -113,15 +115,16 @@ budget-policy story needs an asset your policies are scoped to.
 ## Why it exists
 
 Policy-governed smart-account payments (the [x402 agent flow](./x402.md))
-run the spending-policy contract inside `__check_auth`, which raises the
-simulation-derived fee to roughly 130,000 stroops (worst settlement measured
-on testnet: 127,808). Hosted facilitators default to a 50,000-stroop
-sponsorship ceiling and reject those payments with `fee_exceeds_maximum`,
-even though the payment is valid and policy-approved. The Vellar facilitator
-ships with a 500,000-stroop ceiling — ~3.9× the worst real settlement,
-raisable via `MAX_TX_FEE_STROOPS` — so **agent payments bounded by an
-on-chain budget settle instead of being refused**. Both classic keypairs and
-Soroban smart accounts are supported.
+run the spending-policy contract inside `__check_auth`, which raises the fee.
+Hosted facilitators default to a 50,000-stroop sponsorship ceiling and reject
+those payments with `fee_exceeds_maximum`, even though the payment is valid and
+policy-approved. The Vellar facilitator ships with a 500,000-stroop ceiling. A
+policy-governed payment bids roughly 130,000 stroops, and the bid is what the
+ceiling compares against: see
+[Fees and Sponsorship](./reference/fees.md) for the distinction between bid and
+charge. The ceiling is raisable via `MAX_TX_FEE_STROOPS`, so **agent payments
+bounded by an on-chain budget settle instead of being refused**. Both classic
+keypairs and Soroban smart accounts are supported.
 
 ## Endpoints
 
@@ -131,7 +134,7 @@ Soroban smart accounts are supported.
 | `POST /settle` | Submit on-chain, fee-sponsored |
 | `GET /supported` | Advertised scheme, network, extensions, signer addresses |
 | `GET /discovery/resources` | List cataloged x402 resources — [full reference](#get-discoveryresources) |
-| `GET /discovery/search` | Keyword search over the catalog — token-scored relevance ranking (not semantic); [full reference](#get-discoverysearch) |
+| `GET /discovery/search` | Hybrid search, lexical and semantic arms fused by RRF (see [Search and Retrieval](./architecture/search-and-retrieval.md) for the pipeline and quality figures); [full reference](#get-discoverysearch) |
 | `GET /health` | Liveness; also reports `catalogFrozen` if the catalog has stopped accepting writes |
 
 Wire-compatible with the canonical x402 clients — `HTTPFacilitatorClient`
@@ -224,7 +227,7 @@ const server = new x402ResourceServer(
 ```
 
 > **Adding a gate to an endpoint you already have?** The [VS Code
-> extension](./vscode.md) injects this wiring into a route you pick, in one
+> extension](./agent-tooling/vscode.md) injects this wiring into a route you pick, in one
 > command — same boilerplate, without writing it by hand.
 
 Declare the **bazaar discovery extension** on a route and your resource is
@@ -372,7 +375,7 @@ The facilitator runs on a free tier — the first tool call after idle may take 
 to a minute.
 
 Paying for what you find is a separate server that holds a key — see the
-[MCP payer](./mcp-payer.md).
+[MCP payer](./agent-tooling/mcp-payer.md).
 
 ## Running the full loop
 
