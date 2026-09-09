@@ -1,10 +1,13 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { DocsNav } from "./docs-nav";
+import { DocsTabs } from "./docs-tabs";
 
-// Docs shell: brand topbar + section-grouped sidebar + content column. The
-// sidebar nav (active state + mobile toggle) is a client component; everything
-// else is a server component. Self-contained — no dependency on the wallet app.
+// Docs shell: brand topbar + section tab row + section-grouped sidebar +
+// content column. The tab row and sidebar nav are client components (both read
+// the pathname to resolve the active tab, since this layout sits above the
+// [...slug] segment and receives no params); everything else is a server
+// component. Self-contained — no dependency on the wallet app.
 
 export default function DocsLayout({ children }: { children: ReactNode }) {
   return (
@@ -35,6 +38,8 @@ export default function DocsLayout({ children }: { children: ReactNode }) {
           Open Vellar Wallet
         </a>
       </header>
+
+      <DocsTabs />
 
       <div className="docs-body">
         <DocsNav />

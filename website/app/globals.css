@@ -160,6 +160,48 @@ a {
   color: var(--sun);
 }
 
+/* Section tabs: a full-width band between the topbar and the sidebar. Each tab
+   swaps the whole sidebar. Sticky below the 64px topbar, at a lower z-index so
+   it slides under the topbar rather than over it. */
+.docs-tabrow {
+  position: sticky;
+  top: 64px;
+  z-index: 19;
+  display: flex;
+  align-items: flex-end;
+  height: 48px;
+  padding: 0 24px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+}
+.docs-tab {
+  display: inline-flex;
+  align-items: center;
+  height: 48px;
+  padding: 0 16px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  border-bottom: 2px solid transparent;
+  /* pull the underline onto the row's own 1px rule so they read as one line */
+  margin-bottom: -1px;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+.docs-tab:hover {
+  color: var(--ink);
+}
+.docs-tab.active {
+  color: var(--ink);
+  font-weight: 700;
+  border-bottom-color: var(--sun);
+}
+.docs-tab:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -4px;
+}
+
 /* Body: sidebar + content. Full-bleed — the sidebar is pinned to the viewport's
    left edge the way a docs site expects, so no centering max-width here. The
    reading measure is held by .docs-article instead, not by narrowing the shell. */
@@ -174,10 +216,11 @@ a {
    the first viewport lost its fill and showed the bare border colour. */
 .docs-sidebar {
   position: sticky;
-  top: 64px;
+  /* 64px topbar + 48px tab row */
+  top: 112px;
   flex-shrink: 0;
   width: 268px;
-  height: calc(100vh - 64px);
+  height: calc(100vh - 112px);
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 28px 20px 40px 24px;
@@ -482,10 +525,11 @@ a {
   }
   .docs-sidebar {
     position: fixed;
-    top: 64px;
+    /* clears the topbar and the tab row, same as the desktop rail */
+    top: 112px;
     left: 0;
     z-index: 55;
-    height: calc(100vh - 64px);
+    height: calc(100vh - 112px);
     width: 260px;
     margin: 0;
     clip-path: none;
