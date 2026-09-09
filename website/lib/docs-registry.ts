@@ -54,11 +54,16 @@ export const DOC_PAGES: DocPage[] = [
   { slug: "upto", title: "upto — Metered Payments", nav: "Upto (metered)", section: "x402 Payments",
     description: "The experimental upto scheme: authorize a spending ceiling with one signature, settle for the actual metered amount, enforced on-ledger by a Soroban contract." },
 
-  // Agents & Provenance
-  { slug: "agent-keys", title: "Agent Keys", nav: "Agent keys", section: "Agents & Provenance",
-    description: "Mint scoped agent session keys bounded by on-chain policies, and revoke them remotely." },
-  { slug: "policies", title: "Policies & Provenance", nav: "Policies & provenance", section: "Agents & Provenance",
-    description: "Deploy and attach spending-limit and verified-only policies enforced inside the wallet's __check_auth." },
+  // Sellers — the receiving side of the x402 loop.
+  { slug: "sellers/charge-for-an-endpoint", title: "Charge for an Endpoint",
+    nav: "Charge for an endpoint", section: "Sellers",
+    description: "Add an x402 payment gate to an HTTP route and collect on every request that settles." },
+  { slug: "sellers/get-discovered", title: "Get Discovered", nav: "Get discovered",
+    section: "Sellers",
+    description: "Earn ownerVerified so agents trust your listing, and read the trust fields in your catalog entry." },
+  { slug: "sellers/upto-metered-payments", title: "Upto Metered Payments",
+    nav: "Upto metered payments", section: "Sellers",
+    description: "Accept usage-based payments: the buyer authorizes a ceiling and only the actual usage settles." },
 
   // Wallet & Passkeys — one pillar, not the whole story
   { slug: "wallet-methods", title: "Wallet Methods", nav: "Wallet methods", section: "Wallet & Passkeys",
@@ -66,7 +71,14 @@ export const DOC_PAGES: DocPage[] = [
   { slug: "security", title: "Security", nav: "Security", section: "Wallet & Passkeys",
     description: "The wallet and SDK security model: no key custody, no silent signing, and the on-chain policy guarantees." },
 
-  // Agent tooling — the servers and editor tooling an agent developer wires up.
+  // Agent tooling — the keys, policies, servers and editor tooling an agent
+  // developer wires up.
+  { slug: "agent-tooling/agent-keys", title: "Agent Keys", nav: "Agent keys",
+    section: "Agent Tooling",
+    description: "Mint scoped agent session keys bounded by on-chain policies, and revoke them remotely." },
+  { slug: "agent-tooling/policies", title: "Policies", nav: "Policies",
+    section: "Agent Tooling",
+    description: "Deploy and attach spending-limit and verified-only policies enforced inside the wallet's __check_auth." },
   { slug: "agent-tooling/mcp-payer", title: "MCP Payer", nav: "MCP payer",
     section: "Agent Tooling",
     description: "An MCP server that lets an AI agent pay for x402 resources, with process-level and on-chain budget layers." },

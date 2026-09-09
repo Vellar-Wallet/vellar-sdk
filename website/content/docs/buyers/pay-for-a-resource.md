@@ -179,4 +179,4 @@ node buyer-classic.mjs
 - [Spend controls](./spend-controls.md) — maxAmount vs the on-chain budget
 - [Discover services](./discover-services.md) — find what to pay for without a
   hardcoded URL
-- [Agent keys](../agent-keys.md) — give an agent a scoped session key
+- [Agent keys](../agent-tooling/agent-keys.md) — give an agent a scoped session key

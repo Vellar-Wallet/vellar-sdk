@@ -51,7 +51,7 @@ The window is **fixed (tumbling), not sliding** — spent resets to zero when th
 window elapses. Spending timed around a window boundary can therefore move up to
 **2× the cap** in a short span. Treat the limit as an on-chain spending
 guardrail, not a to-the-stroop hard cap; see
-[Honesty](../policies.md#honesty) for the full explanation.
+[Honesty](../agent-tooling/policies.md#honesty) for the full explanation.
 
 Use a **token-scoped** spending-limit policy so only one specific token's
 transfers count against the budget — then "give your agent $10/day of USDC"
@@ -70,7 +70,7 @@ const policy = await vellar.policies.generate({
 const { contractId, attachTxHash } = await vellar.policies.deploy(policy.id);
 ```
 
-See [Policies & provenance](../policies.md) for the full authoring flow,
+See [Policies & provenance](../agent-tooling/policies.md) for the full authoring flow,
 including `listTemplates()` and the optional `simulate()` dry run.
 
 ## The two signers
@@ -117,7 +117,7 @@ and network.
 ## Next steps
 
 - [Pay for a resource](./pay-for-a-resource.md) — the full payment flow
-- [Agent keys](../agent-keys.md) — generate a scoped session key
-- [Policies & provenance](../policies.md) — deploy and manage spending-limit and
+- [Agent keys](../agent-tooling/agent-keys.md) — generate a scoped session key
+- [Policies & provenance](../agent-tooling/policies.md) — deploy and manage spending-limit and
   verified-only policies
 - [Sign and pay](./sign-and-pay.md) — what happens inside the payment loop

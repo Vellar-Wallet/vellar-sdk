@@ -92,7 +92,7 @@ Because accounts are smart contracts, Vellar wallets can carry on-chain policies
 — for example a cumulative fixed-window spending limit that bounds how much can
 move per window, enforced by the network rather than by client-side checks a
 malicious frontend could skip. The SDK exposes the full authoring and deploy
-flow as [`wallet.policies`](../policies.md).
+flow as [`wallet.policies`](../agent-tooling/policies.md).
 
 ## When it fails
 
@@ -107,5 +107,5 @@ flow as [`wallet.policies`](../policies.md).
 
 - [Quickstart](./quickstart.md) — create a wallet in five minutes
 - [x402 payments](../buyers/pay-for-a-resource.md) — pay for a resource from code
-- [Agent keys](../agent-keys.md) — give an agent a scoped session key
+- [Agent keys](../agent-tooling/agent-keys.md) — give an agent a scoped session key
 - [Security](../security.md) — the guarantees the SDK enforces

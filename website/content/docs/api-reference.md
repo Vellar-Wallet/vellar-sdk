@@ -43,9 +43,9 @@ interface VellarWalletConfig {
 | `backend` | `Backend` | Your server endpoints for submission and lookup (holds relayer/sponsor secrets — never the SDK). |
 | `isValidAddress` | `(address) => boolean` | Validates a recipient before a payment is ever signed. |
 | `signedToXdr?` | `(signed) => string` | Advanced/test hook: convert the kit's signed output to XDR. Defaults to handling strings and objects with `toXDR()`. |
-| `apiUrl?` | `string` | Policy API gateway base URL. Required to use `wallet.policies` — see [Policies](./policies.md#enabling-policies). |
-| `policyAttach?` | `PolicyAttachRuntime` | Passkey-attach runtime for `wallet.policies.deploy()`; without it read/generate/simulate work but deploy throws. See [Policies](./policies.md#enabling-policies). |
-| `agentKeys?` | `AgentKeyRuntime` | Passkey-signed wallet-admin runtime for `wallet.agents` (mint/revoke agent session keys). See [Agent Keys](./agent-keys.md). |
+| `apiUrl?` | `string` | Policy API gateway base URL. Required to use `wallet.policies` — see [Policies](./agent-tooling/policies.md#enabling-policies). |
+| `policyAttach?` | `PolicyAttachRuntime` | Passkey-attach runtime for `wallet.policies.deploy()`; without it read/generate/simulate work but deploy throws. See [Policies](./agent-tooling/policies.md#enabling-policies). |
+| `agentKeys?` | `AgentKeyRuntime` | Passkey-signed wallet-admin runtime for `wallet.agents` (mint/revoke agent session keys). See [Agent Keys](./agent-tooling/agent-keys.md). |
 | `x402?` | `{ signer, simulationSourceAccount, rpcUrl?, fetchImpl?, expirationLedgerOffset? }` | Enables `wallet.x402` agentic payments. A valid RPC URL is required (here or top-level `rpcUrl`) — from 0.6.1, construction throws `X402NotConfiguredError` otherwise. See [x402](./x402.md#enabling-x402). |
 | `x402.expirationLedgerOffset?` | `number` | Number of ledgers added to the current ledger when setting auth entry expiration. Raise for flows with slow human confirmation; lower to shrink the replay window. See [Auth entry expiration](./x402.md#auth-entry-expiration). |
 | `rpcUrl?` | `string` | RPC URL for x402 simulation when `x402.rpcUrl` isn't given, e.g. `https://soroban-testnet.stellar.org`. |

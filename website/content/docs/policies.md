@@ -17,7 +17,7 @@ Two policies matter most for agent payments, and they stack:
 
 Both are checked inside the wallet's `__check_auth` during authorization, so
 they're enforced by **Stellar consensus**, not by your code — see [x402
-payments](./x402.md) and [agent keys](./agent-keys.md) for how an agent pays
+payments](./x402.md) and [agent keys](./agent-tooling/agent-keys.md) for how an agent pays
 under them.
 
 ## Enabling policies
@@ -125,7 +125,7 @@ rejects any payment whose recipient contract isn't attested as verified.
 Attach it exactly like a spending limit (through `wallet.policies`), and stack
 both so an agent key can pay *up to a budget* and *only through verified code*.
 This is `verified ≠ audited` — it proves *provenance* (reproducible, attributable
-source), not safety. See [agent keys](./agent-keys.md) for the full mint flow.
+source), not safety. See [agent keys](./agent-tooling/agent-keys.md) for the full mint flow.
 
 ## API
 

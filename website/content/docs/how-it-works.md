@@ -3,7 +3,7 @@
 This page covers the **passkey smart-wallet** layer — the account model the rest
 of Vellar is built on. For the payment layer that sits on top of it, see [x402
 payments](./x402.md), the [Facilitator & Bazaar](./facilitator.md), and
-[policies & provenance](./policies.md).
+[policies & provenance](./agent-tooling/policies.md).
 
 Vellar SDK composes several ecosystem primitives behind one clean interface.
 Here's what's happening underneath.
@@ -62,4 +62,4 @@ Because accounts are smart contracts, Vellar wallets can carry on-chain policies
 — e.g. a **cumulative fixed-window spending limit** that bounds how much can
 move per window, enforced by the network rather than by client-side checks. The
 SDK exposes the full authoring and deploy flow as
-[`wallet.policies`](./policies.md).
+[`wallet.policies`](./agent-tooling/policies.md).

@@ -38,7 +38,7 @@ node provision-testnet.mjs
 
 Creates all four in roughly 40 seconds to 3 minutes and prints a
 paste-ready env block. Pass it an `AGENT_PUBLIC` to also provision a Vellar
-smart-account wallet for the buyer side — see [Agent keys](./agent-keys.md)
+smart-account wallet for the buyer side — see [Agent keys](./agent-tooling/agent-keys.md)
 for generating that keypair without the secret ever touching a command line
 or a file.
 

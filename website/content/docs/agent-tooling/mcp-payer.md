@@ -154,6 +154,56 @@ the cap, satisfies the policy completely.
 > every call. Do not describe the process-only ceiling to a user as an on-chain
 > limit.
 
+## The on-chain demonstration
+
+Two payments were made through the MCP protocol against a policy-governed smart
+account with a 0.5 USDC on-chain cap. The server's own limits were set
+deliberately *above* the cap for both (`max_amount` 1.0 USDC, session ceiling 10
+USDC), so no process-level guard could be what refused the second one.
+
+| Payment | Amount | Outcome | Evidence |
+| --- | --- | --- | --- |
+| A | 0.1 USDC, under the cap | Settled | Transaction `9e1f3acf3681d8a418b7619d480eefce855f7ff9a62b5546255c52cea0eb9d2a`, `successful: true` at ledger 4141211 |
+| B | 0.6 USDC, over the cap | Refused by the chain | `__check_auth` then `policy__` then `Error(Contract, #1)`; no transaction, and the session ledger untouched |
+
+The wallet's USDC balance moved by exactly the settled amount and no more, so B
+spent nothing. That is confirmed by arithmetic on-chain rather than by trusting
+the error.
+
+The run is reproducible as `test/integration/layer2.integration.test.ts`.
+
+Check payment A yourself against Horizon:
+
+```sh
+curl -s https://horizon-testnet.stellar.org/transactions/9e1f3acf3681d8a418b7619d480eefce855f7ff9a62b5546255c52cea0eb9d2a \
+  | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["successful"], d["ledger"])'
+# True 4141211
+```
+
+### Reading a policy refusal
+
+The wallet wraps every auth failure in its own `Error(Contract, #110)`, so the
+top-level code says only "auth failed" and not why. The cause is nested:
+
+```
+[wallet] "contract try_call failed", policy__, [ ...transfer args, 6000000... ]
+[policy] "VM call trapped with HostError", policy__, Error(Contract, #1)
+```
+
+A failed `policy__` call is the signal that a policy refused, which is layer 2
+doing its job. Contrast it with a malformed signature map, which produces the
+same `#110` with no policy invocation at all. Classifying on the top-level code
+alone gets this backwards: the two cases look identical from the outside and
+mean opposite things.
+
+### What it costs
+
+A policy-governed settle costs 28,678 to 116,202 stroops actually charged
+on-chain (0.003 to 0.012 XLM), against a simulated estimate of 140,331 and a
+facilitator ceiling of 500,000. It fits with room to spare, and it is roughly
+the same as a plain keypair settle: running a policy inside `__check_auth` adds
+about 6,900 stroops, roughly 5 percent.
+
 ## Settlement retries are the normal path
 
 Testnet settlements fail regularly with nothing spent. This server retries up to
@@ -231,6 +281,31 @@ one to pay for them. This server does not reimplement discovery and does not
 proxy the facilitator's HTTP API. See
 [Discover services](../buyers/discover-services.md).
 
+## Smart accounts and the official client
+
+Layer 2 works, but not through `@x402/stellar`'s `ExactStellarScheme`, which
+cannot sign for a `C...` credential address.
+
+`AssembledTransaction.signAuthEntries` narrows any signer result to a naked
+buffer. That routes `authorizeEntry` down its ed25519 branch, which calls
+`Keypair.fromPublicKey` on the entry's C-address and throws `invalid version
+byte. expected 48, got 16`. The SDK's `{ signatureScVal }` escape hatch exists
+for exactly this case, but `signAuthEntries` closes it off. This was reproduced
+live against a deployed smart account and filed upstream as
+[x402-foundation/x402 issue #3159](https://github.com/x402-foundation/x402/issues/3159).
+
+The package does not wait on that fix. `x402Client.register()` accepts any
+`SchemeNetworkClient`, so this package registers its own scheme, which signs the
+auth entries directly and never calls `signAuthEntries`: the narrowing that
+blocks the official path simply never happens. That is a documented extension
+point, not a fork.
+
+> ⚠️ **A policy-governed key must carry its policies in the signature map as
+> `SignerKey::Policy` entries alongside the ed25519 one.** Omit them and the
+> wallet rejects the entry before consulting the policy, with the same opaque
+> `#110`, which reads as a broken signer rather than a missing co-signer. Set
+> `VELLAR_X402_POLICIES` to every policy in the key's `SignerLimits`.
+
 ## When it fails
 
 | Symptom | Cause | Money moved? | Fix |
@@ -241,6 +316,9 @@ proxy the facilitator's HTTP API. See
 | Asset not in `VELLAR_X402_ASSETS` | Asset is off the allowlist, refused unsigned | No | Add the asset and its session ceiling to `VELLAR_X402_ASSETS` |
 | Fee sponsorship not declared | The challenge did not set `extra.areFeesSponsored === true`, refused unsigned | No | Point at a facilitator that sponsors fees |
 | Policies set without a wallet | `VELLAR_X402_POLICIES` without `VELLAR_X402_WALLET`, refused at startup | No | Set `VELLAR_X402_WALLET`, or remove `VELLAR_X402_POLICIES` |
+| `Error(Contract, #110)` with a nested failed `policy__` call | Layer 2 refused the payment on-chain | No | The payment is over the policy's cap. Retrying with a larger `max_amount` will not help |
+| `Error(Contract, #110)` with no policy invocation | The signature map is malformed, often a policy missing from it | No | Set `VELLAR_X402_POLICIES` to every policy in the key's `SignerLimits` |
+| `invalid version byte. expected 48, got 16` | The official `ExactStellarScheme` cannot sign for a `C...` credential address | No | Use this package's registered smart-account scheme; see [x402-foundation/x402 issue #3159](https://github.com/x402-foundation/x402/issues/3159) |
 | First call hangs | Free-tier facilitator cold start (sleeps after 15 min idle; first call can take 30-90s, occasionally up to 2 min) | No | Send a warming `GET /health` with a 120s timeout before the first payment |
 
 > **Note:** Debug a paid route with `GET`, never `HEAD`. A `curl -I` returns a
@@ -250,5 +328,6 @@ proxy the facilitator's HTTP API. See
 
 - [Discover services](../buyers/discover-services.md)
 - [Spend controls](../buyers/spend-controls.md)
-- [Agent keys](../agent-keys.md)
+- [Agent keys](./agent-keys.md)
+- [Policies](./policies.md)
 - [Bazaar and discovery](../concepts/bazaar-and-discovery.md)

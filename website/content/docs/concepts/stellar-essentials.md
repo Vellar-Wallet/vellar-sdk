@@ -159,7 +159,7 @@ Sign a fresh payload instead of caching one.
 
 The Vellar passkey wallet creates `C...` accounts: Soroban smart-contract
 accounts whose authorization runs through `__check_auth`, which is where a
-spending-limit [policy](../policies.md) lives. Classic buyers use `G...`
+spending-limit [policy](../agent-tooling/policies.md) lives. Classic buyers use `G...`
 accounts, plain ed25519 keypairs that cannot hold policies at all. The
 facilitator settles from both.
 

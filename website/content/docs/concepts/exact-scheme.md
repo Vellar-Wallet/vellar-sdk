@@ -81,7 +81,7 @@ one of them failing refuses the payment, and nothing is spent.
 1. **The signature is valid over the exact declared transfer fields.** The entry
    is re-checked against `from`, `to` and `amount` as declared. For a Vellar
    smart account this happens by re-simulation, which runs the account's
-   `__check_auth` and therefore any attached [policy](../policies.md).
+   `__check_auth` and therefore any attached [policy](../agent-tooling/policies.md).
 2. **The authorization matches the declared scheme, asset, amount and
    recipient.** A payload that authorizes a different token contract, a different
    amount, or a different `payTo` than the challenge asked for is refused.

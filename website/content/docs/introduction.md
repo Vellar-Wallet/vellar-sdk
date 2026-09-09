@@ -3,7 +3,7 @@
 **Vellar is a programmable payment platform for Stellar** — the payment layer
 for the agent economy. It combines a live [x402 facilitator with Bazaar
 discovery](./facilitator.md), on-chain [spending and provenance
-policies](./policies.md), and a passkey [smart wallet](./how-it-works.md), so
+policies](./agent-tooling/policies.md), and a passkey [smart wallet](./how-it-works.md), so
 that people and AI agents can **discover**, **pay for**, and be **governed on**
 services on Stellar — with the rules enforced by consensus, not by your code.
 
@@ -27,7 +27,7 @@ await vellar.pay({ to, amount, token });  // simulate → passkey → sponsored 
 - **[Bazaar discovery](./facilitator.md)** — every settled payment auto-catalogs
   its resource, so an agent can **find** what to pay for by keyword search over
   HTTP or an MCP server. This is the piece a bare facilitator doesn't have.
-- **[On-chain governance](./policies.md)** — spending-limit and verified-only
+- **[On-chain governance](./agent-tooling/policies.md)** — spending-limit and verified-only
   policies co-sign inside the wallet's `__check_auth`, so an over-budget or
   unverified payment is **rejected by consensus** and no funds move. *Provenance
   the chain enforces, not a claim in a doc.*
@@ -40,9 +40,9 @@ await vellar.pay({ to, amount, token });  // simulate → passkey → sponsored 
 Vellar isn't only a human wallet — it's built for autonomous agents that spend
 money. Three surfaces make that safe:
 
-- **[Agent keys](./agent-keys.md)** — mint a scoped session key an agent holds
+- **[Agent keys](./agent-tooling/agent-keys.md)** — mint a scoped session key an agent holds
   itself. *Give your agent a budget, not your keys.*
-- **[Policies](./policies.md)** — a spending-limit policy caps *how much*; a
+- **[Policies](./agent-tooling/policies.md)** — a spending-limit policy caps *how much*; a
   verified-only policy restricts the agent to contracts with reproducible,
   verified source (*provenance, not an audit*). Both are enforced on-chain in
   the wallet's `__check_auth`, so they bind even a fully compromised agent.

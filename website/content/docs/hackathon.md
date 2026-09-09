@@ -71,11 +71,11 @@ These are starting points, not the ceiling, the strongest submissions will
 surprise us.
 
 **Key SDK surface:** `wallet.policies` (templates, generate, simulate, deploy).
-See [Policies](./policies.md).
+See [Policies](./agent-tooling/policies.md).
 
 **Config you need:** `apiUrl: "https://vellar-backend.onrender.com"` in
 `createVellarWallet` (the same host as the wallet backend) — see
-[Enabling policies](./policies.md#enabling-policies), which includes a
+[Enabling policies](./agent-tooling/policies.md#enabling-policies), which includes a
 zero-context smoke test you can paste before writing any wallet code.
 
 ### Track 3, x402 Agent Payments
@@ -97,7 +97,7 @@ starting points, not the ceiling, the strongest submissions will surprise us.
 signer, a Friendbot-funded `G...` account as `simulationSourceAccount`, and
 `rpcUrl: "https://soroban-testnet.stellar.org"` — copy it from
 [Enabling x402](./x402.md#enabling-x402). Mint the session key per
-[Agent Keys](./agent-keys.md), and discover payable resources through the
+[Agent Keys](./agent-tooling/agent-keys.md), and discover payable resources through the
 [facilitator's Bazaar](./facilitator.md). Want to test against a live seller
 without running your own? The demo seller accepts testnet USDC — see
 [Paying the deployed demo seller](./facilitator.md#paying-the-deployed-demo-seller).
@@ -363,7 +363,7 @@ payments are fee-sponsored. See the [Quickstart](./getting-started/quickstart.md
 browser-only. For Node, CLIs, and agents use the session-key path: mint an
 agent key (browser session, or `provision-testnet.mjs`), then
 `createSessionKeySigner` + `wallet.x402`. The `PasskeyBrowserRequiredError`
-you'll see says exactly this. See [Agent Keys](./agent-keys.md).
+you'll see says exactly this. See [Agent Keys](./agent-tooling/agent-keys.md).
 
 **Can I build on passkey-signed x402?** No — it does not settle on any
 deployed facilitator. Build on the session-key (agent) path. See

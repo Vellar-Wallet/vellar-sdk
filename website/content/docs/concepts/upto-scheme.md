@@ -106,7 +106,7 @@ The answer is reserve-then-reconcile:
 
 So an agent's budget is debited correctly on metered calls. Between signing and settlement the agent's remaining budget looks pessimistic, which is the safe direction: the agent cannot commit to two ceilings it could not both cover. Once the meter is read, the difference comes back.
 
-> **Note:** the spending-limit policy caps cumulative spend over a FIXED (tumbling) window. `spent` resets to zero when the window elapses, it does not slide. Spending timed around a window boundary can move up to 2x the cap in a short span. Treat it as a guardrail, not a to-the-stroop hard cap. See [policies](../policies.md).
+> **Note:** the spending-limit policy caps cumulative spend over a FIXED (tumbling) window. `spent` resets to zero when the window elapses, it does not slide. Spending timed around a window boundary can move up to 2x the cap in a short span. Treat it as a guardrail, not a to-the-stroop hard cap. See [policies](../agent-tooling/policies.md).
 
 ## Known limitation
 
@@ -149,4 +149,4 @@ You can also watch settlements classified off the ledger at [explorer.vellar.xyz
 - [The payment loop](./payment-loop.md) for the verify/settle flow both schemes share
 - [The exact scheme](./exact-scheme.md) for the fixed-price counterpart
 - [Upto reference](../upto.md) for the wire shape, seller registration, and a runnable buyer
-- [Policies](../policies.md) for how the spending-limit budget is enforced by consensus
+- [Policies](../agent-tooling/policies.md) for how the spending-limit budget is enforced by consensus

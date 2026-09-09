@@ -21,11 +21,11 @@ both are enforced on-chain:
 
 - a **spending-limit** policy — *how much* (a cumulative fixed-window cap),
 - a **verified-only** policy — *through what* (only contracts whose source is
-  attested as verified; see [Policies](./policies.md)).
+  attested as verified; see [Policies](./agent-tooling/policies.md)).
 
 A key restricted by both can pay for API calls all day, but cannot spend past
 its per-window cap (at most 2× the cap in a short span around a window reset —
-see [Policies](./policies.md#honesty)) and cannot be tricked into paying
+see [Policies](./agent-tooling/policies.md#honesty)) and cannot be tricked into paying
 through unverified code. Nobody — not your server, not the SDK, not a hijacked
 agent process — can override that.
 
@@ -94,7 +94,7 @@ transaction confirms. This is the remote kill for a lost or misbehaving agent.
 
 `mint` and `revoke` are wallet-admin actions, so they are passkey-signed
 through an `agentKeys` runtime you wire to your `PasskeyKit` — exactly like
-[`policyAttach`](./policies.md). Without it, `wallet.agents` calls throw a
+[`policyAttach`](./agent-tooling/policies.md). Without it, `wallet.agents` calls throw a
 clear error; the rest of the wallet still works.
 
 ```ts
@@ -154,7 +154,7 @@ same reason `policyAttach` is wired the host side.
   supports it); never in the browser or the wallet app.
 - **Verified ≠ safe.** A verified-only grant restricts the agent to contracts
   with reproducible, attributable source — *provenance*, not an audit or a
-  safety proof. See [Policies](./policies.md).
+  safety proof. See [Policies](./agent-tooling/policies.md).
 - **Expiry + revoke bound the blast radius.** A compromised agent key can, at
   worst, spend up to its remaining budget through verified contracts until it
   expires or you revoke it — never the account's full balance, never admin
