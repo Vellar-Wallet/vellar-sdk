@@ -19,8 +19,8 @@ with no backend setup.
 
 ## 1. Install
 
-All three packages — the SDK, its Stellar peer, and the passkey engine you pass
-in as `kit`:
+Install [`vellar-sdk`](https://www.npmjs.com/package/vellar-sdk) with its
+Stellar peer and the passkey engine you pass in as `kit`:
 
 ```sh
 npm install vellar-sdk @stellar/stellar-sdk passkey-kit
