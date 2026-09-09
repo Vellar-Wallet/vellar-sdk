@@ -113,7 +113,7 @@ without hardcoded URLs.
 the same filters, and `cursor` for pagination.
 
 > ⚠️ **The MCP server only discovers. It does not pay.** Paying requires a
-> separate server that holds a key — see the [MCP payer](../mcp-payer.md).
+> separate server that holds a key — see the [MCP payer](../agent-tooling/mcp-payer.md).
 
 > ⚠️ **First tool call after idle may take up to a minute.** The facilitator
 > runs on a free tier. Send a warming `GET /health` request (it is
@@ -133,6 +133,6 @@ the same filters, and `cursor` for pagination.
 
 - [Pay for a resource](./pay-for-a-resource.md) — pay once you have a URL
 - [Spend controls](./spend-controls.md) — cap what an agent can spend
-- [MCP payer](../mcp-payer.md) — pay from inside an agent runtime
+- [MCP payer](../agent-tooling/mcp-payer.md) — pay from inside an agent runtime
 - [Facilitator & Bazaar](../facilitator.md) — list your own resource in the
   catalog

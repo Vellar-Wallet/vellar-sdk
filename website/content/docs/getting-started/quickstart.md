@@ -151,8 +151,8 @@ throw `X402NotConfiguredError`.
 
 - [Pay for a resource](../buyers/pay-for-a-resource.md) — the full x402 buyer
   flow with spend controls
-- [Agent keys](../agent-tooling/agent-keys.md) — give an agent a scoped session
+- [Agent keys](../agent-keys.md) — give an agent a scoped session
   key with an on-chain budget
-- [Charge for an endpoint](../sellers/charge-for-an-endpoint.md) — add a payment
+- [Charge for an endpoint](../facilitator.md) — add a payment
   gate to your API
 - [How it works](./how-it-works.md) — what happened under the hood

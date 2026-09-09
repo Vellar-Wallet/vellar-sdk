@@ -224,7 +224,7 @@ const server = new x402ResourceServer(
 ```
 
 > **Adding a gate to an endpoint you already have?** The [VS Code
-> extension](./vscode.md) injects this wiring into a route you pick, in one
+> extension](./agent-tooling/vscode.md) injects this wiring into a route you pick, in one
 > command — same boilerplate, without writing it by hand.
 
 Declare the **bazaar discovery extension** on a route and your resource is
@@ -372,7 +372,7 @@ The facilitator runs on a free tier — the first tool call after idle may take 
 to a minute.
 
 Paying for what you find is a separate server that holds a key — see the
-[MCP payer](./mcp-payer.md).
+[MCP payer](./agent-tooling/mcp-payer.md).
 
 ## Running the full loop
 

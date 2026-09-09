@@ -97,4 +97,4 @@ credentials and submits to the network.
 
 - [Quickstart](./quickstart.md) — create a wallet and send a payment
 - [How it works](./how-it-works.md) — why submission goes through your backend
-- [API reference](../reference/sdk.md) — the full createVellarWallet config
+- [API reference](../api-reference.md) — the full createVellarWallet config

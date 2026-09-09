@@ -92,6 +92,6 @@ settled payment.
 |---|---|
 | Build a wallet for my users | [Quickstart](./quickstart.md) |
 | Pay for x402 resources from code | [Pay for a resource](../buyers/pay-for-a-resource.md) |
-| Add a payment gate to my API | [Charge for an endpoint](../sellers/charge-for-an-endpoint.md) |
-| Give my agent a budget | [Agent keys](../agent-tooling/agent-keys.md) |
+| Add a payment gate to my API | [Charge for an endpoint](../facilitator.md) |
+| Give my agent a budget | [Agent keys](../agent-keys.md) |
 | Understand how it works | [How it works](./how-it-works.md) |

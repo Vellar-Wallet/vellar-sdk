@@ -69,17 +69,40 @@ export const DOC_PAGES: DocPage[] = [
   { slug: "security", title: "Security", nav: "Security", section: "Wallet & Passkeys",
     description: "The wallet and SDK security model: no key custody, no silent signing, and the on-chain policy guarantees." },
 
-  // Tools
-  { slug: "vscode", title: "VS Code Extension", nav: "VS Code extension", section: "Tools",
-    description: "Add x402 payment gating to an HTTP endpoint in one command from VS Code." },
-  { slug: "mcp-payer", title: "MCP Payer", nav: "MCP payer", section: "Tools",
+  // Agent tooling — the servers and editor tooling an agent developer wires up.
+  { slug: "agent-tooling/mcp-payer", title: "MCP Payer", nav: "MCP payer",
+    section: "Agent Tooling",
     description: "An MCP server that lets an AI agent pay for x402 resources, with process-level and on-chain budget layers." },
+  { slug: "agent-tooling/vscode", title: "VS Code Extension", nav: "VS Code extension",
+    section: "Agent Tooling",
+    description: "Add x402 payment gating to an HTTP endpoint in one command from VS Code." },
+
+  // Concepts — first-principles explanations, readable in any order.
+  { slug: "concepts/payment-loop", title: "The Payment Loop", nav: "The payment loop",
+    section: "Concepts",
+    description: "Every participant and every step in an x402 payment, and why each step exists." },
+  { slug: "concepts/exact-scheme", title: "The Exact Scheme", nav: "Exact scheme",
+    section: "Concepts",
+    description: "Fixed-price settlement: what the buyer signs, ledger-based expiration, and what the facilitator checks." },
+  { slug: "concepts/upto-scheme", title: "The Upto Scheme", nav: "Upto scheme",
+    section: "Concepts",
+    description: "Metered settlement: why it needs a Soroban contract, and the two guarantees that contract enforces." },
+  { slug: "concepts/bazaar-and-discovery", title: "Bazaar and Discovery", nav: "Bazaar and discovery",
+    section: "Concepts",
+    description: "How a resource enters the catalog, what ownerVerified means, and which trust signals actually work." },
+  { slug: "concepts/stellar-essentials", title: "Stellar Essentials", nav: "Stellar essentials",
+    section: "Concepts",
+    description: "Trustlines, SEP-41 amounts, fee sponsorship, authorization entries, and G versus C accounts." },
 
   // Reference
   { slug: "api-reference", title: "API Reference", nav: "createVellarWallet", section: "Reference",
     description: "Configuration reference for createVellarWallet and the runtime seams it accepts." },
   { slug: "advanced", title: "Advanced Usage", nav: "Advanced", section: "Reference",
     description: "Lower-level building blocks the SDK exports for custom transports and integrations." },
+  { slug: "reference/error-codes", title: "Error Codes", nav: "Error codes", section: "Reference",
+    description: "Every error, its cause, whether retrying is safe, and which ones mean money already moved." },
+  { slug: "reference/conformance", title: "Conformance", nav: "Conformance", section: "Reference",
+    description: "Wire-level verification with real settlement hashes you can check against Horizon yourself." },
 ];
 
 /** Sections in sidebar order, derived from DOC_PAGES. */
