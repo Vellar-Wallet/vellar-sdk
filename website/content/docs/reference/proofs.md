@@ -157,6 +157,12 @@ which is the non-custodial property to check.
 The `upto` scheme settles the actual metered amount rather than the signed
 ceiling.
 
+Settlements 1 and 2 ran through the previous contract
+(`CDHPA64M73TUTEM4MMHIWIXINBQXH7JJXFGZMGH22VJWFJFROMR6QV2S`). The current
+contract's first settlement is settlement 3,
+`be33bb71b0a2c74c465bf0243c45e081bc7c5b66a337e2d8a5c0bbb82f54ede6` at ledger
+4587956.
+
 ```bash
 # Settlement 1
 curl -s "https://horizon-testnet.stellar.org/transactions/be72877332bbd7f8d38511cccf00620fb20869cfedbc7530588ca856ac646d9a" \
