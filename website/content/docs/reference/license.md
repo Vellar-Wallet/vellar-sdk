@@ -33,7 +33,8 @@ The `upto` settlement contract vendored at `contracts/upto-stellar/` in the
 facilitator repository is Apache-2.0, credited to rail402
 ([tolgayayci/rail402](https://github.com/tolgayayci/rail402)) at commit
 `ff504b85ac065369dc985759afe4164a4541d861`. The full attribution lives in
-`contracts/upto-stellar/PROVENANCE.md` in the facilitator repo.
+[`contracts/upto-stellar/PROVENANCE.md`](https://github.com/Vellar-Wallet/vellar-facilitator/blob/main/contracts/upto-stellar/PROVENANCE.md)
+in the facilitator repo.
 
 This matters because the vendored code is third-party code running in the
 settlement path, not a Vellar original. The provenance file is the record of
