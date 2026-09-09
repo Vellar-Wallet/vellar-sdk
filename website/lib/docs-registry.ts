@@ -117,6 +117,8 @@ export const DOC_PAGES: DocPage[] = [
     description: "Every error, its cause, whether retrying is safe, and which ones mean money already moved." },
   { slug: "reference/conformance", title: "Conformance", nav: "Conformance", section: "Reference", tab: "reference",
     description: "Wire-level verification with real settlement hashes you can check against Horizon yourself." },
+  { slug: "reference/fees", title: "Fees and Sponsorship", nav: "Fees and sponsorship", section: "Reference", tab: "reference",
+    description: "What fees cost by payment type, why policy-governed payments need a higher ceiling, and how the sponsor balance guards work." },
 
   // Hackathon — a dated event page, kept last so it never fronts the docs.
   { slug: "hackathon", title: "Vellar × Stellar Hackathon", nav: "Hackathon", section: "Hackathon", tab: "reference",
