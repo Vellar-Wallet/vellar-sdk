@@ -36,6 +36,12 @@ server.register(
 );
 ```
 
+> **Note:** If you are running your own facilitator, set `UPTO_CONTRACT_ID` to
+> the contract address in your environment. Without it the `upto` scheme is not
+> registered and not served, and only the `exact` scheme runs. The hosted
+> instance at `vellar-facilitator.onrender.com` has this set already. See
+> [Configuration](../operators/configuration.md).
+
 > **Note:** The facilitator advertises the contract id it will actually use in `GET /supported`, under the `upto` kind's `extra.uptoContract`. Fetch it and confirm it matches the value you register, so you are not authorizing code the facilitator did not name.
 
 ## 2. Declare the ceiling, not the price

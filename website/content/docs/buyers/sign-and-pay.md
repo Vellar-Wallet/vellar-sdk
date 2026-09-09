@@ -66,9 +66,10 @@ any spending-limit policy attached to the signing key. An over-budget payment is
 caught at this point, before anything settles and before any fee is spent.
 
 That is also why policy-governed payments cost more: running the policy contract
-inside `__check_auth` raises the simulation-derived fee to roughly 130,000
-stroops (worst settlement measured on testnet: 127,808), where a plain transfer
-stays well under the default ceiling.
+inside `__check_auth` raises the fee, where a plain transfer stays well under
+the default ceiling. A policy-governed payment bids roughly 130,000 stroops and
+charges roughly 86,000 stroops actually on-chain. See
+[Fees and Sponsorship](../reference/fees.md) for the bid-vs-charge distinction.
 
 > **Note:** The Vellar facilitator ships with a 500,000-stroop fee ceiling
 > specifically so policy-governed agent payments settle instead of being

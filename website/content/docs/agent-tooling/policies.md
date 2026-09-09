@@ -37,7 +37,7 @@ const vellar = createVellarWallet({
   isValidAddress,
   // The hosted testnet policy gateway (same host as the wallet backend).
   // Production: your own gateway. Free instance, so the first request after a
-  // quiet spell can take 30-90s (occasionally about 2 min) while it wakes.
+  // quiet spell can take roughly 45s (measured) while it wakes.
   apiUrl: "https://vellar-backend.onrender.com",
   policyAttach: {
     // build kit.addPolicy(contractId), passkey-sign, submit via your backend
@@ -160,7 +160,7 @@ Each template declares how it is **actually** enforced on-chain, as `enforcement
 | `deploy()` throws a clear error while `listTemplates`, `generate` and `simulate` work | `policyAttach` was not configured | Add the `policyAttach` runtime that builds `kit.addPolicy`, passkey-signs and submits |
 | Policy deployed, but the agent is not limited | The policy is not named in the agent key's grants, so it never co-signs | Mint the agent key with that policy contract in the grant for the token (see [Agent keys](./agent-keys.md)) |
 | More than the cap moved in a short span | Expected: the window tumbles rather than slides, so up to 2x the cap can move around a boundary | Size the window for that worst case, or pair the limit with a cryptographic co-signer |
-| The first gateway request takes 30-90s | Free-tier cold start on the hosted testnet gateway (occasionally about 2 min) | Warm it with an early call and use a 120s timeout |
+| The first gateway request takes roughly 45s (measured) | Free-tier cold start on the hosted testnet gateway | Warm it with an early call and use a 120s timeout |
 
 ## Next steps
 

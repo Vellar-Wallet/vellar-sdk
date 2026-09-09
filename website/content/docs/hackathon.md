@@ -351,8 +351,9 @@ with a pinned message, this page wins.
 
 **The first request is hanging / everything seems down.** The hosted backend
 and facilitator sleep when idle (free instances). The first request after a
-quiet spell can take 30–90 seconds, occasionally ~2 minutes, while they
-wake. Retry — after that everything is fast. Not a bug in your code.
+quiet spell takes roughly 45 seconds (measured) while they wake. Allow up to
+120 seconds in your timeout and retry — after that everything is fast. Not a
+bug in your code.
 
 **How do I get a funded testnet account?** Friendbot, free:
 `curl "https://friendbot.stellar.org?addr=G...YOURKEY"`. You only need it

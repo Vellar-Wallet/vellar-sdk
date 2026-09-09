@@ -140,6 +140,12 @@ CATALOG_DB_URL=file:./data/catalog.db npm start
 Setting one half of the bond escrow pair without the other fails the boot rather
 than starting with escrow half-configured.
 
+> **Note:** Bond escrow is an optional feature that registers each settled
+> payment with an on-chain escrow contract, giving the payer standing to
+> dispute. It is not required for normal operation. Leave both `BOND_ESCROW_*`
+> variables unset unless you are specifically building on the dispute and bond
+> feature.
+
 ## 9. Retired variables
 
 These are logged with a loud warning and ignored if set. They do nothing.

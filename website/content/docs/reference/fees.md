@@ -61,7 +61,15 @@ curl -s \
 # fee_charged: 85999
 ```
 
-The `fee_account` is the facilitator's sponsor, not the buyer. That is
+> **Note:** This settlement used an earlier sponsor account (`GAJS3G2D...`) from
+> before the current channel-pool deployment. The fee payer is still the
+> facilitator, not the buyer, which is the non-custodial property being
+> demonstrated. Recent settlements show one of the 50 channel accounts as
+> `fee_account`, since channel accounts are now the transaction source and the
+> sponsor is the fee-bump payer. Either way, the buyer is not in the
+> `fee_account` field.
+
+The `fee_account` is the facilitator's, not the buyer's. That is
 `areFeesSponsored: true` demonstrated on-chain rather than asserted.
 
 ## Why policy-governed payments cost more
@@ -129,9 +137,10 @@ with confusing errors.
 
 ## Verifying fee sponsorship
 
-On any settlement, `fee_account` in the Horizon response should be the
-facilitator's sponsor rather than the buyer's address. That is how to confirm
-`areFeesSponsored: true` is actually funded at runtime:
+On recent settlements, `fee_account` is one of the 50 channel accounts rather
+than the sponsor directly: the channel account is the transaction source and the
+sponsor acts as the fee-bump payer. On either path the buyer's address does not
+appear in `fee_account`, and that is the non-custodial property to verify.
 
 ```bash
 curl -s \

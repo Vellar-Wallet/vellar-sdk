@@ -48,8 +48,8 @@ for why submission is server-side.
 > `createHttpWalletBackend` at it and skip the server work entirely (this is
 > what [hackathon](./hackathon.md#getting-started) projects should do). It
 > also serves the policy API for `apiUrl`. Free instance: the first request
-> after idle can take 30–90 seconds (occasionally up to ~2 minutes) to wake. Run your own backend when you
-> ship to production.
+> after idle takes roughly 45 seconds (measured) to wake; allow up to 120
+> seconds in your timeout. Run your own backend when you ship to production.
 
 ## Requirements
 

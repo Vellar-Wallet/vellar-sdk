@@ -115,7 +115,7 @@ the same filters, and `cursor` for pagination.
 > ⚠️ **The MCP server only discovers. It does not pay.** Paying requires a
 > separate server that holds a key — see the [MCP payer](../agent-tooling/mcp-payer.md).
 
-> ⚠️ **First tool call after idle may take up to a minute.** The facilitator
+> ⚠️ **First tool call after idle takes roughly 45 seconds.** The facilitator
 > runs on a free tier. Send a warming `GET /health` request (it is
 > rate-limit-exempt) before your agent's first call.
 

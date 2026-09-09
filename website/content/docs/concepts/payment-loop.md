@@ -97,8 +97,8 @@ sequenceDiagram
 ```
 
 > **Note:** The hosted facilitator runs on a free tier and sleeps after 15
-> minutes idle. The first call after a sleep can take 30 to 90 seconds, and
-> occasionally up to 2 minutes, before step 5 answers.
+> minutes idle. The first call after a sleep takes roughly 45 seconds
+> (measured) before step 5 answers. Allow up to 120 seconds in your timeout.
 
 ## Auth entries, not transactions
 
@@ -116,12 +116,11 @@ Verification is not a signature format check. The facilitator re-simulates the
 entire transaction against the chain, which executes the buyer's `__check_auth`,
 and `__check_auth` is exactly where a spending-limit policy is enforced, so an
 over-budget payment is caught before any funds move. That thoroughness has a
-cost: running a policy adds resource fees, and a policy-governed payment raises
-the simulation-derived fee to roughly 130,000 stroops (the worst settlement
-measured on testnet was 127,808). Vellar's facilitator ships a ceiling of
-500,000 stroops, raisable via `MAX_TX_FEE_STROOPS`, while the reference
-`x402.org` facilitator defaults to 50,000 and rejects policy-governed payments
-with `fee_exceeds_maximum`.
+cost: running a policy adds resource fees, so policy-governed payments cost more
+in fees. See [Fees and Sponsorship](../reference/fees.md) for measured figures.
+Vellar's facilitator ships a ceiling of 500,000 stroops, raisable via
+`MAX_TX_FEE_STROOPS`, while the reference `x402.org` facilitator defaults to
+50,000 and rejects policy-governed payments with `fee_exceeds_maximum`.
 
 ## The two schemes
 

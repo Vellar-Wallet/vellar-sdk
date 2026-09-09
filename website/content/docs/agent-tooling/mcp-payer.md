@@ -198,11 +198,12 @@ mean opposite things.
 
 ### What it costs
 
-A policy-governed settle costs 28,678 to 116,202 stroops actually charged
-on-chain (0.003 to 0.012 XLM), against a simulated estimate of 140,331 and a
-facilitator ceiling of 500,000. It fits with room to spare, and it is roughly
-the same as a plain keypair settle: running a policy inside `__check_auth` adds
-about 6,900 stroops, roughly 5 percent.
+A policy-governed settle costs roughly 86,000 stroops actually charged on-chain
+(0.0086 XLM), compared to roughly 23,000 to 29,000 stroops for a plain keypair
+settle. The policy adds meaningful overhead, but the facilitator's
+500,000-stroop ceiling handles it comfortably. See
+[Fees and Sponsorship](../reference/fees.md) for the full breakdown, including
+the bid-vs-charge distinction.
 
 ## Settlement retries are the normal path
 
@@ -319,7 +320,7 @@ point, not a fork.
 | `Error(Contract, #110)` with a nested failed `policy__` call | Layer 2 refused the payment on-chain | No | The payment is over the policy's cap. Retrying with a larger `max_amount` will not help |
 | `Error(Contract, #110)` with no policy invocation | The signature map is malformed, often a policy missing from it | No | Set `VELLAR_X402_POLICIES` to every policy in the key's `SignerLimits` |
 | `invalid version byte. expected 48, got 16` | The official `ExactStellarScheme` cannot sign for a `C...` credential address | No | Use this package's registered smart-account scheme; see [x402-foundation/x402 issue #3159](https://github.com/x402-foundation/x402/issues/3159) |
-| First call hangs | Free-tier facilitator cold start (sleeps after 15 min idle; first call can take 30-90s, occasionally up to 2 min) | No | Send a warming `GET /health` with a 120s timeout before the first payment |
+| First call hangs | Free-tier facilitator cold start (sleeps after 15 min idle; first call takes roughly 45s (measured)) | No | Send a warming `GET /health` with a 120s timeout before the first payment |
 
 > **Note:** Debug a paid route with `GET`, never `HEAD`. A `curl -I` returns a
 > plain 200 because a HEAD request carries no payment challenge.

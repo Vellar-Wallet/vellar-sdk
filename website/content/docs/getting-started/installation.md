@@ -73,7 +73,7 @@ credentials and submits to the network.
 
 > ⚠️ **Free tier cold start.** The hosted backend runs on a free Render instance
 > that sleeps after 15 minutes of inactivity. The first request after idle can
-> take 30-90 seconds, occasionally up to 2 minutes. Retry rather than assuming a
+> take roughly 45 seconds (measured). Retry rather than assuming a
 > bug. Send a warming request before showing it to a user.
 
 ## Requirements

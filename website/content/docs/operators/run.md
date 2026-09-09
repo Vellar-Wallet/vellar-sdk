@@ -49,7 +49,53 @@ block. Keep that block: the next three steps read values out of it.
 With `USE_USDC=1` the script uses canonical testnet USDC rather than minting a
 throwaway token.
 
-## 2. Start the facilitator
+## 2. Provision the channel pool
+
+The facilitator requires exactly 50 funded channel accounts. Generate them:
+
+```bash
+node -e "
+const { Keypair } = require('@stellar/stellar-sdk');
+const keys = Array.from({ length: 50 }, () => Keypair.random());
+// The value for CHANNEL_ACCOUNT_SECRET_KEYS:
+console.log('CHANNEL_ACCOUNT_SECRET_KEYS=' + keys.map(k => k.secret()).join(','));
+// The public keys, which is what friendbot funds:
+keys.forEach((k, i) => console.error('Account ' + (i + 1) + ' ' + k.publicKey()));
+" > channel-keys.env
+```
+
+The secrets go to `channel-keys.env`; the public keys print to stderr so you can
+see what to fund. Fund every one of them through friendbot:
+
+```bash
+node -e "
+const { Keypair } = require('@stellar/stellar-sdk');
+const line = require('fs').readFileSync('channel-keys.env', 'utf8').trim();
+line.replace(/^CHANNEL_ACCOUNT_SECRET_KEYS=/, '').split(',')
+  .forEach(s => console.log(Keypair.fromSecret(s).publicKey()));
+" | while IFS= read -r pubkey; do
+  curl -s "https://friendbot.stellar.org?addr=$pubkey" > /dev/null
+  echo "Funded: $pubkey"
+done
+```
+
+Or fund each public key individually at friendbot.stellar.org.
+
+> ⚠️ **`channel-keys.env` holds 50 Stellar secrets.** Treat it as a credential
+> file. Do not commit it, and add it to `.gitignore` before you do anything
+> else.
+
+Load the env block before starting the facilitator:
+
+```bash
+source channel-keys.env
+```
+
+> **Note:** This script is a development convenience for testnet. For a
+> production deployment, generate the keys in a secure environment, store them
+> in a secrets manager, and fund the accounts on pubnet with real XLM.
+
+## 3. Start the facilitator
 
 > ⚠️ **libSQL will not create the data directory for you.** Without it the
 > facilitator fails with `ConnectionFailed("./data/catalog.db: 14")`, where 14 is
@@ -84,7 +130,7 @@ explicit rather than required. `STELLAR_NETWORK` defaults to `testnet` and
 accepts only `"testnet"` or `"pubnet"`: `"mainnet"`, `"PUBNET"` and
 `"stellar:pubnet"` all fail the boot rather than silently defaulting.
 
-## 3. Verify it started
+## 4. Verify it started
 
 ```bash
 curl localhost:4100/health
@@ -111,7 +157,7 @@ Four other `/health` fields are worth reading now so they mean something later:
 
 `/health` also reports `commit`, the git commit hash currently serving.
 
-## 4. Run a seller
+## 5. Run a seller
 
 From `examples/`, start a seller pointed at your local facilitator, using the
 `PAYTO` and `ASSET` values the provisioning script printed.
@@ -131,7 +177,7 @@ node seller.mjs
 > fails at settlement with an on-chain error that reads like a spend control
 > refusing it.
 
-## 5. Run a buyer
+## 6. Run a buyer
 
 The classic keypair path is the simplest way to prove the loop works. It needs
 nothing but a funded payer secret.
@@ -170,7 +216,7 @@ node buyer.mjs
 > seconds apart) before returning the error, so what you receive is after those
 > retries.
 
-## 6. Check the catalog
+## 7. Check the catalog
 
 After one settled payment, the resource is cataloged. Cataloging happens on
 settle, not on verify.

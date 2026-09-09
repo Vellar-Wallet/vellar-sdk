@@ -53,6 +53,8 @@ The facilitator advertises it in `GET /supported`, under the `upto` kind's `extr
 
 Read that field before you sign. It tells you exactly which contract you are about to authorize, so you are not trusting the facilitator's word about which code will hold your ceiling.
 
+> **Note:** If you are running your own facilitator, set `UPTO_CONTRACT_ID` to the contract address in your environment. Without it the `upto` scheme is not registered and not served, and only the `exact` scheme runs. The hosted instance at `vellar-facilitator.onrender.com` has this set already. See [Configuration](../operators/configuration.md).
+
 ## Verify the contract reproducibly
 
 Fetch the deployed wasm off the ledger and hash it yourself:

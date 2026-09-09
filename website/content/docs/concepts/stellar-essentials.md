@@ -164,12 +164,11 @@ accounts, plain ed25519 keypairs that cannot hold policies at all. The
 facilitator settles from both.
 
 Smart-account payments cost more in fees, because settlement actually runs
-`__check_auth` and any policy attached to the account. A policy-governed payment
-raises the simulation-derived fee to roughly 130,000 stroops (the worst
-settlement measured on testnet was 127,808), which is why Vellar ships a
-500,000 stroop ceiling (raisable via `MAX_TX_FEE_STROOPS`). The reference
-x402.org facilitator defaults to 50,000 stroops and rejects those payments with
-`fee_exceeds_maximum`.
+`__check_auth` and any policy attached to the account. See
+[Fees and Sponsorship](../reference/fees.md) for measured figures. That extra
+cost is why Vellar ships a 500,000 stroop ceiling (raisable via
+`MAX_TX_FEE_STROOPS`). The reference x402.org facilitator defaults to 50,000
+stroops and rejects those payments with `fee_exceeds_maximum`.
 
 ## When it fails
 

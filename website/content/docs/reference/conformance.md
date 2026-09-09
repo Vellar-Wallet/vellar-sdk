@@ -85,9 +85,9 @@ facilitator's sponsor account, not the buyer, which is what
 ## Verify the live endpoints yourself
 
 No wallet, key, or funded account is needed for any of this. The facilitator
-runs on a free tier and sleeps after 15 minutes idle, so the first call can take
-30 to 90 seconds, occasionally up to 2 minutes. Give the first curl a generous
-timeout rather than assuming it is down.
+runs on a free tier and sleeps after 15 minutes idle, so the first call takes
+roughly 45 seconds (measured). Allow up to 120 seconds in your timeout rather
+than assuming it is down.
 
 ```sh
 BASE=https://vellar-facilitator.onrender.com
@@ -233,7 +233,7 @@ Two issues are filed, one of which has attracted a community fix.
 | Scenario fails with "Server failed to start" | Upstream build problem in the suite, not a Vellar defect; it reproduces against the upstream reference facilitator too | Nothing to fix on the Vellar side; the scenario never reaches the payment path |
 | Hash not found on Horizon (404) | Querying the wrong network, e.g. pubnet Horizon | Use `horizon-testnet.stellar.org`; every hash here is testnet |
 | `fee_account` is the buyer, not the sponsor | Fee sponsorship not in effect for that payment | Check `areFeesSponsored: true` on the kind in `GET /supported` |
-| First curl to the facilitator hangs or times out | Free-tier cold start after 15 minutes idle | Retry with a 120s timeout; first call can take 30 to 90s, occasionally 2 minutes |
+| First curl to the facilitator hangs or times out | Free-tier cold start after 15 minutes idle | Retry with a 120s timeout; first call takes roughly 45s (measured) |
 
 ## Next steps
 

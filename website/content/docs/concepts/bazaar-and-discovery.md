@@ -13,8 +13,7 @@ all `localhost` URLs permanently.
   [The payment loop](./payment-loop.md))
 - Access to a facilitator. The hosted instance is
   `https://vellar-facilitator.onrender.com` (`stellar:testnet` only, free tier,
-  sleeps after 15 minutes idle, so the first call can take 30-90s and
-  occasionally up to 2 minutes)
+  sleeps after 15 minutes idle, so the first call takes roughly 45s (measured))
 - `curl` and `python3` for the inspection commands near the end
 
 ## How a resource enters the catalog

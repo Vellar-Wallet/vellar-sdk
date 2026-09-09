@@ -18,8 +18,8 @@ entry are worth reading.
 - `curl` and `python3` for the inspection commands below.
 
 > **Note:** The hosted facilitator runs on a free tier and sleeps after 15
-> minutes idle. The first request after a sleep takes 30-90 seconds, and
-> occasionally up to 2 minutes. That is a cold start, not a failure.
+> minutes idle. The first request after a sleep takes roughly 45 seconds
+> (measured). That is a cold start, not a failure.
 
 ## 1. The five requirements for ownerVerified
 

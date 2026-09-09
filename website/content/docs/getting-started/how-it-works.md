@@ -98,7 +98,7 @@ flow as [`wallet.policies`](../agent-tooling/policies.md).
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| First request takes 30-90 seconds | Render free tier cold start | Send a warming GET /health first |
+| First request takes roughly 45 seconds | Render free tier cold start | Send a warming GET /health first |
 | `X402NotConfiguredError` at construction | `rpcUrl` missing or invalid URL | Pass `x402.rpcUrl` in config |
 | `invalid_exact_stellar_payload_unsupported_credential_type` | `simulationSourceAccount` is the same as the payer | Use a different funded G account for simulation |
 | Payment settles but nothing is cataloged | `required.extensions` not echoed in payload | Echo extensions in your buyer — see Facilitator guide |

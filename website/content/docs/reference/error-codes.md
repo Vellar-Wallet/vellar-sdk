@@ -78,10 +78,10 @@ non-empty `transaction`, covered in the taxonomy below.
 | `fee_exceeds_maximum` | The facilitator's fee ceiling is below the payment's simulated fee | No | Use the Vellar facilitator (500,000 stroops, raisable via `MAX_TX_FEE_STROOPS`) instead of a facilitator defaulting to 50,000 |
 
 > **Note:** Policy-governed payments run the spending-policy contract inside
-> `__check_auth`, which raises the simulation-derived fee to roughly 130,000
-> stroops (worst settlement measured on testnet: 127,808). That is why the
-> reference x402.org facilitator, defaulting to a 50,000-stroop ceiling, refuses
-> them with `fee_exceeds_maximum` even though the payment is valid.
+> `__check_auth`, so they cost more in fees. See
+> [Fees and Sponsorship](./fees.md) for measured figures. That extra cost is why
+> the reference x402.org facilitator, defaulting to a 50,000-stroop ceiling,
+> refuses them with `fee_exceeds_maximum` even though the payment is valid.
 
 ## The settle failure taxonomy
 
@@ -176,7 +176,7 @@ claimed.
 | Symptom | Cause | Fix |
 | --- | --- | --- |
 | A paid route returns `200` to `curl -I` | `HEAD` carries no payment challenge, so a correctly wired route looks broken | Debug with `GET`, not `HEAD` |
-| The first request hangs 30 to 90 seconds (occasionally up to 2 minutes) | Free-tier cold start; the instance sleeps after 15 minutes idle | Send a warming `GET /health` first, with a generous timeout. `/health` is exempt from the 60 requests/min rate limit. |
+| The first request hangs roughly 45 seconds | Free-tier cold start; the instance sleeps after 15 minutes idle | Send a warming `GET /health` first, with a generous timeout. `/health` is exempt from the 60 requests/min rate limit. |
 | Repeated settles come back with an empty `transaction` field | Transient Soroban RPC `TRY_AGAIN_LATER` | Sign a fresh payload and retry once. Nothing was spent, and a cached payload will not work because signatures expire in ledgers. |
 
 ## Next steps

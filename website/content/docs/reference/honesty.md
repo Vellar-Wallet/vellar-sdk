@@ -25,6 +25,20 @@ before the reset and again just after. Treat the limit as an on-chain guardrail,
 not a to-the-stroop hard cap. For a hard guarantee the contract itself
 recommends pairing it with a cryptographic co-signer.
 
+## The spend ceiling accounts at the estimate, not the charge
+
+The facilitator's global spend ceiling (5 XLM per window by default) is
+accounted at the spend estimate of 500,000 stroops per settlement, not at the
+actual charge, which is roughly 23,000 stroops for a keypair payment. So the
+ceiling trips after roughly 100 settlements per window while actually spending
+about 0.23 XLM of the 5 XLM it names.
+
+This is a known open item for pubnet tuning. It fails safe: the ceiling is more
+conservative than it needs to be rather than less. The correct fix is to account
+at the measured charge rather than the estimate, which requires pubnet data that
+does not exist yet. See [Fees and Sponsorship](./fees.md) for the difference
+between the estimate, the bid and the charge.
+
 ## What "verified" does and does not mean
 
 The verified-only policy restricts an agent to contracts whose source is
@@ -82,15 +96,14 @@ settlement are independent.
 Vellar runs on stellar:testnet only, and the facilitator advertises
 stellar:testnet in `/supported`.
 
-Mainnet is gated on two remaining items:
+Mainnet is gated on three items:
 
 1. A persistent-disk deployment.
 2. A funded pubnet sponsor account.
+3. A mainnet security audit of the spending-limit policy contract. The
+   facilitator review is complete; the policy contract is a separate item.
 
-The pre-mainnet security review of the facilitator is complete. The
-spending-limit policy contract has not yet been audited for mainnet, and that
-audit is a separate gating item before production traffic should be pointed
-here.
+Production traffic should not be pointed here until all three are done.
 
 ## What the security review covered
 

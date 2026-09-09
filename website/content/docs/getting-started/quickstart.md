@@ -62,7 +62,7 @@ look up. `createHttpWalletBackend` is the ready-made client for the hosted
 gateway.
 
 > ⚠️ **Cold start warning.** The hosted backend sleeps after 15 minutes idle.
-> The first request can take 30-90 seconds. This is a free-tier characteristic,
+> The first request takes roughly 45 seconds (measured). This is a free-tier characteristic,
 > not a bug. For production, run your own backend.
 
 ## 3. Create a wallet

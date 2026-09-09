@@ -65,8 +65,7 @@ wall-clock window a given ledger offset buys you is not fixed. The timeout has t
 cover the whole round trip: the buyer's simulation, the retry request to the
 seller, the facilitator's verify, and the settle submission. A value tuned to a
 perfect network leaves nothing for the facilitator's cold start, and the hosted
-facilitator's first call after idle sleep can take 30 to 90 seconds and
-occasionally up to 2 minutes.
+facilitator's first call after idle sleep can take roughly 45 seconds (measured).
 
 The [`upto`](./upto-scheme.md) scheme adds a separate contract-enforced ceiling
 on top of this: `expiration_ledger` must not exceed `current_ledger + 17,280`
@@ -148,7 +147,7 @@ You can inspect any settlement hash the same way, or open it in the explorer at
 | Expired authorization (verify-stage refusal) | The entry's expiration ledger has passed. Usually a cached payload, a slow round trip, or a facilitator cold start eating the window. | Sign fresh and raise `maxTimeoutSeconds` so the ledger offset covers the whole round trip. |
 | `invalid_exact_stellar_payload_missing_trustline_recipient` | The seller's `payTo` has no trustline to the payment asset. The payment verifies successfully, then fails at settlement. | The seller must add a trustline for that asset. Note this reads almost exactly like a spend control refusing the payment, so check the recipient before blaming your policy. |
 | `invalid_exact_stellar_payload_unsupported_credential_type` | `simulationSourceAccount` is the payer's own address, so Soroban authorized with source-account credentials instead of the smart account's auth entry. | Use a **different** funded classic `G...` account for `simulationSourceAccount`. It never signs and is never charged. |
-| `fee_exceeds_maximum` | The facilitator's sponsored-fee ceiling is below what the payment costs. Policy-governed payments raise the simulation-derived fee to roughly 130,000 stroops (worst measured settlement on testnet: 127,808), while the reference `x402.org` facilitator defaults to 50,000. | Use a facilitator with a raised ceiling. Vellar ships 500,000 stroops, raisable via `MAX_TX_FEE_STROOPS`. |
+| `fee_exceeds_maximum` | The facilitator's sponsored-fee ceiling is below what the payment costs. Policy-governed payments cost more in fees (see [Fees and Sponsorship](../reference/fees.md) for measured figures), while the reference `x402.org` facilitator defaults to 50,000 stroops. | Use a facilitator with a raised ceiling. Vellar ships 500,000 stroops, raisable via `MAX_TX_FEE_STROOPS`. |
 
 Two settlement failures deserve a separate note, because they look alarming and
 are not: `/settle` can return an empty `transaction` field with

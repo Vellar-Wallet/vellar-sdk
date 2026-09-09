@@ -115,15 +115,16 @@ budget-policy story needs an asset your policies are scoped to.
 ## Why it exists
 
 Policy-governed smart-account payments (the [x402 agent flow](./x402.md))
-run the spending-policy contract inside `__check_auth`, which raises the
-simulation-derived fee to roughly 130,000 stroops (worst settlement measured
-on testnet: 127,808). Hosted facilitators default to a 50,000-stroop
-sponsorship ceiling and reject those payments with `fee_exceeds_maximum`,
-even though the payment is valid and policy-approved. The Vellar facilitator
-ships with a 500,000-stroop ceiling — ~3.9× the worst real settlement,
-raisable via `MAX_TX_FEE_STROOPS` — so **agent payments bounded by an
-on-chain budget settle instead of being refused**. Both classic keypairs and
-Soroban smart accounts are supported.
+run the spending-policy contract inside `__check_auth`, which raises the fee.
+Hosted facilitators default to a 50,000-stroop sponsorship ceiling and reject
+those payments with `fee_exceeds_maximum`, even though the payment is valid and
+policy-approved. The Vellar facilitator ships with a 500,000-stroop ceiling. A
+policy-governed payment bids roughly 130,000 stroops, and the bid is what the
+ceiling compares against: see
+[Fees and Sponsorship](./reference/fees.md) for the distinction between bid and
+charge. The ceiling is raisable via `MAX_TX_FEE_STROOPS`, so **agent payments
+bounded by an on-chain budget settle instead of being refused**. Both classic
+keypairs and Soroban smart accounts are supported.
 
 ## Endpoints
 

@@ -72,7 +72,7 @@ and sponsors the network fee from
 
 > **Note:** The hosted facilitator is `stellar:testnet` only and runs on a free
 > tier. It sleeps after 15 minutes idle, so the first request after a quiet spell
-> takes 30-90 seconds and occasionally up to 2 minutes. Send a warming
+> takes roughly 45 seconds (measured). Send a warming
 > `GET /health` before a request you care about.
 
 ## 3. Declare the payment requirements
