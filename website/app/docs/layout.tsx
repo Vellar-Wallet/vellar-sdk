@@ -27,7 +27,7 @@ export default function DocsLayout({ children }: { children: ReactNode }) {
           Explorer
         </a>
         <a
-          href="https://github.com/Vellar-Wallet/vellar-sdk"
+          href="https://github.com/Vellar-Wallet/vellar-facilitator"
           className="docs-toplink"
           target="_blank"
           rel="noopener noreferrer"
