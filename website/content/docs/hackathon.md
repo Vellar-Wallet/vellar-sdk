@@ -1,5 +1,12 @@
 # Vellar × Stellar Hackathon
 
+> **This hackathon has closed.** Submissions closed on August 31, 2026. Thank
+> you to everyone who participated. Follow
+> [@vellar_sdk](https://x.com/vellar_sdk) for announcements about future
+> events.
+
+The rules, prizes, and judging criteria below are kept for reference.
+
 Everything you need to build, submit, and get judged. Read this fully before
 you start.
 

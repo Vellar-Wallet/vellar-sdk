@@ -51,10 +51,11 @@ skip.
 
 Be aware while the SDK is pre-`1.0`:
 
-- **Testnet only.** Vellar runs on stellar:testnet only. Mainnet is gated on two
-  remaining items: a persistent-disk deployment and a funded pubnet sponsor
-  account. The pre-mainnet security review of the facilitator is complete. The
-  spending-limit policy contract has **not yet been audited** for mainnet, and
-  that audit is a separate gating item.
+- **Testnet only.** Vellar runs on stellar:testnet only. Mainnet is gated on
+  three items:
+  1. A persistent-disk deployment.
+  2. A funded pubnet sponsor account.
+  3. A mainnet security audit of the spending-limit policy contract. The
+     facilitator review is complete; the policy contract is a separate item.
 - You are responsible for securing your own backend (the submission surface) —
   rate limiting, auth, and abuse protection are your app's concern.
