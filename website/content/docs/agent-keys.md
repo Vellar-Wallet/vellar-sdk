@@ -25,7 +25,7 @@ both are enforced on-chain:
 
 A key restricted by both can pay for API calls all day, but cannot spend past
 its per-window cap (at most 2× the cap in a short span around a window reset —
-see [Policies](./agent-tooling/policies.md#honesty)) and cannot be tricked into paying
+see [Policies](./reference/honesty.md)) and cannot be tricked into paying
 through unverified code. Nobody — not your server, not the SDK, not a hijacked
 agent process — can override that.
 

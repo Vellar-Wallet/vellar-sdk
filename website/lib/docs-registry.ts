@@ -119,6 +119,16 @@ export const DOC_PAGES: DocPage[] = [
     description: "Wire-level verification with real settlement hashes you can check against Horizon yourself." },
   { slug: "reference/fees", title: "Fees and Sponsorship", nav: "Fees and sponsorship", section: "Reference", tab: "reference",
     description: "What fees cost by payment type, why policy-governed payments need a higher ceiling, and how the sponsor balance guards work." },
+  { slug: "reference/honesty", title: "Honesty", nav: "Honesty", section: "Reference", tab: "reference",
+    description: "Every limitation, dead end, and known gap in one place." },
+
+  // Operators — running your own facilitator rather than the hosted instance.
+  { slug: "operators/run", title: "Run the Facilitator", nav: "Run", section: "Operators", tab: "guides",
+    description: "Run your own facilitator locally in under five minutes." },
+  { slug: "operators/configuration", title: "Configuration", nav: "Configuration", section: "Operators", tab: "guides",
+    description: "Every environment variable, its default, and what happens when it is wrong." },
+  { slug: "operators/limits", title: "Limits and Operations", nav: "Limits", section: "Operators", tab: "guides",
+    description: "The six things that will bite you on the hosted instance." },
 
   // Hackathon — a dated event page, kept last so it never fronts the docs.
   { slug: "hackathon", title: "Vellar × Stellar Hackathon", nav: "Hackathon", section: "Hackathon", tab: "reference",

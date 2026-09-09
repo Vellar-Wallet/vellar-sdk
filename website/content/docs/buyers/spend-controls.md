@@ -51,7 +51,12 @@ The window is **fixed (tumbling), not sliding** — spent resets to zero when th
 window elapses. Spending timed around a window boundary can therefore move up to
 **2× the cap** in a short span. Treat the limit as an on-chain spending
 guardrail, not a to-the-stroop hard cap; see
-[Honesty](../agent-tooling/policies.md#honesty) for the full explanation.
+[Honesty](../reference/honesty.md) for the full explanation.
+
+> **Note:** The spending-limit policy validates the token and the amount. It has
+> no opinion on the recipient. A payment redirected to a different address
+> within the cap satisfies the policy. Guarding the recipient is your
+> application's responsibility.
 
 Use a **token-scoped** spending-limit policy so only one specific token's
 transfers count against the budget — then "give your agent $10/day of USDC"

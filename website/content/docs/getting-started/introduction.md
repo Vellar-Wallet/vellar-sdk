@@ -83,8 +83,11 @@ settled payment.
 
 ## Status
 
-> ⚠️ **Testnet only.** Vellar is live on stellar:testnet. Mainnet is gated on a
-> security review and a persistent-disk deployment. APIs may change before 1.0.
+> ⚠️ **Testnet only.** Vellar runs on stellar:testnet only. Mainnet is gated on
+> two remaining items: a persistent-disk deployment and a funded pubnet sponsor
+> account. The pre-mainnet security review of the facilitator is complete. The
+> spending-limit policy contract has not yet been audited for mainnet, and that
+> audit is a separate gating item. APIs may change before 1.0.
 
 ## Where to start
 

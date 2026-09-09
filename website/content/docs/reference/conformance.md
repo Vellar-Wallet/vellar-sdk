@@ -49,19 +49,15 @@ Each passing scenario produced a real on-chain settlement on Stellar testnet.
 | # | Client + Server | Tx hash | Ledger |
 |---|---|---|---|
 | 1 | fetch + express | `b6712023355eaae20636da32a23909d0c74204ed0f6e46a6c6a10c06f4223ca4` | 4561546 |
-| 2 | axios + express | `55c3026d...132b` | 4561549 |
-| 5 | fetch + hono | `ed32fe90...c670` | 4561559 |
-| 6 | axios + hono | `555d7538...a733` | 4561562 |
-| 7 | fetch + fastify | `22b97394...61c3` | 4561568 |
-| 8 | axios + fastify | `b401ff7b...8a4a` | 4561571 |
+| 2 | axios + express | `55c3026db406de06d3e24e93ec3a3c57f87ac10bd9bbbc10ab60cb78fc79132b` | 4561549 |
+| 5 | fetch + hono | `ed32fe90f4bb2d882919601f5b8706da6cf8420a9f91ee3f765223a9a6c8c670` | 4561559 |
+| 6 | axios + hono | `555d7538c0c81e590a2a32a1c9039bea412dcca23d72baae82711b38856fa733` | 4561562 |
+| 7 | fetch + fastify | `22b97394a8bd99eeacf113cad9d13e390dd8b664cb163be9982e868ffed361c3` | 4561568 |
+| 8 | axios + fastify | `b401ff7bc5c6c5774781588b4f16c2f4a4dff5ae235fa63c7129024d1eeb8a4a` | 4561571 |
 
 All six were charged `fee_charged` 23059 stroops to the facilitator sponsor
 account `GBUCR6H22CZC5OYHBJIEUS2JFZBOB63AHEGTCV6UEPMD2TMLKG2ZMIW4`, across
 consecutive ledgers 4561546 to 4561571.
-
-> **Note:** The truncated hashes are shown exactly as recorded. Only the full
-> hash for run 1 is reproduced here, and it is the one used in the curl example
-> below.
 
 ## Verify any settlement independently
 

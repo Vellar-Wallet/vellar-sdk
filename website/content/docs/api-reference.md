@@ -50,16 +50,6 @@ interface VellarWalletConfig {
 | `x402.expirationLedgerOffset?` | `number` | Number of ledgers added to the current ledger when setting auth entry expiration. Raise for flows with slow human confirmation; lower to shrink the replay window. See [Auth entry expiration](./x402.md#auth-entry-expiration). |
 | `rpcUrl?` | `string` | RPC URL for x402 simulation when `x402.rpcUrl` isn't given, e.g. `https://soroban-testnet.stellar.org`. |
 
-<!-- TODO(docs): this page documents createVellarWallet's config only. Real,
-     public exports still undocumented anywhere on the site — needs its own
-     effort: waitForTransaction / TxStatusReader (tx-status), createSessionStore
-     + storage adapters (session), the vellar-sdk/x402-guards subpath
-     (decodePaymentRequired, selectRequirements, classifySettlement — the
-     don't-double-pay retry classifier), assertAuthEntryInvocation
-     (x402-auth-entry), the vellar-sdk/x402-untrusted prompt-injection
-     sanitizers, and vellar-sdk/rpc (isValidStellarAddress,
-     createRpcBalanceReader, createRpcTxStatusReader). -->
-
 ## The `backend` contract
 
 ```ts

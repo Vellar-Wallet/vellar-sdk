@@ -25,6 +25,8 @@ Two policies stack, and both are enforced on-chain:
 
 A key restricted by both can pay for API calls all day, but cannot spend past its per-window cap and cannot be tricked into paying through unverified code. Nobody (not your server, not the SDK, not a hijacked agent process) can override that.
 
+> **Note:** The spending-limit policy validates the token and the amount. It has no opinion on the recipient. A payment redirected to a different address within the cap satisfies the policy. Guarding the recipient is your application's responsibility.
+
 > **Note:** A spending limit is a fixed (tumbling) window, not a sliding one. Spending timed around a window boundary can move up to 2x the cap in a short span. See [Policies](./policies.md).
 
 ## The flow

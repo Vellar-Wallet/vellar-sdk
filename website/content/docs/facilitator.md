@@ -14,9 +14,11 @@ verify it, submits it on-chain, and sponsors the network fee.
 > **Status: testnet, pre-production.** Open for anyone to build against. It
 > runs on a free tier for now, so the first request after idle can take up to
 > a minute (cold start) — and the catalog does not survive that sleep (see
-> [Limits](#limits-and-operational-caveats)). The pre-mainnet security review
-> is complete; mainnet is now gated on a persistent-disk deployment and a
-> funded pubnet sponsor account. Source:
+> [Limits](#limits-and-operational-caveats)). Vellar runs on stellar:testnet
+> only. Mainnet is gated on two remaining items: a persistent-disk deployment
+> and a funded pubnet sponsor account. The pre-mainnet security review of the
+> facilitator is complete. The spending-limit policy contract has not yet been
+> audited for mainnet, and that audit is a separate gating item. Source:
 > [Vellar-Wallet/vellar-facilitator](https://github.com/Vellar-Wallet/vellar-facilitator).
 
 ## Bring your own payment asset

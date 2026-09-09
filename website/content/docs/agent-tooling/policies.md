@@ -110,6 +110,8 @@ The spending-limit policy is a dedicated policy contract enforcing a cumulative 
 
 > ⚠️ **Spending timed around a window boundary can move up to 2x the cap in a short span.** With a 100 XLM per 24h window, an agent could move 100 XLM just before the reset and another 100 just after. Treat the limit as an on-chain spending guardrail, not a to-the-stroop hard cap. For a hard guarantee, the contract itself recommends pairing it with a cryptographic co-signer.
 
+> **Note:** The spending-limit policy validates the token and the amount. It has no opinion on the recipient. A payment redirected to a different address within the cap satisfies the policy. Guarding the recipient is your application's responsibility.
+
 ## The verified-only policy
 
 Instead of capping an amount, the verified-only policy reads an on-chain **AttestationRegistry** inside `__check_auth` and rejects any payment whose recipient contract is not attested as verified.
