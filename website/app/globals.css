@@ -337,6 +337,44 @@ a {
   font-size: 13px;
   line-height: 1.6;
 }
+/* Mermaid diagrams: a paper panel, not the inverted ink one code blocks get.
+   The SVG scrolls inside its own box so a wide sequence diagram never makes
+   the page scroll sideways. */
+.docs-mermaid {
+  margin: 22px 0;
+  padding: 20px;
+  background: var(--paper-tint);
+  border: 1px solid var(--line);
+  clip-path: var(--clip-card);
+  overflow-x: auto;
+}
+.docs-mermaid svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+/* Pre-render and no-JS fallback: the diagram source, legible rather than styled
+   as a finished picture. */
+.docs-mermaid-source {
+  margin: 22px 0;
+  padding: 18px 20px;
+  background: var(--paper-tint);
+  border: 1px solid var(--line);
+  clip-path: var(--clip-card);
+  overflow-x: auto;
+  font-family: var(--mono-stack);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+.docs-mermaid-source code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+}
+
 .docs-prose table {
   width: 100%;
   border-collapse: collapse;
