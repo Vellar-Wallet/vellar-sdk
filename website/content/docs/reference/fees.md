@@ -64,12 +64,14 @@ curl -s \
 > **Note:** This settlement used an earlier sponsor account (`GAJS3G2D...`) from
 > before the current channel-pool deployment. The fee payer is still the
 > facilitator, not the buyer, which is the non-custodial property being
-> demonstrated. Recent settlements show one of the 50 channel accounts as
-> `fee_account`, since channel accounts are now the transaction source and the
-> sponsor is the fee-bump payer. Either way, the buyer is not in the
-> `fee_account` field.
+> demonstrated. Recent settlements are fee-bumped: the channel account appears
+> as `source_account` and the sponsor
+> `GBUCR6H22CZC5OYHBJIEUS2JFZBOB63AHEGTCV6UEPMD2TMLKG2ZMIW4` appears as
+> `fee_account`. Older settlements, from before the channel pool, show the
+> sponsor in both fields. On either path the buyer's address appears in neither,
+> and that is the non-custodial property to verify.
 
-The `fee_account` is the facilitator's, not the buyer's. That is
+Neither `source_account` nor `fee_account` is ever the buyer. That is
 `areFeesSponsored: true` demonstrated on-chain rather than asserted.
 
 ## Why policy-governed payments cost more
@@ -137,22 +139,36 @@ with confusing errors.
 
 ## Verifying fee sponsorship
 
-On recent settlements, `fee_account` is one of the 50 channel accounts rather
-than the sponsor directly: the channel account is the transaction source and the
-sponsor acts as the fee-bump payer. On either path the buyer's address does not
-appear in `fee_account`, and that is the non-custodial property to verify.
+Recent settlements are fee-bumped: the channel account appears as
+`source_account` and the sponsor
+`GBUCR6H22CZC5OYHBJIEUS2JFZBOB63AHEGTCV6UEPMD2TMLKG2ZMIW4` appears as
+`fee_account`. Older settlements, from before the channel pool, show the sponsor
+in both fields. On either path the buyer's address appears in neither, and that
+is the non-custodial property to verify.
+
+Print both fields, since checking only one tells you half the story:
 
 ```bash
 curl -s \
-  "https://horizon-testnet.stellar.org/transactions/<any-settlement-hash>" \
+  "https://horizon-testnet.stellar.org/transactions/b6712023355eaae20636da32a23909d0c74204ed0f6e46a6c6a10c06f4223ca4" \
   | python3 -c \
   "import json,sys; \
   d=json.load(sys.stdin); \
+  print('source_account:', d['source_account']); \
   print('fee_account:', d['fee_account']); \
   print('successful:', d['successful'])"
 ```
 
-If `fee_account` is the buyer's address, fee sponsorship is not working. Check
+Expected output:
+
+```
+source_account: GBG5UKF4EXHYOFQFHOO263NTZRFUSXKBRUOAPDZEKISA7CPLABH7ONV4
+fee_account: GBUCR6H22CZC5OYHBJIEUS2JFZBOB63AHEGTCV6UEPMD2TMLKG2ZMIW4
+successful: True
+```
+
+The first is a channel account, the second the facilitator's sponsor. If the
+buyer's address appears in either field, fee sponsorship is not working. Check
 that your facilitator's sponsor account is funded.
 
 ## If you run your own facilitator

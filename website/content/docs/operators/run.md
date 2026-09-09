@@ -24,8 +24,8 @@ catalog across restarts.
 > ⚠️ **`CHANNEL_ACCOUNT_SECRET_KEYS` must contain exactly 50 keys.** Not 49, not
 > 51. There is no default and no fallback. A smaller pool loses the
 > collision-free guarantee for 50 concurrent settlements, so the count is
-> enforced at boot rather than at the first collision. See
-> [Configuration](./configuration.md) for how to generate and fund the pool.
+> enforced at boot rather than at the first collision. Step 2 on this page
+> covers generating and funding the pool.
 
 ## 1. Provision accounts and assets
 
@@ -53,12 +53,17 @@ throwaway token.
 
 The facilitator requires exactly 50 funded channel accounts. Generate them:
 
+> **Note:** Run this from the repo root or from `examples/`, where
+> `@stellar/stellar-sdk` is installed. The script fails with
+> `MODULE_NOT_FOUND` if you run it from an empty directory.
+
 ```bash
 node -e "
 const { Keypair } = require('@stellar/stellar-sdk');
 const keys = Array.from({ length: 50 }, () => Keypair.random());
-// The value for CHANNEL_ACCOUNT_SECRET_KEYS:
-console.log('CHANNEL_ACCOUNT_SECRET_KEYS=' + keys.map(k => k.secret()).join(','));
+// The value for CHANNEL_ACCOUNT_SECRET_KEYS, written with export so that
+// sourcing the file puts it in the environment npm start actually reads:
+console.log('export CHANNEL_ACCOUNT_SECRET_KEYS=' + keys.map(k => k.secret()).join(','));
 // The public keys, which is what friendbot funds:
 keys.forEach((k, i) => console.error('Account ' + (i + 1) + ' ' + k.publicKey()));
 " > channel-keys.env
@@ -71,7 +76,7 @@ see what to fund. Fund every one of them through friendbot:
 node -e "
 const { Keypair } = require('@stellar/stellar-sdk');
 const line = require('fs').readFileSync('channel-keys.env', 'utf8').trim();
-line.replace(/^CHANNEL_ACCOUNT_SECRET_KEYS=/, '').split(',')
+line.replace(/^export CHANNEL_ACCOUNT_SECRET_KEYS=/, '').split(',')
   .forEach(s => console.log(Keypair.fromSecret(s).publicKey()));
 " | while IFS= read -r pubkey; do
   curl -s "https://friendbot.stellar.org?addr=$pubkey" > /dev/null
@@ -90,6 +95,12 @@ Load the env block before starting the facilitator:
 ```bash
 source channel-keys.env
 ```
+
+> **Note:** If `source` does not export the variable in your shell, use
+> `set -a; source channel-keys.env; set +a` instead. Without the export,
+> `CHANNEL_ACCOUNT_SECRET_KEYS` is only a shell variable and `npm start` never
+> sees it, so the facilitator fails its boot check as though you had not set it
+> at all.
 
 > **Note:** This script is a development convenience for testnet. For a
 > production deployment, generate the keys in a secure environment, store them
@@ -117,8 +128,8 @@ payments and pays the sponsored fees. Never include it in
 `CHANNEL_ACCOUNT_SECRET_KEYS`: the boot check rejects that outright.
 
 `CHANNEL_ACCOUNT_SECRET_KEYS` is exactly 50 comma-separated Stellar classic
-(`S...`) secrets, one per channel account. [Configuration](./configuration.md)
-covers generating and funding them.
+(`S...`) secrets, one per channel account. Step 2 on this page covers generating
+and funding the pool.
 
 > **Note:** `CATALOG_DB_URL` is unset by default, which means the catalog lives
 > in memory and nothing survives a restart. `file:./data/catalog.db` is the local
