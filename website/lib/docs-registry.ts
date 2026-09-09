@@ -121,6 +121,8 @@ export const DOC_PAGES: DocPage[] = [
     description: "What fees cost by payment type, why policy-governed payments need a higher ceiling, and how the sponsor balance guards work." },
   { slug: "reference/honesty", title: "Honesty", nav: "Honesty", section: "Reference", tab: "reference",
     description: "Every limitation, dead end, and known gap in one place." },
+  { slug: "reference/proofs", title: "Proofs", nav: "Proofs", section: "Reference", tab: "reference",
+    description: "Every verifiable claim indexed with copy-paste curl commands." },
 
   // Operators — running your own facilitator rather than the hosted instance.
   { slug: "operators/run", title: "Run the Facilitator", nav: "Run", section: "Operators", tab: "guides",

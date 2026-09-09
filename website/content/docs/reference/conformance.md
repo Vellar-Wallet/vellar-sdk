@@ -208,12 +208,26 @@ inherited the accumulated trust stats along with it.
 ownership binding. The payment still settled and the attacker received their
 funds from the buyer, but the catalog entry was unchanged.
 
-Verify any of the four the same way as every other hash on this page:
+Verify both halves. The pair is the point: without the pre-fix run showing the
+hijack actually worked, "blocked" would be indistinguishable from a settlement
+that broke for unrelated reasons.
 
 ```sh
+# Pre-fix: the hijack succeeded, and the catalog entry was overwritten
 curl -s "https://horizon-testnet.stellar.org/transactions/d56dc927a7c7c019197017b6a3dd92c198d9dce0d9d35749d8dbc896d0c4160d" \
-  | python3 -c 'import json,sys; d=json.load(sys.stdin); print("successful:", d["successful"]); print("ledger:", d["ledger"]); print("fee_charged:", d["fee_charged"]); print("fee_account:", d["fee_account"])'
+  | python3 -c 'import json,sys; d=json.load(sys.stdin); print("successful:", d["successful"]); print("ledger:", d["ledger"]); print("fee_charged:", d["fee_charged"])'
+# successful: True, ledger: 4040689, fee_charged: 23067
+
+# Post-fix: the identical attack settled too, but the catalog was not updated
+curl -s "https://horizon-testnet.stellar.org/transactions/a909e4748c83f55972d6cee3286b8627c304b231037c7daae51d869bf17f1d38" \
+  | python3 -c 'import json,sys; d=json.load(sys.stdin); print("successful:", d["successful"]); print("ledger:", d["ledger"]); print("fee_charged:", d["fee_charged"])'
+# successful: True, ledger: 4040706, fee_charged: 23067
 ```
+
+> **Note:** `decisions.md` in the facilitator repo records this as 2026-08-09.
+> All four transactions are timestamped 2026-08-08T21:22-21:23Z, a late-evening
+> UTC run written up on the following local date. The UTC timestamps above are
+> authoritative.
 
 > ⚠️ **"Blocked" does not mean the payment failed.** Both payments succeeded
 > on-chain. Blocked means the catalog protected the legitimate seller's entry
