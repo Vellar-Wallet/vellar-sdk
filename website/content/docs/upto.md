@@ -224,10 +224,9 @@ signed ceiling — `be72877332bbd7f8d38511cccf00620fb20869cfedbc7530588ca856ac64
 (0.0312 of 0.08), and `12f0fa5c…` (0.0417 of 0.12); full tx hashes and the
 Horizon-confirmed record in the facilitator repo's
 [`docs/upto-deployment.md`](https://github.com/Vellar-Wallet/vellar-facilitator/blob/main/docs/upto-deployment.md).
-Per the explorer's own attribution breakdown at time of writing, 6 of 4,799 payments
-indexed across the visible testnet ecosystem carry a known facilitator, and
-all six are ours — a small, testnet-scale number stated as one, not a
-market-share claim.
+The explorer classifies x402 payments directly from Stellar ledger data. See
+[The Explorer](./reference/explorer.md) for current figures and how attribution
+works.
 
 One thing worth knowing rather than discovering: the first settlement
 attempted through this path didn't show up at all when this was verified —

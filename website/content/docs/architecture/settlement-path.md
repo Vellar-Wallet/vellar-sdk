@@ -150,11 +150,11 @@ refusal never leaves the buyer charged:
 - **An empty `transaction` field on a `/settle` failure means nothing was
   submitted.** The absence of a hash is itself the signal that a retry is safe.
 
-> ⚠️ **HTTP 200 does not mean the payment succeeded.** `/verify` returns
-> `isValid: false` and `/settle` returns `success: false` inside an HTTP 200
-> response. A client that branches on the status code alone will treat a rejected
-> payment as a successful one and hand over the goods for nothing. Always branch
-> on the response body.
+> ⚠️ **Branch on the response body, not the status code.** `/verify` returns
+> `isValid: false` and `/settle` returns `success: false` in the response body.
+> A client that branches on the HTTP status code alone may miss rejections,
+> treating a refused payment as a successful one and handing over the goods for
+> nothing. Always branch on the response body fields.
 
 Spend-control refusals (`rate_limited_payto`, `rate_limited_url`,
 `spend_ceiling`, `unbound_pool_exhausted`) are enforced on pubnet and log-only on
