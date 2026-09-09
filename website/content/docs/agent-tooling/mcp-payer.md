@@ -1,28 +1,166 @@
 # MCP Payer
 
-> An MCP server that lets an AI agent pay for x402 resources from inside its
-> runtime, under a per-call ceiling and a session budget it cannot raise.
+> Your agent finds a resource in the Bazaar and it costs money. This is the
+> server that pays for it. `vellar-mcp-x402-payer` is an MCP server that lets an
+> AI agent pay for x402 (HTTP 402) resources on Stellar from inside its own
+> runtime, under a per-call ceiling and a session budget it cannot raise. It
+> runs locally beside the agent over stdio and holds exactly one key. All
+> configuration is environment-only, because a tool argument is model context,
+> and anything in model context is one prompt injection away from being echoed
+> back out.
 
-By the end of this page you will have `vellar-mcp-x402-payer` running in an MCP
-client, know all three tools and their parameters, understand the difference
-between the two budget layers (only one of which is a security boundary), and
-know which settlement failures mean money already moved.
+By the end of this page you will have the server wired into an MCP client, have
+made a real testnet payment and verified it on Horizon, and understand the
+difference between the two spending limits, only one of which is a security
+boundary.
 
-The server runs locally beside the agent over stdio and holds exactly one key.
-All configuration is environment-only. The secret is never accepted as a tool
-argument, because a tool argument is model context, and anything in model
-context is one prompt injection away from being echoed back out.
+## How it fits together
+
+Paying and finding are two servers, not one.
+
+| | `vellar-facilitator-discovery` | `vellar-mcp-x402-payer` |
+| --- | --- | --- |
+| Role | Find resources | Pay for them |
+| Holds keys | No | Yes, exactly one |
+| Tools | list, search | quote, pay, budget |
+
+They are separate on purpose. The facilitator is neutral infrastructure that
+strangers point wallets at, so giving it custody would invert its trust model.
+An agent connects to both: one to find resources, this one to pay for them. This
+server does not reimplement discovery and does not proxy the facilitator's HTTP
+API. See [Discover services](../buyers/discover-services.md).
 
 ## Prerequisites
 
-- The package installed: `npm install vellar-mcp-x402-payer`
 - A funded testnet account holding the payment asset (see
   [Quickstart](../getting-started/quickstart.md))
-- An MCP-capable runtime such as Claude Code or Cursor
+- An MCP-capable runtime such as Claude Desktop, Claude Code, or Cursor
 
-> **Note:** The demo seller at `https://vellar-seller-demo.onrender.com/quote`
-> charges 0.1 testnet USDC with sponsored fees, so it is a cheap first target
-> for `x402_quote` and `x402_pay`.
+## Install
+
+```sh
+npm install vellar-mcp-x402-payer
+```
+
+## Wire it up
+
+The same `mcpServers` config format works for Claude Desktop, Claude Code, and
+Cursor. The command is `npx`, the args are `["-y", "vellar-mcp-x402-payer"]`,
+and the key and asset ceilings arrive through `env`.
+
+```jsonc
+// claude_desktop_config.json (or any MCP client)
+{
+  "mcpServers": {
+    "vellar-x402-payer": {
+      "command": "npx",
+      "args": ["-y", "vellar-mcp-x402-payer"],
+      "env": {
+        "VELLAR_X402_SECRET_FILE": "/run/secrets/x402-payer-key",
+        "VELLAR_X402_ASSETS": "CBIN4HTPJM2QLJ32DTRO6OCLIMM7TR7D74JDIPVQYLNYGL7SBWOXH5ND:5000000",
+        "VELLAR_X402_NETWORK": "testnet"
+      }
+    }
+  }
+}
+```
+
+> ⚠️ **Prefer `VELLAR_X402_SECRET_FILE` over `VELLAR_X402_SECRET`.** The file
+> path keeps the key out of the process environment, where child processes can
+> read it. Never use a mainnet secret here, and never commit a config file
+> containing a real secret.
+
+On macOS you can source the key from the keychain instead of a file:
+
+```sh
+VELLAR_X402_SECRET="$(security find-generic-password -s vellar-x402-payer -w)"
+```
+
+`VELLAR_X402_ASSETS` is both the asset allowlist and the per-asset session
+ceilings. The value above allows one asset and caps cumulative spend on it at
+5,000,000 base units, which is 0.5 USDC.
+
+## Your first paid call
+
+The demo seller at `https://vellar-seller-demo.onrender.com/quote` charges 0.1
+testnet USDC with sponsored fees, so it is a cheap first target.
+
+> **Note:** It runs on a free tier and sleeps after 15 minutes idle. The first
+> call after a sleep takes roughly 45 seconds. That is a cold start, not a
+> failure.
+
+### Step 1: Quote it
+
+Ask the price without paying. This is one HTTP request that never touches the
+signer or the chain.
+
+```
+x402_quote("https://vellar-seller-demo.onrender.com/quote")
+```
+
+The server reports the price, the asset, and whether it would pay:
+
+```
+Payment required (HTTP 402).
+Would pay: 1000000 base units of asset CBIN…H5ND on stellar:testnet to GBBD…FLA5.
+Session ceiling remaining for that asset: 5000000 base units.
+This resource is payable.
+No payment was made and nothing was signed by this call.
+```
+
+If the server would refuse, it says so and names the reason. That reason is the
+point of asking: the agent learns that an asset is off the allowlist, or that
+the price is above what it can spend, before anything is signed.
+
+### Step 2: Pay it
+
+```
+x402_pay("https://vellar-seller-demo.onrender.com/quote", "1000000")
+```
+
+`max_amount` is in the asset's base units as a decimal string. Stellar Asset
+Contracts use 7 decimals, so `1000000` is 0.1 units and `10000000` is 1.0.
+
+On success the unlocked content comes back with the settlement hash:
+
+```
+Paid 1000000 base units of asset CBIN…H5ND on stellar:testnet.
+Settlement transaction: 9e1f3acf…a0eb9d2a
+Session ceiling remaining for that asset: 4000000 base units.
+Content (text/plain, 84 bytes):
+```
+
+The resource content follows inside a fenced block. If the payment took more
+than one attempt, the server says so and states that the earlier attempts spent
+nothing.
+
+### Step 3: Verify it on Horizon
+
+The settlement hash is a real Stellar transaction. Check it yourself rather than
+trusting the tool output:
+
+```sh
+curl -s https://horizon-testnet.stellar.org/transactions/<hash> \
+  | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["successful"], d["ledger"])'
+```
+
+### Step 4: Check your budget
+
+```
+x402_session_budget()
+```
+
+```
+Payer address: G…
+Network: testnet
+Per-asset session ceilings (base units):
+CBIN…H5ND: 1000000 spent of 5000000, 4000000 remaining
+
+These ceilings are enforced by this process, NOT on-chain, and reset when it
+restarts. The key is a hot wallet. Do not report this as an on-chain limit.
+```
+
+That closing warning is not decoration. The next section is why.
 
 ## The three tools
 
@@ -31,20 +169,16 @@ context is one prompt injection away from being echoed back out.
 Reports a resource's price without paying. One HTTP request: it never touches
 the signer, the RPC, or Horizon.
 
-It reports the price, the asset, and whether this server *would* pay it,
-including the reason when it would refuse. That reason is the point of asking:
-the agent learns that an asset is off the allowlist, or that the price is above
-what it can spend, before anything is signed.
+It reports the price, the asset, and whether this server would pay it, including
+the reason when it would refuse. Call it before `x402_pay` when the price is not
+already known.
 
 ### `x402_pay(resource_url, max_amount)`
 
 Pays the challenge and returns the unlocked content plus the settlement hash.
 
 `max_amount` is a hard per-call ceiling in the asset's base units, as a decimal
-string. Stellar Asset Contracts use 7 decimals, so `1000000` is 0.1 units and
-`10000000` is 1.0.
-
-The payment is refused, unsigned, if:
+string. The payment is refused, unsigned, if:
 
 - the price exceeds `max_amount`
 - the asset is not in `VELLAR_X402_ASSETS`
@@ -59,7 +193,115 @@ If the resource needs no payment, the content is returned and nothing is spent.
 Reports per-asset spend and remaining ceiling, plus which limit mode the server
 is running in. These cannot be changed by any tool call.
 
-## Configure
+## The two spending limits
+
+This is the section to read before funding anything. There are two independent
+spend limits, and only one of them is a security boundary.
+
+| Layer | Where enforced | Defends against |
+| --- | --- | --- |
+| 1: process ceiling (per-call `max_amount` plus a cumulative per-asset session ceiling read from the environment at startup and absent from every tool schema) | In the same process the agent is talking to; resets when that process restarts | Mistakes: a typo, a runaway loop, a resource that costs more than expected |
+| 2: chain-enforced budget (a spending-limit policy attached on-chain to the signing key in a Vellar smart account) | Inside the wallet's `__check_auth` at settlement | A compromised or manipulated agent |
+
+Layer 1 is always on and refuses before signing. Layer 2 requires
+`VELLAR_X402_WALLET`, refuses at settlement inside the wallet contract, and a
+refusal from it tells the model that retrying with a larger `max_amount` will not
+help.
+
+> ⚠️ **Layer 1 is defence against mistakes; only layer 2 is defence against a
+> compromised or manipulated agent.** If the key is exfiltrated, layer 1 protects
+> nothing, because the attacker simply does not run this server. Without
+> `VELLAR_X402_WALLET` the key is a hot wallet, so fund it with only what you are
+> willing to lose.
+
+The policy validates the token and the amount. It has no opinion on the
+recipient. So "the agent cannot exceed its budget" is true, and "the agent's
+funds are protected" is not: a payment redirected to another address, within the
+cap, satisfies the policy completely.
+
+> **Note:** The server states which mode it is in at startup (`spendLimit:
+> chain-enforced` or `process-only`), and `x402_session_budget` says so on every
+> call. Do not describe the process-only ceiling to a user as an on-chain limit.
+
+## Proven on-chain: the layer 2 demonstration
+
+Two payments were made through the MCP protocol against a policy-governed smart
+account with a 0.5 USDC on-chain cap. The server's own limits were set
+deliberately *above* the cap for both (`max_amount` 1.0 USDC, session ceiling 10
+USDC), so no process-level guard could be what refused the second one.
+
+| Payment | Amount | Outcome | Evidence |
+| --- | --- | --- | --- |
+| A | 0.1 USDC, under the cap | Settled | Transaction `9e1f3acf3681d8a418b7619d480eefce855f7ff9a62b5546255c52cea0eb9d2a`, `successful: true` at ledger 4141211 |
+| B | 0.6 USDC, over the cap | Refused by the chain | `__check_auth` then `policy__` then `Error(Contract, #1)`; no transaction, and the session ledger untouched |
+
+The wallet's USDC balance moved by exactly the settled amount and no more, so B
+spent nothing. That is confirmed by arithmetic on-chain rather than by trusting
+the error.
+
+Check payment A yourself:
+
+```sh
+curl -s https://horizon-testnet.stellar.org/transactions/9e1f3acf3681d8a418b7619d480eefce855f7ff9a62b5546255c52cea0eb9d2a \
+  | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["successful"], d["ledger"])'
+# True 4141211
+```
+
+The run is reproducible as `test/integration/layer2.integration.test.ts`.
+
+## Configure for layer 2
+
+To enable the chain-enforced budget:
+
+1. Create a Vellar smart account with a spending-limit policy. See
+   [Agent keys](./agent-keys.md) and [Policies](./policies.md).
+2. Generate an agent session key scoped to that policy.
+3. Add all three values to your MCP config:
+
+```jsonc
+"env": {
+  "VELLAR_X402_WALLET": "C…",    // the smart account that pays
+  "VELLAR_X402_POLICIES": "C…",  // every policy in the key's SignerLimits
+  "VELLAR_X402_SECRET_FILE": "/run/secrets/x402-session-key",
+  "VELLAR_X402_ASSETS": "C…:5000000",
+  "VELLAR_X402_NETWORK": "testnet"
+}
+```
+
+With `VELLAR_X402_WALLET` set, `VELLAR_X402_SECRET` is the wallet's agent session
+key, not a standalone account.
+
+> ⚠️ **`VELLAR_X402_POLICIES` must name every policy in the key's
+> `SignerLimits`.** A missing one is rejected by the wallet before the policy is
+> consulted, and the error reads like a broken signer rather than a missing
+> co-signer. Setting policies without a wallet is refused at startup rather than
+> ignored, so a half-configured layer 2 cannot look like a working one.
+
+### Reading a layer 2 refusal
+
+The wallet wraps every auth failure in its own `Error(Contract, #110)`, so the
+top-level code says only "auth failed" and not why. The cause is nested:
+
+```
+[wallet] "contract try_call failed", policy__, [ ...transfer args, 6000000... ]
+[policy] "VM call trapped with HostError", policy__, Error(Contract, #1)
+```
+
+A failed `policy__` call is the signal that a policy refused, which is layer 2
+doing its job. A `#110` with no policy invocation at all means the signature map
+is malformed instead. The two look identical from the outside and mean opposite
+things, so classifying on the top-level code alone gets this backwards.
+
+### What it costs
+
+A policy-governed settle bids roughly 130,000 stroops and charges roughly 86,000
+stroops actually on-chain (0.0086 XLM), compared to roughly 23,000 to 29,000
+stroops for a plain keypair settle. The policy adds meaningful overhead at
+settlement, but the facilitator's 500,000-stroop ceiling handles it comfortably.
+See [Fees and Sponsorship](../reference/fees.md) for the full breakdown,
+including the bid-vs-charge distinction.
+
+## Full configuration reference
 
 | Variable | Required | Meaning |
 | --- | --- | --- |
@@ -89,121 +331,6 @@ all. Ceilings are per-asset rather than one global number because base units
 are only comparable within a single asset. One shared total would be
 meaningless across different decimals and would fail open on a
 cheaply-denominated asset.
-
-## Connect an MCP client
-
-```jsonc
-// claude_desktop_config.json (or any MCP client)
-{
-  "mcpServers": {
-    "vellar-x402-payer": {
-      "command": "npx",
-      "args": ["-y", "vellar-mcp-x402-payer"],
-      "env": {
-        "VELLAR_X402_SECRET_FILE": "/run/secrets/x402-payer-key",
-        "VELLAR_X402_ASSETS": "CBIN4HTPJM2QLJ32DTRO6OCLIMM7TR7D74JDIPVQYLNYGL7SBWOXH5ND:5000000",
-        "VELLAR_X402_NETWORK": "testnet"
-      }
-    }
-  }
-}
-```
-
-The same `mcpServers` config format works for Claude Code and for Cursor: the
-command is `npx`, the args are `["-y", "vellar-mcp-x402-payer"]`, and the key
-and asset ceilings arrive through `env`.
-
-> ⚠️ **Never use a mainnet secret here, and never commit a config file
-> containing a real secret.** Prefer `VELLAR_X402_SECRET_FILE` over
-> `VELLAR_X402_SECRET`, so the key stays out of the process environment where
-> child processes can read it.
-
-On macOS you can source the key from the keychain instead of a file:
-
-```sh
-VELLAR_X402_SECRET="$(security find-generic-password -s vellar-x402-payer -w)"
-```
-
-## The two budget layers
-
-There are two independent spend limits, and only one of them is a security
-boundary.
-
-| Layer | Where enforced | Defends against |
-| --- | --- | --- |
-| 1: process-level ceiling (per-call `max_amount` plus a cumulative per-asset session ceiling read from the environment at startup and absent from every tool schema) | In the same process the agent is talking to; resets when that process restarts | Mistakes: a typo, a runaway loop, a resource that costs more than expected |
-| 2: chain-enforced budget (a spending-limit policy attached on-chain to the signing key in a Vellar smart account) | Inside the wallet's `__check_auth` at settlement | A compromised or manipulated agent |
-
-Layer 1 is always on and refuses before signing. Layer 2 refuses at settlement
-inside the wallet contract, and a refusal from it tells the model that retrying
-with a larger `max_amount` will not help.
-
-> ⚠️ **Layer 1 is defence against mistakes; only layer 2 is defence against a
-> compromised or manipulated agent.** If the key is exfiltrated, layer 1
-> protects nothing, because the attacker simply does not run this server. Layer
-> 2 requires `VELLAR_X402_WALLET`; without it the key is a hot wallet, so fund
-> it with only what you are willing to lose.
-
-The policy validates the token and the amount. It has no opinion on the
-recipient. So "the agent cannot exceed its budget" is true, and "the agent's
-funds are protected" is not: a payment redirected to another address, within
-the cap, satisfies the policy completely.
-
-> **Note:** The server states which mode it is in at startup (`spendLimit:
-> chain-enforced` or `process-only`), and `x402_session_budget` says so on
-> every call. Do not describe the process-only ceiling to a user as an on-chain
-> limit.
-
-## The on-chain demonstration
-
-Two payments were made through the MCP protocol against a policy-governed smart
-account with a 0.5 USDC on-chain cap. The server's own limits were set
-deliberately *above* the cap for both (`max_amount` 1.0 USDC, session ceiling 10
-USDC), so no process-level guard could be what refused the second one.
-
-| Payment | Amount | Outcome | Evidence |
-| --- | --- | --- | --- |
-| A | 0.1 USDC, under the cap | Settled | Transaction `9e1f3acf3681d8a418b7619d480eefce855f7ff9a62b5546255c52cea0eb9d2a`, `successful: true` at ledger 4141211 |
-| B | 0.6 USDC, over the cap | Refused by the chain | `__check_auth` then `policy__` then `Error(Contract, #1)`; no transaction, and the session ledger untouched |
-
-The wallet's USDC balance moved by exactly the settled amount and no more, so B
-spent nothing. That is confirmed by arithmetic on-chain rather than by trusting
-the error.
-
-The run is reproducible as `test/integration/layer2.integration.test.ts`.
-
-Check payment A yourself against Horizon:
-
-```sh
-curl -s https://horizon-testnet.stellar.org/transactions/9e1f3acf3681d8a418b7619d480eefce855f7ff9a62b5546255c52cea0eb9d2a \
-  | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["successful"], d["ledger"])'
-# True 4141211
-```
-
-### Reading a policy refusal
-
-The wallet wraps every auth failure in its own `Error(Contract, #110)`, so the
-top-level code says only "auth failed" and not why. The cause is nested:
-
-```
-[wallet] "contract try_call failed", policy__, [ ...transfer args, 6000000... ]
-[policy] "VM call trapped with HostError", policy__, Error(Contract, #1)
-```
-
-A failed `policy__` call is the signal that a policy refused, which is layer 2
-doing its job. Contrast it with a malformed signature map, which produces the
-same `#110` with no policy invocation at all. Classifying on the top-level code
-alone gets this backwards: the two cases look identical from the outside and
-mean opposite things.
-
-### What it costs
-
-A policy-governed settle bids roughly 130,000 stroops and charges roughly 86,000
-stroops actually on-chain (0.0086 XLM), compared to roughly 23,000 to 29,000
-stroops for a plain keypair settle. The policy adds meaningful overhead at
-settlement, but the facilitator's 500,000-stroop ceiling handles it comfortably.
-See [Fees and Sponsorship](../reference/fees.md) for the full breakdown,
-including the bid-vs-charge distinction.
 
 ## Settlement retries are the normal path
 
@@ -246,6 +373,12 @@ lost, this server under-counts that spend. That is the correct trade, since laye
 1 is anti-mistake and layer 2 is what actually bounds a lost-response case, but
 it is a property rather than an accident.
 
+## Payments are serialised
+
+One key, one budget, one payment at a time. Concurrent calls would otherwise
+each pass the ceiling check before either recorded a spend, and together exceed
+it.
+
 ## What the agent should not believe
 
 Resource descriptions, service names, mime types and the resource body itself
@@ -266,7 +399,9 @@ what follows read as trusted text. An unpredictable one they cannot forge.
 DEL and the Unicode format class (`\p{Cf}`, which covers zero-width characters
 and the bidi overrides that can visually reorder a line so a reviewer sees
 something different from what the model reads) stripped. Metadata is
-additionally collapsed to a single line and clamped to 256 characters.
+additionally collapsed to a single line and clamped to 256 characters, and each
+field is sanitised individually before being joined, so a newline smuggled into
+one value cannot forge an extra `key: value` line.
 
 > ⚠️ **A fenced block is not a security boundary.** The nonce makes the
 > boundary unforgeable and the sanitiser removes dangerous content, but neither
@@ -297,27 +432,6 @@ and named the attempt as an injection.
 > hand-written attacks. A smaller or differently-tuned model may not resist at
 > all. Do not generalise from this to "models are safe against injection."
 
-## Payments are serialised
-
-One key, one budget, one payment at a time. Concurrent calls would otherwise
-each pass the ceiling check before either recorded a spend, and together exceed
-it.
-
-## Discovery is a separate server
-
-| | `vellar-facilitator-discovery` | `vellar-mcp-x402-payer` |
-| --- | --- | --- |
-| Role | Find resources | Pay for them |
-| Holds keys | No | Yes, exactly one |
-| Tools | list, search | quote, pay, budget |
-
-The discovery server deliberately holds no keys. The facilitator is neutral
-infrastructure that strangers point wallets at, so giving it custody would
-invert its trust model. An agent connects to both: one to find resources, this
-one to pay for them. This server does not reimplement discovery and does not
-proxy the facilitator's HTTP API. See
-[Discover services](../buyers/discover-services.md).
-
 ## Smart accounts and the official client
 
 Layer 2 works, but not through `@x402/stellar`'s `ExactStellarScheme`, which
@@ -338,11 +452,15 @@ auth entries directly and never calls `signAuthEntries`: the narrowing that
 blocks the official path simply never happens. That is a documented extension
 point, not a fork.
 
-> ⚠️ **A policy-governed key must carry its policies in the signature map as
-> `SignerKey::Policy` entries alongside the ed25519 one.** Omit them and the
-> wallet rejects the entry before consulting the policy, with the same opaque
-> `#110`, which reads as a broken signer rather than a missing co-signer. Set
-> `VELLAR_X402_POLICIES` to every policy in the key's `SignerLimits`.
+## Debugging
+
+Diagnostics go to stderr as JSON lines, never stdout. On a stdio transport
+stdout is the JSON-RPC channel, and a stray write desynchronises the protocol so
+the agent sees a transport error instead of a payment error.
+
+Use `GET`, never `HEAD`, to debug a paid route. A `HEAD` request carries no
+payment challenge, so a correctly wired route looks broken: `curl -I` returns a
+plain 200.
 
 ## When it fails
 
@@ -359,20 +477,11 @@ point, not a fork.
 | `invalid version byte. expected 48, got 16` | The official `ExactStellarScheme` cannot sign for a `C...` credential address | No | Use this package's registered smart-account scheme; see [x402-foundation/x402 issue #3158](https://github.com/x402-foundation/x402/issues/3158) (#3159 is a duplicate filed one hour later and closed) |
 | First call hangs | Free-tier facilitator cold start (sleeps after 15 min idle; first call takes roughly 45s (measured)) | No | Send a warming `GET /health` with a 120s timeout before the first payment |
 
-## Debugging
-
-Diagnostics go to stderr as JSON lines, never stdout. On a stdio transport
-stdout is the JSON-RPC channel, and a stray write desynchronises the protocol so
-the agent sees a transport error instead of a payment error.
-
-Use `GET`, never `HEAD`, to debug a paid route. A `HEAD` request carries no
-payment challenge, so a correctly wired route looks broken: `curl -I` returns a
-plain 200.
-
 ## Next steps
 
-- [Discover services](../buyers/discover-services.md)
-- [Spend controls](../buyers/spend-controls.md)
 - [Agent keys](./agent-keys.md)
 - [Policies](./policies.md)
+- [Discover services](../buyers/discover-services.md)
+- [Spend controls](../buyers/spend-controls.md)
 - [Bazaar and discovery](../concepts/bazaar-and-discovery.md)
+- [Fees and Sponsorship](../reference/fees.md)
