@@ -15,13 +15,12 @@ covers the piece they are actually taking.
 | Component | License | Source |
 | --- | --- | --- |
 | `vellar-sdk` (published on npm) | MIT | [github.com/Vellar-Wallet/vellar-sdk](https://github.com/Vellar-Wallet/vellar-sdk) |
-| The Vellar facilitator | Open-source | [github.com/Vellar-Wallet/vellar-facilitator](https://github.com/Vellar-Wallet/vellar-facilitator) |
+| The Vellar facilitator | Apache-2.0 | [github.com/Vellar-Wallet/vellar-facilitator](https://github.com/Vellar-Wallet/vellar-facilitator) |
 | The Vellar explorer | Apache-2.0 | [github.com/Vellar-Wallet/vellar-explorer](https://github.com/Vellar-Wallet/vellar-explorer) |
 
-> ⚠️ **The facilitator's license is not named here on purpose.** The facilitator
-> is open-source and its source is public, but this page does not assert a
-> specific license identifier for it. Read the license file in the repository
-> and rely on that, not on this table.
+> **Note:** The identifiers above are what each repository declares. Read the
+> `LICENSE` file in the repository you are depending on and rely on that rather
+> than on this table, which is a summary and can fall behind.
 
 The explorer is a separate open-source repository rather than a component of
 the facilitator. It reads ledger data directly and asks the facilitator

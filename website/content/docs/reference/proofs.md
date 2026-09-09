@@ -178,6 +178,11 @@ curl -s "https://horizon-testnet.stellar.org/transactions/72c816a63ab9da21b1403f
 # successful: True, ledger: 4250665
 ```
 
+> **Note:** Settlement 2 used the F11 test sponsor account
+> (`GBOC2UOB7UI3LW2JDRSJQVCGI7SN7QD7AWELYCSNFY6GEWD4EPED6U3Y`) rather than the
+> current production sponsor. The fee payer is still the facilitator, so the
+> non-custodial property holds either way.
+
 ## The upto contract
 
 The deployed wasm hash is checkable against the published source.

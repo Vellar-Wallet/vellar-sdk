@@ -82,6 +82,19 @@ service that is deployed nowhere, which is architectural rather than an outage.
 > that instead. See [Bazaar and
 > discovery](../concepts/bazaar-and-discovery.md).
 
+## The semantic search arm fails silently
+
+Search uses a hybrid pipeline: a lexical arm and a Voyage AI semantic arm fused
+by RRF. When the Voyage AI API is unavailable, the semantic arm is skipped and
+the endpoint returns lexical-only results with no indication in the response
+that the semantic stage was missing.
+
+A query that returns weak results during a Voyage outage returns better results
+once the service recovers, with no change in the response shape.
+
+This is documented in [Search and
+Retrieval](../architecture/search-and-retrieval.md).
+
 ## The catalog is ephemeral on the hosted instance
 
 The free-tier hosted instance has no persistent disk. The catalog resets on

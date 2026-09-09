@@ -34,9 +34,12 @@ const { resources } = await bazaar.search({ query: "weather data api" });
 > `resources`. Parsing a search response as `items` returns nothing with no
 > error.
 
-> **Note:** Search ranking is token-scored relevance, not semantic. Keyword
-> overlap decides the order, so phrase a query the way a listing would describe
-> itself.
+> **Note:** Search is hybrid: a lexical arm and a semantic arm fused by
+> Reciprocal Rank Fusion. Keyword queries are handled by the lexical stage.
+> Queries sharing no vocabulary with any listing are handled by the semantic
+> stage and still return results. See [Search and
+> Retrieval](../architecture/search-and-retrieval.md) for the full pipeline and
+> measured quality figures.
 
 ## 2. Read a result before paying
 

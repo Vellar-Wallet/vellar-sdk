@@ -134,7 +134,7 @@ keypairs and Soroban smart accounts are supported.
 | `POST /settle` | Submit on-chain, fee-sponsored |
 | `GET /supported` | Advertised scheme, network, extensions, signer addresses |
 | `GET /discovery/resources` | List cataloged x402 resources — [full reference](#get-discoveryresources) |
-| `GET /discovery/search` | Keyword search over the catalog — token-scored relevance ranking (not semantic); [full reference](#get-discoverysearch) |
+| `GET /discovery/search` | Hybrid search, lexical and semantic arms fused by RRF (see [Search and Retrieval](./architecture/search-and-retrieval.md) for the pipeline and quality figures); [full reference](#get-discoverysearch) |
 | `GET /health` | Liveness; also reports `catalogFrozen` if the catalog has stopped accepting writes |
 
 Wire-compatible with the canonical x402 clients — `HTTPFacilitatorClient`

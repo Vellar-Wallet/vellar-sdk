@@ -96,6 +96,15 @@ Load the env block before starting the facilitator:
 source channel-keys.env
 ```
 
+Check that it actually exported before starting anything:
+
+```bash
+# Verify the variable exported correctly
+echo $CHANNEL_ACCOUNT_SECRET_KEYS \
+  | tr ',' '\n' | wc -l
+# should print 50
+```
+
 > **Note:** If `source` does not export the variable in your shell, use
 > `set -a; source channel-keys.env; set +a` instead. Without the export,
 > `CHANNEL_ACCOUNT_SECRET_KEYS` is only a shell variable and `npm start` never
