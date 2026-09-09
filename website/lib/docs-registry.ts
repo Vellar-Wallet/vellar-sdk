@@ -123,6 +123,12 @@ export const DOC_PAGES: DocPage[] = [
     description: "Every limitation, dead end, and known gap in one place." },
   { slug: "reference/proofs", title: "Proofs", nav: "Proofs", section: "Reference", tab: "reference",
     description: "Every verifiable claim indexed with copy-paste curl commands." },
+  { slug: "reference/evaluation", title: "Search Evaluation", nav: "Search Evaluation", section: "Reference", tab: "reference",
+    description: "Honest account of search quality: MRR 0.717 on n=19, what that means and does not." },
+  { slug: "reference/explorer", title: "The Explorer", nav: "Explorer", section: "Reference", tab: "reference",
+    description: "How the independent Stellar indexer classifies x402 payments and what the attribution numbers mean." },
+  { slug: "reference/license", title: "License and Versioning", nav: "License", section: "Reference", tab: "reference",
+    description: "SDK MIT, facilitator open-source, versioning policy, and changelog location." },
 
   // Operators — running your own facilitator rather than the hosted instance.
   { slug: "operators/run", title: "Run the Facilitator", nav: "Run", section: "Operators", tab: "guides",
@@ -131,6 +137,27 @@ export const DOC_PAGES: DocPage[] = [
     description: "Every environment variable, its default, and what happens when it is wrong." },
   { slug: "operators/limits", title: "Limits and Operations", nav: "Limits", section: "Operators", tab: "guides",
     description: "The six things that will bite you on the hosted instance." },
+
+  // Architecture — why it is built this way, for an auditor or a partner
+  // deciding whether to depend on it.
+  { slug: "architecture/settlement-path", title: "Settlement Path", nav: "Settlement Path",
+    section: "Architecture", tab: "reference",
+    description: "What happens inside the facilitator between a signed payment and a ledger hash." },
+  { slug: "architecture/channel-pool", title: "Channel Pool", nav: "Channel Pool",
+    section: "Architecture", tab: "reference",
+    description: "Why 50 channel accounts, why exactly 50, and how the monitor handles degraded accounts." },
+  { slug: "architecture/catalog-integrity", title: "Catalog Integrity", nav: "Catalog Integrity",
+    section: "Architecture", tab: "reference",
+    description: "How the catalog prevents spam, URL squatting, and metadata injection." },
+  { slug: "architecture/spending-policies", title: "Spending Policies", nav: "Spending Policies",
+    section: "Architecture", tab: "reference",
+    description: "How __check_auth enforces spending limits and what the policy cannot enforce." },
+  { slug: "architecture/threat-model", title: "Threat Model", nav: "Threat Model",
+    section: "Architecture", tab: "reference",
+    description: "Trust boundaries, blast radius by key type, and what the audit covers." },
+  { slug: "architecture/search-and-retrieval", title: "Search and Retrieval", nav: "Search and Retrieval",
+    section: "Architecture", tab: "reference",
+    description: "The ranking pipeline, measured quality numbers, and the pre-mainnet evaluation plan." },
 
   // Hackathon — a dated event page, kept last so it never fronts the docs.
   { slug: "hackathon", title: "Vellar × Stellar Hackathon", nav: "Hackathon", section: "Hackathon", tab: "reference",
