@@ -16,7 +16,7 @@ exactly one key.
 > exceed its budget"* is true; *"the agent's funds are protected"* is **not** —
 > a payment redirected to another address, within the cap, satisfies the policy
 > completely. Guarding the recipient is this client's job, not the chain's (see
-> [security audit V-1](../../docs/security-audit.md)).
+> the [security audit](https://github.com/Vellar-Wallet/vellar-sdk/blob/main/docs/security-audit.md)).
 >
 > **Leave it unset and the key is a hot wallet.** The ceiling is then ordinary
 > code in the same process the agent is talking to — stronger than a prompt,
@@ -343,11 +343,11 @@ backwards; an earlier revision here did exactly that.
 
 ### What it costs
 
-A policy-governed settle costs **28,678–116,202 stroops** actually charged
-on-chain (0.003–0.012 XLM), against a simulated estimate of 140,331 and a
-facilitator ceiling of 500,000. It fits with room to spare, and it is roughly the
-same as a plain keypair settle — running a policy inside `__check_auth` adds
-~6,900 stroops, about 5%.
+A policy-governed settle bids roughly **130,000 stroops** and charges roughly
+**86,000 stroops** actually on-chain (0.0086 XLM), against a facilitator ceiling
+of 500,000. A plain keypair settle charges 23,000–29,000 stroops, so running the
+policy inside `__check_auth` adds 57,000–63,000 stroops — meaningful overhead at
+settlement, and still well inside the ceiling.
 
 ## Smart accounts: shipped here, still blocked in the official client
 

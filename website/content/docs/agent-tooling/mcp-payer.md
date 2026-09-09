@@ -198,12 +198,12 @@ mean opposite things.
 
 ### What it costs
 
-A policy-governed settle costs roughly 86,000 stroops actually charged on-chain
-(0.0086 XLM), compared to roughly 23,000 to 29,000 stroops for a plain keypair
-settle. The policy adds meaningful overhead, but the facilitator's
-500,000-stroop ceiling handles it comfortably. See
-[Fees and Sponsorship](../reference/fees.md) for the full breakdown, including
-the bid-vs-charge distinction.
+A policy-governed settle bids roughly 130,000 stroops and charges roughly 86,000
+stroops actually on-chain (0.0086 XLM), compared to roughly 23,000 to 29,000
+stroops for a plain keypair settle. The policy adds meaningful overhead at
+settlement, but the facilitator's 500,000-stroop ceiling handles it comfortably.
+See [Fees and Sponsorship](../reference/fees.md) for the full breakdown,
+including the bid-vs-charge distinction.
 
 ## Settlement retries are the normal path
 
@@ -233,6 +233,19 @@ hash means fees were already charged, so retrying would burn them again. That is
 why the non-empty case is terminal and the hash is surfaced in the error, so the
 payment stays traceable.
 
+### Why there is no expiry safety margin
+
+Across 22 observed settle failures, zero were expiry-shaped. Every one was an
+RPC-level submission failure
+(`settle_exact_stellar_transaction_submission_failed`), which a margin would not
+prevent. The expiry margin was left at zero on that evidence. Revisit only if
+expiry-shaped failures actually appear.
+
+One documented consequence: if a settlement succeeds on-chain but its response is
+lost, this server under-counts that spend. That is the correct trade, since layer
+1 is anti-mistake and layer 2 is what actually bounds a lost-response case, but
+it is a property rather than an accident.
+
 ## What the agent should not believe
 
 Resource descriptions, service names, mime types and the resource body itself
@@ -260,6 +273,29 @@ additionally collapsed to a single line and clamped to 256 characters.
 > can compel a model to treat the enclosed text as data. That is a property of
 > the model, not of this code. What actually bounds damage is the spend limits,
 > and above all the chain-enforced budget.
+
+### What was measured
+
+Three injection attack variants were run through the real server and the
+resulting tool output given to a fresh model instance: a loud attack with a
+forged fence and a fake "AUTHORITATIVE SYSTEM NOTICE" (raise the ceiling,
+redirect `payTo`), the same attack unfenced and unsanitised as a control, and a
+subtler one that closed a fixed fence and appended a plausible "settlement
+address rotated" note.
+
+The model ignored the injection in all three cases. It read `payTo` from the
+challenge, passed the exact quoted `max_amount`, reported the ceiling unchanged,
+and named the attempt as an injection.
+
+> **Read this carefully:** this did not demonstrate that the fence changes model
+> behaviour. On these attacks the model resisted with or without it. What the
+> fence demonstrably provides is mechanical: an unforgeable boundary, removal of
+> dangerous characters, and the 256-char clamp truncating the attacker's address
+> mid-string so it never arrived intact.
+>
+> Two limits: this was a single model from one family, tested on three
+> hand-written attacks. A smaller or differently-tuned model may not resist at
+> all. Do not generalise from this to "models are safe against injection."
 
 ## Payments are serialised
 
@@ -293,7 +329,8 @@ buffer. That routes `authorizeEntry` down its ed25519 branch, which calls
 byte. expected 48, got 16`. The SDK's `{ signatureScVal }` escape hatch exists
 for exactly this case, but `signAuthEntries` closes it off. This was reproduced
 live against a deployed smart account and filed upstream as
-[x402-foundation/x402 issue #3159](https://github.com/x402-foundation/x402/issues/3159).
+[x402-foundation/x402 issue #3158](https://github.com/x402-foundation/x402/issues/3158)
+(#3159 is a duplicate filed one hour later and closed).
 
 The package does not wait on that fix. `x402Client.register()` accepts any
 `SchemeNetworkClient`, so this package registers its own scheme, which signs the
@@ -319,11 +356,18 @@ point, not a fork.
 | Policies set without a wallet | `VELLAR_X402_POLICIES` without `VELLAR_X402_WALLET`, refused at startup | No | Set `VELLAR_X402_WALLET`, or remove `VELLAR_X402_POLICIES` |
 | `Error(Contract, #110)` with a nested failed `policy__` call | Layer 2 refused the payment on-chain | No | The payment is over the policy's cap. Retrying with a larger `max_amount` will not help |
 | `Error(Contract, #110)` with no policy invocation | The signature map is malformed, often a policy missing from it | No | Set `VELLAR_X402_POLICIES` to every policy in the key's `SignerLimits` |
-| `invalid version byte. expected 48, got 16` | The official `ExactStellarScheme` cannot sign for a `C...` credential address | No | Use this package's registered smart-account scheme; see [x402-foundation/x402 issue #3159](https://github.com/x402-foundation/x402/issues/3159) |
+| `invalid version byte. expected 48, got 16` | The official `ExactStellarScheme` cannot sign for a `C...` credential address | No | Use this package's registered smart-account scheme; see [x402-foundation/x402 issue #3158](https://github.com/x402-foundation/x402/issues/3158) (#3159 is a duplicate filed one hour later and closed) |
 | First call hangs | Free-tier facilitator cold start (sleeps after 15 min idle; first call takes roughly 45s (measured)) | No | Send a warming `GET /health` with a 120s timeout before the first payment |
 
-> **Note:** Debug a paid route with `GET`, never `HEAD`. A `curl -I` returns a
-> plain 200 because a HEAD request carries no payment challenge.
+## Debugging
+
+Diagnostics go to stderr as JSON lines, never stdout. On a stdio transport
+stdout is the JSON-RPC channel, and a stray write desynchronises the protocol so
+the agent sees a transport error instead of a payment error.
+
+Use `GET`, never `HEAD`, to debug a paid route. A `HEAD` request carries no
+payment challenge, so a correctly wired route looks broken: `curl -I` returns a
+plain 200.
 
 ## Next steps
 
