@@ -3,6 +3,15 @@
   "version": "0.1.0",
   "description": "MCP server that lets an AI agent pay for x402 resources on Stellar. Holds exactly one key, runs locally over stdio.",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Vellar-Wallet/vellar-sdk.git",
+    "directory": "packages/mcp-x402-payer"
+  },
+  "homepage": "https://github.com/Vellar-Wallet/vellar-sdk/tree/main/packages/mcp-x402-payer#readme",
+  "bugs": {
+    "url": "https://github.com/Vellar-Wallet/vellar-sdk/issues"
+  },
   "type": "module",
   "bin": {
     "vellar-mcp-x402-payer": "dist/bin.js"
