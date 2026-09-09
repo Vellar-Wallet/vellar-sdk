@@ -155,14 +155,14 @@ ledger: 4252896
 
 ## Verify the upto contract
 
-The `upto` contract deployed on testnet is
-`CDHPA64M73TUTEM4MMHIWIXINBQXH7JJXFGZMGH22VJWFJFROMR6QV2S`, deployed
-2026-08-21. Fetch its wasm and hash it yourself.
+The `upto` contract Vellar deploys is
+`CCZL7CTRS6GWEYXDYD54DZM3OUHQW2S2A4KSU75SH275P3SFZLL4YQAN`, deployed
+2026-09-09. Fetch its wasm and hash it yourself.
 
 ```sh
 stellar contract fetch \
   --network testnet \
-  --id CDHPA64M73TUTEM4MMHIWIXINBQXH7JJXFGZMGH22VJWFJFROMR6QV2S \
+  --id CCZL7CTRS6GWEYXDYD54DZM3OUHQW2S2A4KSU75SH275P3SFZLL4YQAN \
   --out-file upto.wasm
 
 shasum -a 256 upto.wasm
@@ -171,13 +171,33 @@ shasum -a 256 upto.wasm
 Expected hash:
 
 ```
-c276b905981eab91704ce9b9046ebb4867b164dd7e4ba0e0ecda841527d398a9
+92365d9e5effe046a1db5b959bd2357672aef3f4b2137653c8095a0764d1f6c8
 ```
 
-The source is vendored verbatim (Apache-2.0) from rail402's
-`contracts/upto-stellar/` at commit
-`ff504b85ac065369dc985759afe4164a4541d861`, so the hash is reproducible from
-that tree rather than only from the deployed artifact.
+The source is `contracts/upto-vellar/` in the facilitator repo, Vellar's own
+implementation (MIT) written from the x402 `upto` scheme specification, so the
+hash is reproducible from that tree rather than only from the deployed
+artifact. Build it with rustc 1.96.0 and stellar-cli 26.1.0, targeting
+`wasm32v1-none`.
+
+> **Note:** The hosted facilitator has not been redeployed against this contract
+> yet, so `GET /supported` still advertises the earlier
+> `CDHPA64M73TUTEM4MMHIWIXINBQXH7JJXFGZMGH22VJWFJFROMR6QV2S`. Read that field
+> rather than assuming either value.
+
+The facilitator repo also retains `contracts/upto-stellar/`, a vendored
+Apache-2.0 copy of rail402's contract at commit
+`ff504b85ac065369dc985759afe4164a4541d861`, kept for reference. Its wasm hashes
+to `c276b905981eab91704ce9b9046ebb4867b164dd7e4ba0e0ecda841527d398a9`, which is
+what the hosted facilitator serves today. The same source built by its upstream
+author, testnet contract
+`CCMM3FMGEH7FHRYXZ3WQDQCTIWDXGZBGW7D4UT7NKH34SUQACYC3U54X`, hashes to
+`a19f563e764dfd52a0d229c063e7ac1a1b36f6a976f552a8e19b91ee8e4ef84a` instead,
+because it was built with stellar CLI 27.0.0, the version stamped in its wasm
+metadata, while ours was built with stellar CLI 26.1.0 and rustc 1.96.0; the CLI
+writes its version into the wasm's `contractmetav0` section and the newer
+toolchain emits different code, so the two artifacts cannot share a hash even
+though their contract interface and protocol sections are byte-identical.
 
 ## Security finding F11 blocked on-chain
 

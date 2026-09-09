@@ -27,26 +27,36 @@ the facilitator. It reads ledger data directly and asks the facilitator
 nothing, so its license and its release cadence are independent. See
 [Explorer](./explorer.md).
 
-## The vendored upto contract
+## The upto settlement contracts
 
-The `upto` settlement contract vendored at `contracts/upto-stellar/` in the
-facilitator repository is Apache-2.0, credited to rail402
-([tolgayayci/rail402](https://github.com/tolgayayci/rail402)) at commit
-`ff504b85ac065369dc985759afe4164a4541d861`. The full attribution lives in
+The facilitator repository carries two `upto` settlement contracts, under
+different licenses, and a reviewer needs to know which one they are looking at.
+
+| Contract | License | Origin |
+| --- | --- | --- |
+| `contracts/upto-vellar/` | MIT | Vellar's own implementation, written from the x402 `upto` scheme specification |
+| `contracts/upto-stellar/` | Apache-2.0 | Vendored verbatim from [tolgayayci/rail402](https://github.com/tolgayayci/rail402) at commit `ff504b85ac065369dc985759afe4164a4541d861` |
+
+`upto-vellar` is the contract Vellar deploys. Its design brief at
+`contracts/upto-vellar/DESIGN.md` was committed before the implementation.
+
+`upto-stellar` is third-party code, retained for reference and comparison
+rather than deployed by Vellar. Its full attribution lives in
 [`contracts/upto-stellar/PROVENANCE.md`](https://github.com/Vellar-Wallet/vellar-facilitator/blob/main/contracts/upto-stellar/PROVENANCE.md)
-in the facilitator repo.
+in the facilitator repo, which is the record of where it came from.
 
-This matters because the vendored code is third-party code running in the
-settlement path, not a Vellar original. The provenance file is the record of
-where it came from.
+The deployed artifacts, so the license notes can be tied to something
+verifiable:
 
-The deployed artifact, so the license note can be tied to something verifiable:
+| Field | `upto-vellar` | `upto-stellar` |
+| --- | --- | --- |
+| Contract id (testnet) | `CCZL7CTRS6GWEYXDYD54DZM3OUHQW2S2A4KSU75SH275P3SFZLL4YQAN` | `CDHPA64M73TUTEM4MMHIWIXINBQXH7JJXFGZMGH22VJWFJFROMR6QV2S` |
+| Wasm sha256 | `92365d9e5effe046a1db5b959bd2357672aef3f4b2137653c8095a0764d1f6c8` | `c276b905981eab91704ce9b9046ebb4867b164dd7e4ba0e0ecda841527d398a9` |
+| Deployed | 2026-09-09 | 2026-08-21 |
 
-| Field | Value |
-| --- | --- |
-| Contract id (testnet) | `CDHPA64M73TUTEM4MMHIWIXINBQXH7JJXFGZMGH22VJWFJFROMR6QV2S` |
-| Wasm sha256 | `c276b905981eab91704ce9b9046ebb4867b164dd7e4ba0e0ecda841527d398a9` |
-| Deployed | 2026-08-21 |
+> **Note:** The hosted facilitator has not been redeployed against
+> `upto-vellar` yet, so it still serves the `upto-stellar` contract id in
+> `GET /supported`. Read that field rather than assuming either value.
 
 ## Version signals in these docs
 
