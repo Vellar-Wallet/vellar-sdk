@@ -45,7 +45,7 @@ A key restricted by both can pay for API calls all day, but cannot spend past it
 
 ## Prerequisites
 
-- **`vellar-sdk` 0.5.0 or later.**
+- **[`vellar-sdk`](https://www.npmjs.com/package/vellar-sdk) 0.5.0 or later.**
 - **A deployed spending-limit policy**, attached to the wallet. See [Policies](./policies.md).
 - **An `agentKeys` runtime** wired to `createVellarWallet`, covered in step 1.
 

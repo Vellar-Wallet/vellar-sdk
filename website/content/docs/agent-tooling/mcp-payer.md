@@ -1,7 +1,9 @@
 # MCP Payer
 
 > Your agent finds a resource in the Bazaar and it costs money. This is the
-> server that pays for it. `vellar-mcp-x402-payer` is an MCP server that lets an
+> server that pays for it.
+> [`vellar-mcp-x402-payer`](https://www.npmjs.com/package/vellar-mcp-x402-payer)
+> is an MCP server that lets an
 > AI agent pay for x402 (HTTP 402) resources on Stellar from inside its own
 > runtime, under a per-call ceiling and a session budget it cannot raise. It
 > runs locally beside the agent over stdio and holds exactly one key. All

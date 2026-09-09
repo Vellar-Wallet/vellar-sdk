@@ -11,7 +11,8 @@ solves, and which part of the docs to read next based on what you are building.
 
 Vellar is a programmable payment platform for Stellar that lets people and AI
 agents discover, pay for, and be governed on services, with the rules enforced
-by consensus rather than by your application code. The `vellar-sdk` package on
+by consensus rather than by your application code. The
+[`vellar-sdk`](https://www.npmjs.com/package/vellar-sdk) package on
 npm is the client half; the x402 payment layer Vellar runs — a live
 verify/settle facilitator with Bazaar discovery — is the other half, and it is
 live on Stellar testnet today. What separates it from a bare x402 facilitator is

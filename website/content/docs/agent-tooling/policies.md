@@ -6,7 +6,7 @@ By the end of this page you will have deployed a spending-limit policy, know wha
 
 ## Prerequisites
 
-- **`vellar-sdk` installed** (see [Installation](../getting-started/installation.md)).
+- **[`vellar-sdk`](https://www.npmjs.com/package/vellar-sdk) installed** (see [Installation](../getting-started/installation.md)).
 - **`apiUrl`** on `createVellarWallet`, pointing at your policy API gateway.
 - **`policyAttach`** configured on `createVellarWallet`. It is required for `deploy()`, but not for `listTemplates()`, `generate()` or `simulate()`.
 

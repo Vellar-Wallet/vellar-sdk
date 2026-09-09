@@ -16,8 +16,8 @@ npm install vellar-sdk @stellar/stellar-sdk
 # or: yarn add vellar-sdk @stellar/stellar-sdk
 ```
 
-`vellar-sdk` is the client half — the wallet handle, payments, policies, and the
-x402 client. `@stellar/stellar-sdk` provides the Stellar primitives the SDK
+[`vellar-sdk`](https://www.npmjs.com/package/vellar-sdk) is the client half — the
+wallet handle, payments, policies, and the x402 client. `@stellar/stellar-sdk` provides the Stellar primitives the SDK
 builds transactions with.
 
 You will also want the passkey smart-wallet engine and Soroban token client the

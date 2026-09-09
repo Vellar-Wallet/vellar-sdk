@@ -9,7 +9,7 @@ hash, and understood why `maxAmount` is a guard and not the budget.
 
 ## Prerequisites
 
-- `vellar-sdk` installed and a wallet created (see
+- [`vellar-sdk`](https://www.npmjs.com/package/vellar-sdk) installed and a wallet created (see
   [Quickstart](../getting-started/quickstart.md))
 - `x402` config passed to `createVellarWallet`
 - A funded classic `G...` account for `simulationSourceAccount`, different from
