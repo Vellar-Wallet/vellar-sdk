@@ -61,6 +61,31 @@ The semantic stage embeds catalog entries with Voyage AI `voyage-code-3` at
 computes cosine similarity over an in-memory cache and fuses the resulting
 ranking with the lexical one via RRF.
 
+### Fusion: why rank position rather than score
+
+The two stages produce numbers with no common unit. A lexical score is
+unbounded and grows with match length, while a cosine similarity is bounded in
+`[-1, 1]` and, on this model, clusters tightly around 0.4 to 0.7 even for
+unrelated pairs. Adding or averaging them compares quantities that do not share
+a scale, and whichever has the larger spread silently becomes the only one that
+matters. Ranks are unitless, so neither side can dominate by accident and no
+per-corpus normalisation has to be re-tuned as the catalog grows.
+
+The fusion is:
+
+```
+rrfScore(lexicalRank, vectorRank, k = 60)
+  = 1 / (k + lexicalRank) + 1 / (k + vectorRank)
+```
+
+Ranks are 1-based. `k = 60` is the value from the original Cormack et al. paper
+and the de-facto default across search stacks. Its effect is to flatten the top
+of each list: at `k = 60` the gap between rank 1 and rank 2 is small (1/61
+against 1/62), so a resource must rank well in **both** lists to beat one that
+is second in both. That is the behaviour wanted here, because the lexical list
+is the one already known to be good, and a confident-but-wrong vector hit should
+not displace it on the strength of a single first place.
+
 This is the arm that answers a query sharing no vocabulary with any listing.
 The lexical stage cannot: with zero token overlap there is nothing to score.
 

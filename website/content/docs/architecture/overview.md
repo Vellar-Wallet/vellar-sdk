@@ -170,7 +170,7 @@ requirements, the metadata sanitisation rules, and the F11 controlled A/B test.
 flowchart TB
     Q["Query"] --> LEX["Stage 1: lexical<br/>8 synonym groups, 6 stem rules<br/>serviceName 4x · tags 3x<br/>description 2x · URL 1x"]
     Q --> SEM["Stage 2: semantic<br/>Voyage AI voyage-code-3<br/>1024 dimensions, cosine similarity"]
-    LEX --> RRF["Reciprocal Rank Fusion<br/>combines by rank position"]
+    LEX --> RRF["Reciprocal Rank Fusion, k = 60<br/>1/(k+lexRank) + 1/(k+vecRank)"]
     SEM --> RRF
     RRF --> OUT["Ranked results<br/>ties broken by settlements x2 + uniquePayers"]
 ```
@@ -179,7 +179,8 @@ The two stages answer different queries. The lexical arm scores token overlap
 and cannot rank a query that shares no vocabulary with any listing, because
 there is nothing to score. The semantic arm handles exactly that case. RRF fuses
 them by rank position rather than by score, so the two stages never have to
-share a scale.
+share a scale. At `k = 60` the top of each list is flattened, so a resource must
+rank well in both to beat one that is second in both.
 
 Hybrid raised MRR on semantic queries from 0.264 to 0.717 while leaving keyword
 queries unchanged at 0.950, which is the whole argument for fusing rather than
