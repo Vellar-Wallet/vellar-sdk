@@ -169,6 +169,143 @@ restarts. The key is a hot wallet. Do not report this as an on-chain limit.
 
 That closing warning is not decoration. The next section is why.
 
+## Your first pay_and_call
+
+The walkthrough above needed a URL. This one does not: you describe what you
+want and the tool finds it, picks the cheapest payable option, and pays for it
+in a single call.
+
+Everything below is real output from a live run against testnet.
+
+### Step 1: Call x402_pay_and_call
+
+```
+x402_pay_and_call(query="quote", max_amount="1000000")
+```
+
+```
+Query: quote
+Selected: https://vellar-seller-demo.onrender.com/quote (cheapest of 1 payable result(s), from 1 found)
+Paid 1000000 base units of asset CBIELTK6…QDAMA on testnet.
+Settlement transaction: f78d4b90c57dd59ee73f6353d8aec4b880f567db8013f0a40d41826306c4bbb0
+Session ceiling remaining for that asset: 4000000 base units.
+```
+
+The unlocked content follows inside a fenced untrusted-data block:
+
+```
+{"quote":"Ships are safe in harbor, but that's not what ships are for.","topic":"perseverance", …}
+```
+
+### Step 2: Understand the response fields
+
+| Field | This run | What it means |
+| --- | --- | --- |
+| `query` | `quote` | The search query, echoed back so the agent can tell the user what it looked for |
+| `selectedUrl` | `…/quote` | The URL that was discovered and paid. This is the facilitator's URL, never one retyped by the model |
+| `resultsFound` | 1 | Catalog entries the Bazaar returned |
+| `resultsPayable` | 1 | How many passed every filter: right asset, right network, fees sponsored, under `max_amount` |
+| settlement | `f78d4b90…` | The on-chain transaction hash |
+| content | the quote | The resource body, fenced as untrusted data |
+
+`resultsFound` and `resultsPayable` are worth reading together. A large gap
+between them means the Bazaar had matches this server could not pay, usually
+because they were priced in an asset outside `VELLAR_X402_ASSETS`.
+
+### Step 3: Verify it on Horizon
+
+```sh
+curl -s "https://horizon-testnet.stellar.org/transactions/f78d4b90c57dd59ee73f6353d8aec4b880f567db8013f0a40d41826306c4bbb0" \
+  | python3 -c \
+  "import json,sys; \
+  d=json.load(sys.stdin); \
+  print('successful:', d['successful']); \
+  print('ledger:', d['ledger']); \
+  print('fee_charged:', d['fee_charged']); \
+  print('fee_account:', d['fee_account'])"
+```
+
+```
+successful: True
+ledger: 4601452
+fee_charged: 23060
+fee_account: GBUCR6H22CZC5OYHBJIEUS2JFZBOB63AHEGTCV6UEPMD2TMLKG2ZMIW4
+```
+
+The `source_account` on this transaction is
+`GBG5UKF4EXHYOFQFHOO263NTZRFUSXKBRUOAPDZEKISA7CPLABH7ONV4`, a channel account
+from the facilitator's pool, and `fee_account` is the sponsor. The buyer
+(`GCBB5SUM…PW4TS7O`) appears in neither, and its XLM balance was unchanged
+across the payment at 9999.7068997. Only 0.1 USDC moved, 0.2 down to 0.1.
+
+That is the non-custodial property shown on-chain rather than asserted. See
+[Channel Pool](../architecture/channel-pool.md) and
+[Fees and Sponsorship](../reference/fees.md).
+
+### Step 4: Check the session budget
+
+```
+x402_session_budget()
+```
+
+```
+Payer address: GCBB5SUM7CEGHDDMFKEL5LTBFWLUU2B6WPK2BVGCMMCEGNHDMPW4TS7O
+Network: testnet
+Per-asset session ceilings (base units):
+CBIELTK6…QDAMA: 1000000 spent of 5000000, 4000000 remaining
+```
+
+The ledger debited exactly 1,000,000 once, on the confirmed settlement, not once
+per signed attempt. That is what keeps the limiter from drifting away from what
+was actually spent when a benign settle failure is retried.
+
+### How it differs from x402_pay
+
+`x402_pay` requires a URL: the agent must already know what to pay for.
+`x402_pay_and_call` takes a query, so the agent describes what it needs in plain
+language and the tool handles discovery, selection, and payment together.
+
+The selection logic:
+
+1. Search the Bazaar for the query.
+2. Filter to payable results: an `exact` option on the configured network, in an
+   allowed asset, with `areFeesSponsored: true`, priced under `max_amount`.
+3. Sort cheapest first.
+4. Pay the cheapest qualifying result.
+
+> ⚠️ **The catalog price is a claim, not a quote.** The tool re-quotes the
+> selected URL against the live 402 challenge before signing, so a seller cannot
+> list a low price in the catalog and serve a higher one at the resource.
+
+The session ceiling is checked **before** the search runs, so a call that could
+not pay for anything never reaches the facilitator.
+
+### What happens when nothing qualifies
+
+When results exist but all of them cost more than `max_amount`, the tool refuses
+before signing and names the cheapest price it saw:
+
+```
+pay_and_call did not complete: nothing is under max_amount 1000000. The
+cheapest payable result costs 5000000 base units of CBIELTK6…QDAMA. Nothing
+was signed and nothing was spent.
+```
+
+That price is the useful part: the agent can ask the user to authorise that
+specific amount instead of guessing at a higher ceiling.
+
+When results exist but none is payable at all, the refusal says so separately,
+because the fix is different:
+
+```
+pay_and_call did not complete: no result is payable by this server. 3
+result(s) were found, but none offered an 'exact' option on the configured
+network in an allowed asset with sponsored fees.
+```
+
+The first case means raise the ceiling; the second means this server cannot pay
+those resources at any price.
+
 ## The four tools
 
 ### `x402_quote(resource_url)`
