@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "types": ["node"],
+    // Resolve the SDK to source, mirroring the mcp-x402-payer package and the
+    // vitest alias. Without this, tsc follows the exports map to ../../dist,
+    // which does not exist on a clean checkout, so typecheck would depend on
+    // build order.
+    "paths": {
+      "vellar-sdk": ["../../src/index.ts"]
+    }
+  },
+  "include": ["src"]
+}
