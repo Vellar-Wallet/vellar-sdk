@@ -3,7 +3,7 @@
 // lives in ./docs (server-only).
 
 /** Top-level tab a page belongs to. Each tab swaps the whole sidebar. */
-export type DocTabId = "guides" | "concepts" | "reference";
+export type DocTabId = "guides" | "concepts" | "reference" | "architecture";
 
 export interface DocPage {
   slug: string;
@@ -140,23 +140,26 @@ export const DOC_PAGES: DocPage[] = [
 
   // Architecture — why it is built this way, for an auditor or a partner
   // deciding whether to depend on it.
+  { slug: "architecture/overview", title: "Architecture Overview", nav: "Overview",
+    section: "Architecture", tab: "architecture",
+    description: "System architecture, settlement flow, channel pool, smart account policy enforcement, and catalog integrity, with diagrams." },
   { slug: "architecture/settlement-path", title: "Settlement Path", nav: "Settlement Path",
-    section: "Architecture", tab: "reference",
+    section: "Architecture", tab: "architecture",
     description: "What happens inside the facilitator between a signed payment and a ledger hash." },
   { slug: "architecture/channel-pool", title: "Channel Pool", nav: "Channel Pool",
-    section: "Architecture", tab: "reference",
+    section: "Architecture", tab: "architecture",
     description: "Why 50 channel accounts, why exactly 50, and how the monitor handles degraded accounts." },
   { slug: "architecture/catalog-integrity", title: "Catalog Integrity", nav: "Catalog Integrity",
-    section: "Architecture", tab: "reference",
+    section: "Architecture", tab: "architecture",
     description: "How the catalog prevents spam, URL squatting, and metadata injection." },
   { slug: "architecture/spending-policies", title: "Spending Policies", nav: "Spending Policies",
-    section: "Architecture", tab: "reference",
+    section: "Architecture", tab: "architecture",
     description: "How __check_auth enforces spending limits and what the policy cannot enforce." },
   { slug: "architecture/threat-model", title: "Threat Model", nav: "Threat Model",
-    section: "Architecture", tab: "reference",
+    section: "Architecture", tab: "architecture",
     description: "Trust boundaries, blast radius by key type, and what the audit covers." },
   { slug: "architecture/search-and-retrieval", title: "Search and Retrieval", nav: "Search and Retrieval",
-    section: "Architecture", tab: "reference",
+    section: "Architecture", tab: "architecture",
     description: "The ranking pipeline, measured quality numbers, and the pre-mainnet evaluation plan." },
 
   // Hackathon — a dated event page, kept last so it never fronts the docs.
@@ -179,6 +182,7 @@ const TAB_LABELS: Record<DocTabId, string> = {
   guides: "Guides",
   concepts: "Concepts",
   reference: "Reference",
+  architecture: "Architecture",
 };
 
 /**
