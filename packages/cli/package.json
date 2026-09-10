@@ -1,6 +1,6 @@
 {
   "name": "vellar-cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "CLI for discovering, quoting, paying for, and inspecting x402 resources on Stellar.",
   "license": "Apache-2.0",
   "repository": {
@@ -8,7 +8,7 @@
     "url": "git+https://github.com/Vellar-Wallet/vellar-sdk.git",
     "directory": "packages/cli"
   },
-  "homepage": "https://docs.vellar.xyz",
+  "homepage": "https://docs.vellar.xyz/docs/agent-tooling/cli",
   "bugs": {
     "url": "https://github.com/Vellar-Wallet/vellar-sdk/issues"
   },
