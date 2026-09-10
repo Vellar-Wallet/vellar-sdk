@@ -24,13 +24,18 @@ Paying and finding are two servers, not one.
 | --- | --- | --- |
 | Role | Find resources | Pay for them |
 | Holds keys | No | Yes, exactly one |
-| Tools | list, search | quote, pay, budget |
+| Tools | list, search | quote, pay, pay_and_call, budget |
 
 They are separate on purpose. The facilitator is neutral infrastructure that
 strangers point wallets at, so giving it custody would invert its trust model.
-An agent connects to both: one to find resources, this one to pay for them. This
-server does not reimplement discovery and does not proxy the facilitator's HTTP
-API. See [Discover services](../buyers/discover-services.md).
+An agent connects to both: one to find resources, this one to pay for them.
+
+This server does not reimplement discovery as a general proxy.
+[`x402_pay_and_call`](#x402_pay_and_callquery-max_amount) is the deliberate
+exception: it reads `/discovery/search` to select a resource and pays for it in
+one call, so the URL paid is the URL the facilitator returned rather than one
+that passed through agent context. See
+[Discover services](../buyers/discover-services.md).
 
 ## Prerequisites
 
@@ -164,7 +169,7 @@ restarts. The key is a hot wallet. Do not report this as an on-chain limit.
 
 That closing warning is not decoration. The next section is why.
 
-## The three tools
+## The four tools
 
 ### `x402_quote(resource_url)`
 
@@ -189,6 +194,45 @@ string. The payment is refused, unsigned, if:
 - fee sponsorship is not explicitly declared (`extra.areFeesSponsored === true`)
 
 If the resource needs no payment, the content is returned and nothing is spent.
+
+### `x402_pay_and_call(query, max_amount)`
+
+Searches the Vellar Bazaar for a resource matching the query, selects the
+cheapest payable result, pays it, and returns the unlocked content plus the
+settlement hash. One call, with no separate discovery and payment steps.
+
+Use it when the user describes what they want rather than naming a URL.
+
+- `query` is a natural-language search query, for example `"weather data API"`.
+- `max_amount` is a hard ceiling in base units as a decimal string, the same
+  convention as `x402_pay`.
+
+The payment is refused, unsigned, if:
+
+- no result matches the configured asset
+- no result declares `areFeesSponsored: true`
+- every result exceeds `max_amount`
+- the session ceiling would be exceeded
+
+When refusing because everything is too expensive, the tool reports the cheapest
+available price, so the agent can ask the user for that specific amount rather
+than guessing at a higher ceiling.
+
+The session ceiling is checked **before** the search runs. A call that could not
+pay for anything never reaches the facilitator, and never tells the model about
+resources it was not able to buy.
+
+> ⚠️ **The catalog price is a claim, not a quote.** The tool re-quotes the
+> selected URL against the live 402 challenge before signing, so a seller cannot
+> bait-and-switch by listing a low price in the catalog and serving a higher one
+> at the resource. Price, asset, network and ceiling are all re-checked against
+> what the resource actually returns.
+
+> **On the architectural boundary.** The discovery server deliberately holds no
+> keys, and the payer server deliberately does not proxy discovery.
+> `x402_pay_and_call` is the deliberate exception: selecting and paying in one
+> call means the URL paid is the URL the facilitator returned, not a URL that
+> passed through agent context where an injected description could rewrite it.
 
 ### `x402_session_budget()`
 

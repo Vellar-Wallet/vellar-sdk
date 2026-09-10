@@ -2,8 +2,14 @@
 //
 // This server is the PAYER side and holds exactly one key. Discovery is a
 // separate concern handled by the facilitator's own MCP server, which
-// deliberately holds no keys — an agent connects to both. Nothing here
-// reimplements discovery or proxies the facilitator's HTTP API.
+// deliberately holds no keys — an agent connects to both.
+//
+// This server does not reimplement discovery as a general proxy. The
+// x402_pay_and_call tool is the deliberate exception: it reads
+// /discovery/search to select a resource, then pays for it in one call. The URL
+// paid is always the URL the facilitator returned, not a URL that passed
+// through agent context, which is what makes the combined call safer than
+// searching and paying in separate tools.
 //
 // Note what is NOT in the tool schemas: the secret, the asset allowlist, and the
 // session ceilings. A tool argument is model context, so anything declared here
