@@ -8,6 +8,14 @@ const RPC_URLS: Record<string, string> = {
   mainnet: "https://mainnet.sorobanrpc.com",
 };
 
+export function safeJsonParse(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
 const NETWORK_IDS: Record<string, Network> = {
   testnet: "stellar:testnet",
   mainnet: "stellar:pubnet",
@@ -184,8 +192,21 @@ export function makePayCommand(): Command {
           // 4. Retry with the payment attached.
           const paid = await fetch(url, { headers: http.encodePaymentSignatureHeader(payload) });
           const text = await paid.text();
+          // Set by the facilitator's /settle route from the bazaar onAfterSettle
+          // hook's outcome (src/bazaar.ts, src/server.ts in vellar-facilitator) —
+          // relayed unchanged by a seller that forwards facilitator response
+          // headers. Absent if the seller doesn't relay it or the hook never ran
+          // (e.g. settlement failed before reaching the success branch).
+          const extensionResponses = paid.headers.get("extension-responses");
 
           if (paid.status !== 200) {
+            if (opts.json) {
+              console.log(
+                JSON.stringify({ response: safeJsonParse(text), extensionResponses }, null, 2),
+              );
+              process.exit(1);
+              return;
+            }
             console.error(`Not unlocked: HTTP ${paid.status}`);
             console.error(text);
             console.error(
@@ -197,15 +218,10 @@ export function makePayCommand(): Command {
             return;
           }
 
-          let body: unknown;
-          try {
-            body = JSON.parse(text);
-          } catch {
-            body = null;
-          }
+          const body = safeJsonParse(text);
 
           if (opts.json) {
-            console.log(text);
+            console.log(JSON.stringify({ response: body, extensionResponses }, null, 2));
             return;
           }
 
@@ -214,6 +230,7 @@ export function makePayCommand(): Command {
             console.error(`Payer:      ${keypair.publicKey()}`);
             console.error(`Paid:       ${price} base units of ${chosen.asset ?? "?"}`);
             console.error(`Settlement: ${settlement.transaction}`);
+            if (extensionResponses) console.error(`Extensions: ${extensionResponses}`);
             console.error("---");
           }
           console.log(text);

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { makePayCommand, selectRequirement } from "./pay.js";
+import { makePayCommand, safeJsonParse, selectRequirement } from "./pay.js";
 import type { Requirement } from "./quote.js";
 
 function optionFor(flags: string) {
@@ -95,5 +95,19 @@ describe("selectRequirement", () => {
     );
     expect(chosen).toBeUndefined();
     expect(reason).toMatch(/upto/);
+  });
+});
+
+describe("safeJsonParse", () => {
+  it("parses valid JSON", () => {
+    expect(safeJsonParse('{"a":1}')).toEqual({ a: 1 });
+  });
+
+  it("returns null for non-JSON text rather than throwing", () => {
+    expect(safeJsonParse("not json")).toBeNull();
+  });
+
+  it("returns null for an empty string", () => {
+    expect(safeJsonParse("")).toBeNull();
   });
 });
