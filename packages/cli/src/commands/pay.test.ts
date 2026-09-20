@@ -79,6 +79,59 @@ describe("pay command", () => {
     expect(err.mock.calls.flat().join(" ")).toMatch(/--secret-file/);
   });
 
+  it("rejects a --method outside GET/POST/PUT/PATCH/DELETE before making any network call", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const exit = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`exit:${code}`);
+    }) as never);
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await expect(
+      makePayCommand().parseAsync([
+        "node",
+        "pay",
+        "https://example.test/paid",
+        "--secret",
+        FAKE_SECRET,
+        "--method",
+        "TRACE",
+      ]),
+    ).rejects.toThrow("exit:1");
+
+    expect(exit).toHaveBeenCalledWith(1);
+    expect(err.mock.calls.flat().join(" ")).toMatch(/--method must be one of/);
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    vi.unstubAllGlobals();
+  });
+
+  it("accepts --method in any case and normalises it to uppercase", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: false, status: 500, statusText: "boom" });
+    vi.stubGlobal("fetch", fetchSpy);
+    vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`exit:${code}`);
+    }) as never);
+
+    await expect(
+      makePayCommand().parseAsync([
+        "node",
+        "pay",
+        "https://example.test/paid",
+        "--secret",
+        FAKE_SECRET,
+        "--method",
+        "delete",
+      ]),
+    ).rejects.toThrow("exit:1");
+
+    const [, calledInit] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(calledInit.method).toBe("DELETE");
+
+    vi.unstubAllGlobals();
+  });
+
   it("rejects invalid --body JSON before making any network call", async () => {
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     const exit = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {

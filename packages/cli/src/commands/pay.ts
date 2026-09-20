@@ -21,6 +21,8 @@ const NETWORK_IDS: Record<string, Network> = {
   mainnet: "stellar:pubnet",
 };
 
+const ALLOWED_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+
 /**
  * Pick the requirement to pay. Only `exact` is payable from a classic keypair
  * here: `upto` needs a contract call the official client does not build, so an
@@ -56,7 +58,11 @@ export function makePayCommand(): Command {
     .option("--max <amount>", "Maximum amount to pay in base units", "10000000")
     .option("--network <network>", "testnet or mainnet", process.env.VELLAR_NETWORK ?? "testnet")
     .option("--rpc-url <url>", "Soroban RPC URL (defaults per network)")
-    .option("--method <method>", "HTTP method for both the probe and paid request", "GET")
+    .option(
+      "--method <method>",
+      `HTTP method for both the probe and paid request (${ALLOWED_METHODS.join(", ")})`,
+      "GET",
+    )
     .option("--body <json>", "JSON body to send with the paid request (default {})")
     .option("--json", "Output raw JSON")
     .action(
@@ -114,9 +120,18 @@ export function makePayCommand(): Command {
           }
 
           const method = opts.method.toUpperCase();
-          // GET/HEAD never carry a body: fetch throws ("Request with GET/HEAD
+          if (!ALLOWED_METHODS.includes(method)) {
+            console.error(
+              `Error: --method must be one of ${ALLOWED_METHODS.join(", ")}, got '${opts.method}'`,
+            );
+            process.exit(1);
+            return;
+          }
+          // GET never carries a body: fetch throws ("Request with GET/HEAD
           // method cannot have body") if one is attached, so both requests
           // below gate on this rather than sending a body unconditionally.
+          // (HEAD is excluded from ALLOWED_METHODS above, so only GET matters
+          // here, but the check stays defensive rather than assuming that.)
           const hasBody = method !== "GET" && method !== "HEAD";
 
           let requestBody = "{}";
