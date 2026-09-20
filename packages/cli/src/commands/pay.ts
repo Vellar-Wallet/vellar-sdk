@@ -53,9 +53,11 @@ export function makePayCommand(): Command {
     .argument("<url>", "Resource URL to pay for")
     .option("--secret <key>", "Payer secret key (S...)", process.env.VELLAR_SECRET)
     .option("--secret-file <path>", "Path to a file containing the secret key")
-    .option("--max <amount>", "Maximum amount to pay in base units", "1000000")
+    .option("--max <amount>", "Maximum amount to pay in base units", "10000000")
     .option("--network <network>", "testnet or mainnet", process.env.VELLAR_NETWORK ?? "testnet")
     .option("--rpc-url <url>", "Soroban RPC URL (defaults per network)")
+    .option("--method <method>", "HTTP method for both the probe and paid request", "GET")
+    .option("--body <json>", "JSON body to send with the paid request (default {})")
     .option("--json", "Output raw JSON")
     .action(
       async (
@@ -66,6 +68,8 @@ export function makePayCommand(): Command {
           max: string;
           network: string;
           rpcUrl?: string;
+          method: string;
+          body?: string;
           json?: boolean;
         },
       ) => {
@@ -109,8 +113,29 @@ export function makePayCommand(): Command {
             return;
           }
 
-          // 1. Unpaid request. GET, never HEAD.
-          const unpaid = await fetch(url, { method: "GET" });
+          const method = opts.method.toUpperCase();
+          // GET/HEAD never carry a body: fetch throws ("Request with GET/HEAD
+          // method cannot have body") if one is attached, so both requests
+          // below gate on this rather than sending a body unconditionally.
+          const hasBody = method !== "GET" && method !== "HEAD";
+
+          let requestBody = "{}";
+          if (opts.body !== undefined) {
+            if (safeJsonParse(opts.body) === null && opts.body.trim() !== "null") {
+              console.error(`Error: --body must be valid JSON, got '${opts.body}'`);
+              process.exit(1);
+              return;
+            }
+            requestBody = opts.body;
+          }
+
+          // 1. Unpaid probe, same method/body as the paid request: a POST-only
+          //    endpoint has no GET route to 402 off of, so probing with a
+          //    hardcoded GET would 404/405 instead of surfacing the challenge.
+          const unpaid = await fetch(url, {
+            method,
+            ...(hasBody ? { headers: { "Content-Type": "application/json" }, body: requestBody } : {}),
+          });
           if (unpaid.ok) {
             console.log(await unpaid.text());
             console.error("(No payment was required, so nothing was spent.)");
@@ -189,8 +214,15 @@ export function makePayCommand(): Command {
             return;
           }
 
-          // 4. Retry with the payment attached.
-          const paid = await fetch(url, { headers: http.encodePaymentSignatureHeader(payload) });
+          // 4. Retry with the payment attached, same method/body as the probe.
+          const paid = await fetch(url, {
+            method,
+            headers: {
+              ...http.encodePaymentSignatureHeader(payload),
+              ...(hasBody ? { "Content-Type": "application/json" } : {}),
+            },
+            ...(hasBody ? { body: requestBody } : {}),
+          });
           const text = await paid.text();
           // Set by the facilitator's /settle route from the bazaar onAfterSettle
           // hook's outcome (src/bazaar.ts, src/server.ts in vellar-facilitator) —
