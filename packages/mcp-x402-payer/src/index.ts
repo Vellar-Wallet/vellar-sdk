@@ -16,6 +16,15 @@ export {
   type Truncated,
 } from "./output.js";
 export {
+  DEFAULT_FACILITATOR_URL,
+  NoPayableResultError,
+  payAndCall,
+  selectCandidates,
+  type Candidate,
+  type PayAndCallDeps,
+  type PayAndCallResult,
+} from "./pay-and-call.js";
+export {
   createPayer,
   type FetchLike,
   type PayResult,

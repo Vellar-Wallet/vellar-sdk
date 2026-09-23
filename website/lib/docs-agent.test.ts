@@ -16,6 +16,7 @@ const page = (over: Partial<DocPage> = {}): DocPage => ({
   title: "x402 Agentic Payments",
   nav: "x402",
   section: "x402 Payments",
+  tab: "reference",
   description: "Pay HTTP-402 resources.",
   ...over,
 });
