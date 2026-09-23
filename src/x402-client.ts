@@ -14,7 +14,14 @@
 
 import { Address, nativeToScVal, rpc, xdr } from "@stellar/stellar-sdk";
 import { AssembledTransaction } from "@stellar/stellar-sdk/contract";
-import { assertAuthEntryInvocation, type ExpectedInvocation } from "./x402-auth-entry";
+import {
+  assertAuthEntryInvocation,
+  type ExpectedInvocation,
+} from "./x402-auth-entry";
+import {
+  UnworkableTimeoutError,
+  MIN_VIABLE_EXPIRATION_LEDGERS,
+} from "./x402-timeout-error";
 import type { Network } from "./types";
 import {
   createSignedFetch,
@@ -55,6 +62,7 @@ import {
 
 // The pure guard layer is part of this module's published surface.
 export * from "./x402-guards";
+export { UnworkableTimeoutError } from "./x402-timeout-error";
 
 /** Minimal fetch surface (injectable for tests). */
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
@@ -132,12 +140,21 @@ export function expirationOffsetFor(
   maxTimeoutSeconds: number | undefined,
   ceiling?: number,
 ): number {
-  const windowLedgers = Math.ceil((maxTimeoutSeconds ?? 120) / ESTIMATED_LEDGER_SECONDS);
+  const windowLedgers = Math.ceil(
+    (maxTimeoutSeconds ?? 120) / ESTIMATED_LEDGER_SECONDS,
+  );
   let offset = windowLedgers - EXPIRATION_SAFETY_MARGIN;
   // An explicit ceiling still wins; absent one, fall back to the default bound
   // rather than honouring whatever the seller asked for.
   offset = Math.min(offset, ceiling ?? DEFAULT_MAX_EXPIRATION_LEDGERS);
-  return Math.max(offset, MIN_EXPIRATION_LEDGERS);
+  offset = Math.max(offset, MIN_EXPIRATION_LEDGERS);
+
+  // Security audit V-13: refuse before signing if the window is too narrow.
+  if (offset < MIN_VIABLE_EXPIRATION_LEDGERS) {
+    throw new UnworkableTimeoutError(maxTimeoutSeconds ?? 120, offset);
+  }
+
+  return offset;
 }
 
 export function createX402Client(deps: X402ClientDeps): X402Client {
@@ -150,7 +167,8 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
   assertValidBudgetAttributeRules(budgetAttributes);
   const now = deps.now ?? (() => new Date());
   const server = new rpc.Server(deps.rpcUrl);
-  const baseFetch: FetchLike = deps.fetchImpl ?? ((url, init) => fetch(url, init));
+  const baseFetch: FetchLike =
+    deps.fetchImpl ?? ((url, init) => fetch(url, init));
   // Request signing wraps whatever fetch the caller already injected, so a
   // test double or logging wrapper composes with it rather than being replaced.
   const doFetch: FetchLike = deps.requestSigning
@@ -160,7 +178,9 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
   const expirationCeiling = deps.expirationLedgerOffset;
   const ourCaip2 = CAIP2_BY_NETWORK[deps.network];
 
-  function budgetRequestFor(requirements: PaymentRequirements): BudgetAttributeRequest {
+  function budgetRequestFor(
+    requirements: PaymentRequirements,
+  ): BudgetAttributeRequest {
     const category = requirements.extra?.category;
     return {
       merchant: requirements.payTo,
@@ -174,13 +194,20 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
     requirements: PaymentRequirements,
   ): Promise<{ header: string; amount: bigint }> {
     const net = NETWORKS[requirements.network];
-    if (!net) throw new NoUsablePaymentOptionError(`Unknown network ${requirements.network}`);
+    if (!net)
+      throw new NoUsablePaymentOptionError(
+        `Unknown network ${requirements.network}`,
+      );
 
     // Attribute-scoped budget check (#225) — BEFORE simulation, so an
     // out-of-budget payment never even round-trips to the RPC. Independent of
     // (checked in addition to) maxAmount / allowedAssets in createPayment.
     const budgetRequest = budgetRequestFor(requirements);
-    await assertBudgetAttributes(budgetAttributes, budgetRequest, deps.budgetAttributeTracker);
+    await assertBudgetAttributes(
+      budgetAttributes,
+      budgetRequest,
+      deps.budgetAttributeTracker,
+    );
 
     // Build the SEP-41 transfer(from = C-address, to = payTo, amount).
     const tx = await AssembledTransaction.build({
@@ -199,7 +226,8 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
 
     const latest = await server.getLatestLedger();
     const expirationLedger =
-      latest.sequence + expirationOffsetFor(requirements.maxTimeoutSeconds, expirationCeiling);
+      latest.sequence +
+      expirationOffsetFor(requirements.maxTimeoutSeconds, expirationCeiling);
 
     if (!tx.built) {
       throw new Error(
@@ -219,13 +247,18 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
     };
 
     // Sign every wallet auth entry (V1) via the injected signer.
-    const op = built.operations[0] as { auth?: xdr.SorobanAuthorizationEntry[] };
+    const op = built.operations[0] as {
+      auth?: xdr.SorobanAuthorizationEntry[];
+    };
     const auth = op.auth ?? [];
     let signed = 0;
     for (let i = 0; i < auth.length; i++) {
       const entry = auth[i]!;
-      if (entry.credentials().switch().name !== "sorobanCredentialsAddress") continue;
-      const addr = Address.fromScAddress(entry.credentials().address().address()).toString();
+      if (entry.credentials().switch().name !== "sorobanCredentialsAddress")
+        continue;
+      const addr = Address.fromScAddress(
+        entry.credentials().address().address(),
+      ).toString();
       if (addr !== deps.signer.address) continue;
 
       // Security audit V-1. The credential address only establishes that the
@@ -241,7 +274,9 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
       signed++;
     }
     if (signed === 0) {
-      throw new Error("No wallet auth entry found to sign for the payer address.");
+      throw new Error(
+        "No wallet auth entry found to sign for the payer address.",
+      );
     }
     op.auth = auth;
 
@@ -262,18 +297,28 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
   ): Promise<SignedPayment> {
     // Re-apply guards even on the direct path (a caller-supplied requirement is
     // still subject to maxAmount / allowedAssets).
-    if (opts.allowedAssets && !opts.allowedAssets.includes(requirements.asset)) {
+    if (
+      opts.allowedAssets &&
+      !opts.allowedAssets.includes(requirements.asset)
+    ) {
       throw new DisallowedAssetError(requirements.asset, opts.allowedAssets);
     }
     const required = parseAmount(requirements.amount);
     if (required > opts.maxAmount) {
-      throw new MaxAmountExceededError(required, opts.maxAmount, requirements.asset);
+      throw new MaxAmountExceededError(
+        required,
+        opts.maxAmount,
+        requirements.asset,
+      );
     }
     const { header, amount } = await buildSignedPayment(requirements);
     return { header, requirements, amount };
   }
 
-  async function x402Fetch(url: string, init: X402FetchInit): Promise<X402Response> {
+  async function x402Fetch(
+    url: string,
+    init: X402FetchInit,
+  ): Promise<X402Response> {
     // A single-use body (a ReadableStream) is consumed by the first request and
     // cannot be replayed for the paid retry — the retry would silently send an
     // empty body. Reject it with a clear error; callers should pass a
@@ -320,7 +365,10 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
     // payment — a request rejected above (over-budget on-chain, or any other
     // 4xx) must not consume period budget it never actually spent.
     if (deps.budgetAttributeTracker && budgetAttributes.length > 0) {
-      const rule = matchingBudgetRule(budgetAttributes, budgetRequestFor(requirements));
+      const rule = matchingBudgetRule(
+        budgetAttributes,
+        budgetRequestFor(requirements),
+      );
       if (rule?.periodMaxAmount !== undefined) {
         await deps.budgetAttributeTracker.record(rule, amount);
       }

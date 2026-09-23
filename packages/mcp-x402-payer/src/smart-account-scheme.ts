@@ -23,6 +23,8 @@ import {
   assertAuthEntryInvocation,
   type ExpectedInvocation,
   type SmartAccountX402Signer,
+  UnworkableTimeoutError,
+  MIN_VIABLE_EXPIRATION_LEDGERS,
 } from "vellar-sdk";
 import { log } from "./output.js";
 import type { X402Requirement } from "./protocol.js";
@@ -48,21 +50,6 @@ const MIN_EXPIRATION_LEDGERS = 3;
  * from 24 hours to 5 minutes — roughly 288x less exposure.
  */
 const MAX_EXPIRATION_SECONDS = 300;
-/**
- * Smallest signature window we will accept (security audit V-13).
- *
- * The measured worst sign-to-settled window is 12.0s; `MIN_EXPIRATION_LEDGERS`
- * (3 ≈ 15s) leaves only ~3s of headroom, so a seller advertising a very short
- * `maxTimeoutSeconds` gets a signature that can expire mid-settle. Nothing is
- * spent when that happens — the facilitator rejects at verify — but the caller
- * sees an opaque failure rather than "the seller's window was too short".
- *
- * We cannot fix it by signing for longer: the facilitator derives its own
- * `maxLedger` from the same `maxTimeoutSeconds` and rejects anything beyond it
- * as `expiration_too_far`. So the honest response is to refuse up front and say
- * why. 5 ledgers (~25s) is ~2x the measured worst case.
- */
-const MIN_VIABLE_EXPIRATION_LEDGERS = 5;
 
 const NETWORK_PASSPHRASE: Record<string, string> = {
   "stellar:testnet": "Test SDF Network ; September 2015",
@@ -108,7 +95,10 @@ function expirationLedgersFor(maxTimeoutSeconds: number): number {
     });
   }
   const window = Math.ceil(requested / ESTIMATED_LEDGER_SECONDS);
-  const offset = Math.max(window - EXPIRATION_SAFETY_MARGIN, MIN_EXPIRATION_LEDGERS);
+  const offset = Math.max(
+    window - EXPIRATION_SAFETY_MARGIN,
+    MIN_EXPIRATION_LEDGERS,
+  );
 
   if (offset < MIN_VIABLE_EXPIRATION_LEDGERS) {
     // Refuse rather than sign something likely to expire in flight. Nothing is
@@ -128,8 +118,12 @@ function expirationLedgersFor(maxTimeoutSeconds: number): number {
  * spending limit is enforced on-chain inside `__check_auth` — this client cannot
  * exceed it, and neither can anything that drives this client.
  */
-export function createSmartAccountScheme(deps: SmartAccountSchemeDeps): SchemeClientLike {
-  const server = new rpc.Server(deps.rpcUrl, { allowHttp: deps.allowHttp ?? false });
+export function createSmartAccountScheme(
+  deps: SmartAccountSchemeDeps,
+): SchemeClientLike {
+  const server = new rpc.Server(deps.rpcUrl, {
+    allowHttp: deps.allowHttp ?? false,
+  });
 
   return {
     scheme: "exact",
@@ -161,7 +155,9 @@ export function createSmartAccountScheme(deps: SmartAccountSchemeDeps): SchemeCl
       });
 
       if (!tx.built) {
-        throw new Error("Failed to assemble the transfer (simulation returned nothing).");
+        throw new Error(
+          "Failed to assemble the transfer (simulation returned nothing).",
+        );
       }
 
       const latest = await server.getLatestLedger();
@@ -181,13 +177,18 @@ export function createSmartAccountScheme(deps: SmartAccountSchemeDeps): SchemeCl
         amount: BigInt(requirements.amount),
       };
 
-      const op = tx.built.operations[0] as { auth?: xdr.SorobanAuthorizationEntry[] };
+      const op = tx.built.operations[0] as {
+        auth?: xdr.SorobanAuthorizationEntry[];
+      };
       const auth = op.auth ?? [];
       let signed = 0;
       for (let i = 0; i < auth.length; i++) {
         const entry = auth[i]!;
-        if (entry.credentials().switch().name !== "sorobanCredentialsAddress") continue;
-        const addr = Address.fromScAddress(entry.credentials().address().address()).toString();
+        if (entry.credentials().switch().name !== "sorobanCredentialsAddress")
+          continue;
+        const addr = Address.fromScAddress(
+          entry.credentials().address().address(),
+        ).toString();
         if (addr !== deps.signer.address) continue;
 
         // The credential address only says "this is mine to sign". This says
@@ -198,10 +199,13 @@ export function createSmartAccountScheme(deps: SmartAccountSchemeDeps): SchemeCl
         // attacker-chosen recipient.
         assertAuthEntryInvocation(entry, expected);
 
-        const signedXdr = await deps.signer.signAuthEntry(entry.toXDR("base64"), {
-          networkPassphrase: passphrase,
-          expirationLedger,
-        });
+        const signedXdr = await deps.signer.signAuthEntry(
+          entry.toXDR("base64"),
+          {
+            networkPassphrase: passphrase,
+            expirationLedger,
+          },
+        );
         auth[i] = xdr.SorobanAuthorizationEntry.fromXDR(signedXdr, "base64");
         signed++;
       }
@@ -220,7 +224,10 @@ export function createSmartAccountScheme(deps: SmartAccountSchemeDeps): SchemeCl
       await tx.simulate({ restore: false });
       const sim = tx.simulation;
       if (!sim || rpc.Api.isSimulationError(sim)) {
-        const detail = sim && "error" in sim ? String(sim.error) : "unknown simulation failure";
+        const detail =
+          sim && "error" in sim
+            ? String(sim.error)
+            : "unknown simulation failure";
         throw new SmartAccountAuthError(detail);
       }
 
@@ -249,7 +256,8 @@ export class SmartAccountAuthError extends Error {
   readonly policyRejected: boolean;
 
   constructor(readonly detail: string) {
-    const policyRejected = /try_call failed.*policy__|policy__.*Error\(Contract, #1\)/s.test(detail);
+    const policyRejected =
+      /try_call failed.*policy__|policy__.*Error\(Contract, #1\)/s.test(detail);
     super(
       `The smart account did not authorise this payment. ` +
         (policyRejected
@@ -263,27 +271,5 @@ export class SmartAccountAuthError extends Error {
     );
     this.name = "SmartAccountAuthError";
     this.policyRejected = policyRejected;
-  }
-}
-
-/**
- * The seller's `maxTimeoutSeconds` is too short for a payment to complete.
- *
- * Security audit V-13. Refused before signing: the window it allows is below
- * what a settlement has been measured to need, and signing anyway would produce
- * a signature that expires mid-flight and fails opaquely. Nothing was spent.
- */
-export class UnworkableTimeoutError extends Error {
-  constructor(
-    readonly maxTimeoutSeconds: number,
-    readonly ledgers: number,
-  ) {
-    super(
-      `The resource server allows only ${maxTimeoutSeconds}s to settle, which is about ` +
-        `${ledgers} ledgers — below the ~25s a settlement has been measured to need. ` +
-        `Refusing before signing rather than producing a signature that expires mid-payment. ` +
-        `Nothing was spent. This is the seller's configuration, not a fault in the payment.`,
-    );
-    this.name = "UnworkableTimeoutError";
   }
 }

@@ -39,6 +39,10 @@ start — pull requests that don't follow them will be closed.
 5. **Questions go to the Telegram group.** Don't open issues for questions —
    ask in [our Telegram](https://t.me/+RWPCKXXJTj45Njk0).
 
+6. **No AI attribution in commits.** Do not include `Co-Authored-By` trailers
+   referencing AI models or AI attribution phrases in commit messages. Commits
+   and pull requests in this repository carry no AI attribution.
+
 ## Before you open a PR
 
 Make sure the package still typechecks, tests, and builds:
@@ -51,6 +55,17 @@ npm run build
 ```
 
 New code is expected to come with tests.
+
+### Set up the git hook (one-time)
+
+To enable the commit-msg hook that checks for AI attribution:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+This is a one-time setup per clone. The hook will prevent commits with AI
+attribution from being created locally.
 
 ## Testing
 
@@ -102,7 +117,7 @@ and asserts that no submission is lost silently. It is also exposed as an
 optional CI job (`load-test`) — trigger it manually via the workflow's "Run
 workflow" button; it does not gate normal PRs.
 
-*Observed behavior & bottlenecks.* The SDK's payment path is a fully
+_Observed behavior & bottlenecks._ The SDK's payment path is a fully
 asynchronous, shared-nothing promise chain, so a single Node process has no
 in-process serialization: with an in-process backend modeled at ~5 ms latency,
 error rate stays 0 and throughput scales roughly with concurrency (≈ `(1000 /
@@ -111,6 +126,7 @@ is therefore the backend/relayer round-trip, not client code — the harness
 models this via `BACKEND_LATENCY_MS` and the `failEveryN` error knob. Expect concrete
 numbers to vary by machine and by real backend; trust `npm run test:load`'s
 report over any fixed figure here.
+
 ## Integration testing
 
 Hermetic (`npm test`) never touches the network. A separate, deliberate suite

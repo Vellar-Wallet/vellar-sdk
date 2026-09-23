@@ -7,6 +7,38 @@ on:
   workflow_dispatch:
 
 jobs:
+  check-ai-attribution:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check for AI attribution in PR commits
+        run: |
+          # Get the merge base to identify PR commits only
+          merge_base=$(git merge-base origin/dev HEAD)
+
+          # Get all commits in the PR (excluding existing history)
+          commits=$(git rev-list ${merge_base}..HEAD)
+
+          # Check each commit message for AI attribution
+          for commit in $commits; do
+            commit_msg=$(git log -1 --format=%B "$commit")
+            
+            if echo "$commit_msg" | grep -iE "Co-Authored-By:.*\b(claude|gpt|chatgpt|gemini|copilot|deepseek|llama|mistral|AI|artificial intelligence)" >/dev/null 2>&1; then
+              echo "Error: Commit $commit contains AI attribution in Co-Authored-By trailer."
+              exit 1
+            fi
+            
+            if echo "$commit_msg" | grep -iE "(Generated with|Assisted by|Created by).*\b(AI|Claude|GPT|ChatGPT|Gemini|Copilot)" >/dev/null 2>&1; then
+              echo "Error: Commit $commit contains AI attribution phrase."
+              exit 1
+            fi
+          done
+
+          echo "✓ No AI attribution found in PR commits"
+
   ci:
     runs-on: ubuntu-latest
     steps:

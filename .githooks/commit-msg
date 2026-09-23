@@ -1,0 +1,24 @@
+#!/bin/bash
+# Reject commits with AI attribution
+
+# Read the commit message
+commit_msg=$(cat "$1")
+
+# List of AI service patterns and attribution phrases to reject
+# Matches Co-Authored-By trailers naming AI services
+if echo "$commit_msg" | grep -iE "Co-Authored-By:.*\b(claude|gpt|chatgpt|gemini|copilot|deepseek|llama|mistral|AI|artificial intelligence)" >/dev/null 2>&1; then
+  echo "Error: Commit contains AI attribution in Co-Authored-By trailer."
+  echo "This repository does not allow AI attribution in commits."
+  echo "Please remove the Co-Authored-By trailer referencing an AI model and try again."
+  exit 1
+fi
+
+# Also check for common AI generation phrases
+if echo "$commit_msg" | grep -iE "(Generated with|Assisted by|Created by).*\b(AI|Claude|GPT|ChatGPT|Gemini|Copilot)" >/dev/null 2>&1; then
+  echo "Error: Commit contains AI attribution phrase."
+  echo "This repository does not allow AI attribution in commits."
+  echo "Please remove the AI attribution phrase and try again."
+  exit 1
+fi
+
+exit 0

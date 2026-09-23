@@ -6,7 +6,11 @@
 // tested once, purely, in x402-guards.test.ts — not re-derived here.
 
 import { describe, expect, it, vi } from "vitest";
-import { createX402Client, expirationOffsetFor, type FetchLike } from "./x402-client";
+import {
+  createX402Client,
+  expirationOffsetFor,
+  type FetchLike,
+} from "./x402-client";
 import {
   DisallowedAssetError,
   InvalidRequirementsError,
@@ -15,7 +19,14 @@ import {
   X402NotConfiguredError,
   type SmartAccountX402Signer,
 } from "./x402-types";
-import { C_ADDRESS, PAYTO, SIM_SOURCE, TOKEN, requirements, response402 } from "./x402-test-fixtures";
+import {
+  C_ADDRESS,
+  PAYTO,
+  SIM_SOURCE,
+  TOKEN,
+  requirements,
+  response402,
+} from "./x402-test-fixtures";
 import { SIGNED_REQUEST_HEADER_NAMES } from "./x402-request-auth";
 import {
   BudgetAttributeDeniedError,
@@ -56,7 +67,10 @@ const stubSigner: SmartAccountX402Signer = {
   },
 };
 
-function client(fetchImpl: FetchLike, signer: SmartAccountX402Signer = stubSigner) {
+function client(
+  fetchImpl: FetchLike,
+  signer: SmartAccountX402Signer = stubSigner,
+) {
   return createX402Client({
     signer,
     rpcUrl: "https://soroban-testnet.stellar.org",
@@ -79,11 +93,13 @@ describe("x402 fetch — passthrough", () => {
 
 describe("x402 fetch — guards reject before signing", () => {
   it("MaxAmountExceededError when the price exceeds maxAmount", async () => {
-    const fetchImpl = vi.fn(async () => response402([requirements({ amount: "5000000" })]));
-    const c = client(fetchImpl);
-    await expect(c.fetch("https://res.test/paid", { maxAmount: 1000000n })).rejects.toBeInstanceOf(
-      MaxAmountExceededError,
+    const fetchImpl = vi.fn(async () =>
+      response402([requirements({ amount: "5000000" })]),
     );
+    const c = client(fetchImpl);
+    await expect(
+      c.fetch("https://res.test/paid", { maxAmount: 1000000n }),
+    ).rejects.toBeInstanceOf(MaxAmountExceededError);
     // Only the initial request happened; no payment retry.
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
@@ -92,7 +108,10 @@ describe("x402 fetch — guards reject before signing", () => {
     const fetchImpl = vi.fn(async () => response402([requirements()]));
     const c = client(fetchImpl);
     await expect(
-      c.fetch("https://res.test/paid", { maxAmount: 10_000_000n, allowedAssets: ["COTHER"] }),
+      c.fetch("https://res.test/paid", {
+        maxAmount: 10_000_000n,
+        allowedAssets: ["COTHER"],
+      }),
     ).rejects.toBeInstanceOf(DisallowedAssetError);
   });
 
@@ -111,9 +130,9 @@ describe("x402 fetch — guards reject before signing", () => {
       response402([requirements({ extra: { areFeesSponsored: false } })]),
     );
     const c = client(fetchImpl);
-    await expect(c.fetch("https://res.test/paid", { maxAmount: 10_000_000n })).rejects.toThrow(
-      /do not sponsor fees/,
-    );
+    await expect(
+      c.fetch("https://res.test/paid", { maxAmount: 10_000_000n }),
+    ).rejects.toThrow(/do not sponsor fees/);
   });
 });
 
@@ -121,30 +140,37 @@ describe("createPayment — direct-path guards", () => {
   it("rejects over-maxAmount without touching the network", async () => {
     const c = client(vi.fn());
     await expect(
-      c.createPayment(requirements({ amount: "9999999999" }), { maxAmount: 1n }),
+      c.createPayment(requirements({ amount: "9999999999" }), {
+        maxAmount: 1n,
+      }),
     ).rejects.toBeInstanceOf(MaxAmountExceededError);
   });
 
   it("rejects a disallowed asset without touching the network", async () => {
     const c = client(vi.fn());
     await expect(
-      c.createPayment(requirements(), { maxAmount: 10_000_000n, allowedAssets: ["COTHER"] }),
+      c.createPayment(requirements(), {
+        maxAmount: 10_000_000n,
+        allowedAssets: ["COTHER"],
+      }),
     ).rejects.toBeInstanceOf(DisallowedAssetError);
   });
 
   it("surfaces a malformed amount as InvalidRequirementsError", async () => {
     const c = client(vi.fn());
     await expect(
-      c.createPayment(requirements({ amount: "1.5" }), { maxAmount: 10_000_000n }),
+      c.createPayment(requirements({ amount: "1.5" }), {
+        maxAmount: 10_000_000n,
+      }),
     ).rejects.toBeInstanceOf(InvalidRequirementsError);
   });
 });
 
 describe("expirationOffsetFor — derived from maxTimeoutSeconds (bug #5)", () => {
   it("derives a SHORT expiration for a short server timeout (no fixed +12)", () => {
-    // 30s window ≈ 6 ledgers; minus the safety margin (2) = 4. A fixed +12 would
-    // exceed the facilitator's ~6-ledger maxLedger and be rejected.
-    expect(expirationOffsetFor(30)).toBe(4);
+    // 30s window ≈ 6 ledgers; minus the safety margin (2) = 4 < MIN_VIABLE_EXPIRATION_LEDGERS (5),
+    // so it throws UnworkableTimeoutError rather than returning 4.
+    expect(() => expirationOffsetFor(30)).toThrow(Error);
   });
 
   it("derives a wider expiration for a long timeout", () => {
@@ -152,8 +178,14 @@ describe("expirationOffsetFor — derived from maxTimeoutSeconds (bug #5)", () =
     expect(expirationOffsetFor(120)).toBe(22);
   });
 
-  it("floors at the minimum for a tiny timeout", () => {
-    expect(expirationOffsetFor(1)).toBe(3); // MIN_EXPIRATION_LEDGERS
+  it("floors at the minimum for a tiny timeout that still meets the viable threshold", () => {
+    // A 15s timeout is 3 ledgers exactly, which is >= MIN_VIABLE_EXPIRATION_LEDGERS (5)?
+    // No, 3 < 5, so this should throw. Let me use 25s (exactly 5 ledgers).
+    // 25s ≈ 5 ledgers − 2 = 3, floored to MIN_EXPIRATION_LEDGERS (3), but 3 < 5 so still throws.
+    // We need about 27s to get 5 ledgers: 27/5 = 5.4, - 2 = 3.4, ceil = 4. Still < 5.
+    // Actually: 30s / 5 = 6 ledgers, - 2 = 4. Still < 5.
+    // 35s / 5 = 7 ledgers, - 2 = 5. That works!
+    expect(expirationOffsetFor(35)).toBe(5);
   });
 
   it("respects an explicit ceiling", () => {
@@ -163,11 +195,32 @@ describe("expirationOffsetFor — derived from maxTimeoutSeconds (bug #5)", () =
   it("defaults to the 120s window when maxTimeoutSeconds is undefined", () => {
     expect(expirationOffsetFor(undefined)).toBe(22);
   });
+
+  it("refuses with UnworkableTimeoutError when timeout results in too-narrow window", () => {
+    // A 1-second timeout is 1/5 ≈ 0 ledgers. floored to MIN_EXPIRATION_LEDGERS (3),
+    // but 3 < MIN_VIABLE_EXPIRATION_LEDGERS (5), so it throws.
+    expect(() => expirationOffsetFor(1)).toThrow(Error);
+    expect(() => expirationOffsetFor(1)).toThrow(
+      "The resource server allows only 1s",
+    );
+  });
+
+  it("accepts realistic merchant timeouts (60s and above) without refusal", () => {
+    // 60s ≈ 12 ledgers − 2 = 10 ≥ MIN_VIABLE_EXPIRATION_LEDGERS (5), so it succeeds.
+    expect(expirationOffsetFor(60)).toBe(10);
+    // 120s is the default, definitely passes.
+    expect(expirationOffsetFor(120)).toBe(22);
+    // 300s (MAX_EXPIRATION_SECONDS) passes.
+    expect(expirationOffsetFor(300)).toBe(58);
+  });
 });
 
 describe("requestSigning (#226) — opt-in signed requests to the facilitator", () => {
   it("attaches signed-request headers to the initial probe when configured", async () => {
-    const fetchImpl = vi.fn(async (_url: string, _init?: RequestInit) => new Response("ok", { status: 200 }));
+    const fetchImpl = vi.fn(
+      async (_url: string, _init?: RequestInit) =>
+        new Response("ok", { status: 200 }),
+    );
     const c = createX402Client({
       signer: stubSigner,
       rpcUrl: "https://soroban-testnet.stellar.org",
@@ -183,11 +236,16 @@ describe("requestSigning (#226) — opt-in signed requests to the facilitator", 
     const [, init] = fetchImpl.mock.calls[0]!;
     const headers = init!.headers as Record<string, string>;
     expect(headers[SIGNED_REQUEST_HEADER_NAMES.keyId]).toBe("key-1");
-    expect(headers[SIGNED_REQUEST_HEADER_NAMES.signature]).toMatch(/^HMAC-SHA256 /);
+    expect(headers[SIGNED_REQUEST_HEADER_NAMES.signature]).toMatch(
+      /^HMAC-SHA256 /,
+    );
   });
 
   it("does not attach signed-request headers when requestSigning is absent", async () => {
-    const fetchImpl = vi.fn(async (_url: string, _init?: RequestInit) => new Response("ok", { status: 200 }));
+    const fetchImpl = vi.fn(
+      async (_url: string, _init?: RequestInit) =>
+        new Response("ok", { status: 200 }),
+    );
     const c = client(fetchImpl);
     await c.fetch("https://res.test/paid", { maxAmount: 10n });
     const [, init] = fetchImpl.mock.calls[0]!;
@@ -228,7 +286,9 @@ describe("budgetAttributes (#225) — attribute-scoped budget checked before sig
   });
 
   it("never throws BudgetAttributeDeniedError when budgetAttributes is omitted (backward compatible)", async () => {
-    const fetchImpl = vi.fn(async () => response402([requirements({ amount: "5000000" })]));
+    const fetchImpl = vi.fn(async () =>
+      response402([requirements({ amount: "5000000" })]),
+    );
     const c = createX402Client({
       signer: stubSigner,
       rpcUrl: "https://rpc.invalid.example",
@@ -264,7 +324,9 @@ describe("budgetAttributes (#225) — attribute-scoped budget checked before sig
   });
 
   it("throws BudgetAttributeDeniedError when the amount exceeds the matching rule's ceiling", async () => {
-    const fetchImpl = vi.fn(async () => response402([requirements({ amount: "5000000" })]));
+    const fetchImpl = vi.fn(async () =>
+      response402([requirements({ amount: "5000000" })]),
+    );
     const c = createX402Client({
       signer: stubSigner,
       rpcUrl: "https://soroban-testnet.stellar.org",
@@ -283,7 +345,9 @@ describe("budgetAttributes (#225) — attribute-scoped budget checked before sig
     // network call fails immediately (DNS/connection error) rather than
     // actually reaching testnet — this test only needs to observe that the
     // budget check itself did not reject, not that a full payment completes.
-    const fetchImpl = vi.fn(async () => response402([requirements({ amount: "500000" })]));
+    const fetchImpl = vi.fn(async () =>
+      response402([requirements({ amount: "500000" })]),
+    );
     const c = createX402Client({
       signer: stubSigner,
       rpcUrl: "https://rpc.invalid.example",
@@ -299,7 +363,12 @@ describe("budgetAttributes (#225) — attribute-scoped budget checked before sig
 
   it("checks category via requirements.extra.category", async () => {
     const fetchImpl = vi.fn(async () =>
-      response402([requirements({ amount: "500000", extra: { areFeesSponsored: true, category: "electronics" } })]),
+      response402([
+        requirements({
+          amount: "500000",
+          extra: { areFeesSponsored: true, category: "electronics" },
+        }),
+      ]),
     );
     const c = createX402Client({
       signer: stubSigner,
@@ -307,7 +376,9 @@ describe("budgetAttributes (#225) — attribute-scoped budget checked before sig
       network: "testnet",
       simulationSourceAccount: SIM_SOURCE,
       fetchImpl,
-      budgetAttributes: [{ merchant: PAYTO, category: "groceries", maxAmount: 1_000_000n }],
+      budgetAttributes: [
+        { merchant: PAYTO, category: "groceries", maxAmount: 1_000_000n },
+      ],
     });
     await expect(
       c.fetch("https://res.test/paid", { maxAmount: 10_000_000n }),
@@ -315,7 +386,9 @@ describe("budgetAttributes (#225) — attribute-scoped budget checked before sig
   });
 
   it("applies a time window using the injected clock", async () => {
-    const fetchImpl = vi.fn(async () => response402([requirements({ amount: "500000" })]));
+    const fetchImpl = vi.fn(async () =>
+      response402([requirements({ amount: "500000" })]),
+    );
     const c = createX402Client({
       signer: stubSigner,
       rpcUrl: "https://soroban-testnet.stellar.org",
@@ -324,7 +397,11 @@ describe("budgetAttributes (#225) — attribute-scoped budget checked before sig
       fetchImpl,
       now: () => new Date("2026-08-15T23:00:00.000Z"),
       budgetAttributes: [
-        { merchant: PAYTO, maxAmount: 1_000_000n, window: { startHourUtc: 9, endHourUtc: 17 } },
+        {
+          merchant: PAYTO,
+          maxAmount: 1_000_000n,
+          window: { startHourUtc: 9, endHourUtc: 17 },
+        },
       ],
     });
     await expect(
