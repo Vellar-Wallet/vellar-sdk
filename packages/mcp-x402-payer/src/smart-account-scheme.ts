@@ -190,17 +190,10 @@ export function createSmartAccountScheme(deps: SmartAccountSchemeDeps): SchemeCl
         const addr = Address.fromScAddress(entry.credentials().address().address()).toString();
         if (addr !== deps.signer.address) continue;
 
-        // The credential address only says "this is mine to sign". This says
-        // WHAT it is. Security audit V-1 — the on-chain policy validates token
-        // and amount and has no opinion on the recipient, so a redirected
-        // payment within the cap would satisfy it completely. This is the only
-        // check standing between a hostile RPC and a signature over an
-        // attacker-chosen recipient.
-        assertAuthEntryInvocation(entry, expected);
-
         const signedXdr = await deps.signer.signAuthEntry(entry.toXDR("base64"), {
           networkPassphrase: passphrase,
           expirationLedger,
+          expectedInvocation: expected,
         });
         auth[i] = xdr.SorobanAuthorizationEntry.fromXDR(signedXdr, "base64");
         signed++;

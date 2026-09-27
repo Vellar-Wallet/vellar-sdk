@@ -120,7 +120,8 @@
     "test:integration": "npm run test:integration --workspace @vellar/mcp-x402-payer",
     "test:load": "vitest run --config vitest.load.config.ts",
     "prepublishOnly": "npm run typecheck && npm test && npm run build",
-    "verify:merged": "node scripts/verify-merged.mjs"
+    "verify:merged": "node scripts/verify-merged.mjs",
+    "verify:exports": "node scripts/verify-exports-map.mjs"
   },
   "peerDependencies": {
     "@stellar/stellar-sdk": "^16.0.0",

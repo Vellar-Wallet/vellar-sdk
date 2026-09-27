@@ -15,6 +15,7 @@ import {
   type X402SignerActionEvent,
 } from "./x402-signer";
 import { CapabilityDeniedError, InvalidCapabilityRuleError } from "./x402-signer-capabilities";
+import { AuthEntryMismatchError } from "./x402-auth-entry";
 
 const PASSPHRASE = "Test SDF Network ; September 2015";
 const C_ADDRESS = "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4";
@@ -357,6 +358,30 @@ describe("createPasskeyX402Signer", () => {
           expirationLedger: 2000,
         }),
       ).resolves.toBeDefined();
+    });
+  });
+
+  describe("invocation guard (V-1 defense in depth)", () => {
+    it("refuses to sign when entry does not match expectedInvocation (redirected recipient)", async () => {
+      const kp = Keypair.random();
+      const signer = createSessionKeySigner({ address: C_ADDRESS, secretKey: kp.secret() });
+      const entry = makeV1AuthEntry(C_ADDRESS); // Invocation has recipient = OTHER_C
+
+      const expectedRedirectedRecipient = {
+        contract: OTHER_C,
+        functionName: "transfer",
+        from: C_ADDRESS,
+        to: "CCATTACKERADDRESSXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX", // Mismatched recipient
+        amount: 1n,
+      };
+
+      await expect(
+        signer.signAuthEntry(entry.toXDR("base64"), {
+          networkPassphrase: PASSPHRASE,
+          expirationLedger: 1000,
+          expectedInvocation: expectedRedirectedRecipient,
+        }),
+      ).rejects.toThrow(AuthEntryMismatchError);
     });
   });
 });

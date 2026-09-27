@@ -24,6 +24,7 @@ import {
   hash,
   xdr,
 } from "@stellar/stellar-sdk";
+import { assertAuthEntryInvocation } from "./x402-auth-entry";
 import type { SmartAccountX402Signer } from "./x402-types";
 import {
   assertCapability,
@@ -268,10 +269,15 @@ export function createSessionKeySigner(config: SessionKeySignerConfig): SmartAcc
 
   return {
     address: config.address,
-    async signAuthEntry(entryXdr, { networkPassphrase, expirationLedger }) {
+    async signAuthEntry(entryXdr, { networkPassphrase, expirationLedger, expectedInvocation }) {
       try {
         const entry = xdr.SorobanAuthorizationEntry.fromXDR(entryXdr, "base64");
         assertEntryAddress(entry, config.address);
+        if (expectedInvocation) {
+          assertAuthEntryInvocation(entry, expectedInvocation);
+        }
+        const request = capabilityRequestFor(entry);
+        if (request) assertCapability(capabilities, request);
         const payload = payloadHashForEntry(entry, networkPassphrase, expirationLedger);
         const signature = keypair.sign(payload);
         setSignatureMap(entry, ed25519SignerKey(rawPk), ed25519Signature(signature), policies);
@@ -282,14 +288,6 @@ export function createSessionKeySigner(config: SessionKeySignerConfig): SmartAcc
         await fire("deny", "error", networkPassphrase, err);
         throw err;
       }
-      const entry = xdr.SorobanAuthorizationEntry.fromXDR(entryXdr, "base64");
-      assertEntryAddress(entry, config.address);
-      const request = capabilityRequestFor(entry);
-      if (request) assertCapability(capabilities, request);
-      const payload = payloadHashForEntry(entry, networkPassphrase, expirationLedger);
-      const signature = keypair.sign(payload);
-      setSignatureMap(entry, ed25519SignerKey(rawPk), ed25519Signature(signature), policies);
-      return entry.toXDR("base64");
     },
   };
 }
@@ -355,10 +353,15 @@ export function createPasskeyX402Signer(config: PasskeyX402SignerConfig): SmartA
 
   return {
     address: config.address,
-    async signAuthEntry(entryXdr, { networkPassphrase, expirationLedger }) {
+    async signAuthEntry(entryXdr, { networkPassphrase, expirationLedger, expectedInvocation }) {
       try {
         const entry = xdr.SorobanAuthorizationEntry.fromXDR(entryXdr, "base64");
         assertEntryAddress(entry, config.address);
+        if (expectedInvocation) {
+          assertAuthEntryInvocation(entry, expectedInvocation);
+        }
+        const request = capabilityRequestFor(entry);
+        if (request) assertCapability(capabilities, request);
         const payload = payloadHashForEntry(entry, networkPassphrase, expirationLedger);
         const assertion = await config.webAuthn.sign(new Uint8Array(payload));
         setSignatureMap(
@@ -374,19 +377,6 @@ export function createPasskeyX402Signer(config: PasskeyX402SignerConfig): SmartA
         await fire("deny", "error", networkPassphrase, err);
         throw err;
       }
-      const entry = xdr.SorobanAuthorizationEntry.fromXDR(entryXdr, "base64");
-      assertEntryAddress(entry, config.address);
-      const request = capabilityRequestFor(entry);
-      if (request) assertCapability(capabilities, request);
-      const payload = payloadHashForEntry(entry, networkPassphrase, expirationLedger);
-      const assertion = await config.webAuthn.sign(new Uint8Array(payload));
-      setSignatureMap(
-        entry,
-        secp256r1SignerKey(assertion.keyId),
-        secp256r1Signature(assertion),
-        config.policies ?? [],
-      );
-      return entry.toXDR("base64");
     },
   };
 }
