@@ -18,6 +18,11 @@
  * the real clock; tests pass a fake to drive state transitions deterministically). */
 export type CircuitBreakerClock = () => number;
 
+export interface CircuitBreakerStorage {
+  getItem(key: string): string | null | Promise<string | null>;
+  setItem(key: string, value: string): void | Promise<void>;
+}
+
 export interface CircuitBreakerOptions {
   /**
    * Number of consecutive failures that trip the breaker CLOSED → OPEN.
@@ -35,6 +40,10 @@ export interface CircuitBreakerOptions {
   isFailure?: (result: { ok: boolean; error?: unknown }) => boolean;
   /** Injectable clock for tests. */
   now?: CircuitBreakerClock;
+  /** Storage interface to persist breaker state across process restarts. */
+  storage?: CircuitBreakerStorage;
+  /** Storage key name. Default "vellar_circuit_breaker". */
+  storageKey?: string;
 }
 
 export type CircuitBreakerState = "closed" | "open" | "half-open";
@@ -61,12 +70,20 @@ export interface CircuitBreaker {
   reset(): void;
 }
 
+interface PersistedBreakerPayload {
+  state: CircuitBreakerState;
+  failures: number;
+  openedAt: number;
+}
+
 export function createCircuitBreaker(options: CircuitBreakerOptions = {}): CircuitBreaker {
   const failureThreshold = options.failureThreshold ?? 5;
   const openDurationMs = options.openDurationMs ?? 30_000;
   const halfOpenMaxCalls = options.halfOpenMaxCalls ?? 1;
   const isFailure = options.isFailure;
   const now = options.now ?? (() => Date.now());
+  const storage = options.storage;
+  const storageKey = options.storageKey ?? "vellar_circuit_breaker";
 
   // Reading state lazily keeps `state()` honest even after simulateState jumps
   // the clock. These transaction-level numbers reset on success, so a single
@@ -76,15 +93,71 @@ export function createCircuitBreaker(options: CircuitBreakerOptions = {}): Circu
   let openedAt = 0;
   let halfOpenUsed = 0;
 
+  function persistState(): void {
+    if (!storage) return;
+    try {
+      const payload: PersistedBreakerPayload = { state, failures, openedAt };
+      const res = storage.setItem(storageKey, JSON.stringify(payload));
+      if (res && typeof (res as Promise<void>).catch === "function") {
+        (res as Promise<void>).catch(() => {
+          // Non-blocking: write failures must not disrupt the call path
+        });
+      }
+    } catch {
+      // Non-blocking: synchronous write failures are caught and ignored
+    }
+  }
+
+  function applyPayload(raw: string | null): void {
+    if (!raw) return;
+    try {
+      const data = JSON.parse(raw) as PersistedBreakerPayload;
+      if (
+        data &&
+        (data.state === "closed" || data.state === "open" || data.state === "half-open") &&
+        typeof data.failures === "number" &&
+        typeof data.openedAt === "number"
+      ) {
+        state = data.state;
+        failures = data.failures;
+        openedAt = data.openedAt;
+      }
+    } catch {
+      // Corrupt or unreadable payload resolves to CLOSED without throwing
+      state = "closed";
+      failures = 0;
+      openedAt = 0;
+    }
+  }
+
+  if (storage) {
+    try {
+      const res = storage.getItem(storageKey);
+      if (res && typeof (res as Promise<string | null>).then === "function") {
+        (res as Promise<string | null>)
+          .then((val) => applyPayload(val))
+          .catch(() => {
+            // Unreadable storage resolves to CLOSED
+          });
+      } else {
+        applyPayload(res as string | null);
+      }
+    } catch {
+      // Unreadable storage resolves to CLOSED
+    }
+  }
+
   function open(): void {
     state = "open";
     openedAt = now();
     failures = failureThreshold;
+    persistState();
   }
 
   function halfOpen(): void {
     state = "half-open";
     halfOpenUsed = 0;
+    persistState();
   }
 
   function close(): void {
@@ -92,6 +165,7 @@ export function createCircuitBreaker(options: CircuitBreakerOptions = {}): Circu
     failures = 0;
     openedAt = 0;
     halfOpenUsed = 0;
+    persistState();
   }
 
   function recordFailure(): void {
@@ -103,6 +177,8 @@ export function createCircuitBreaker(options: CircuitBreakerOptions = {}): Circu
     }
     if (failures >= failureThreshold) {
       open();
+    } else {
+      persistState();
     }
   }
 

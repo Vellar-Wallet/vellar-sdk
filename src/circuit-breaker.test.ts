@@ -143,6 +143,52 @@ describe("createCircuitBreaker", () => {
     const err = new Error("original");
     await expect(breaker.execute(async () => Promise.reject(err))).rejects.toBe(err);
   });
+
+  describe("storage persistence", () => {
+    it("opens, is reconstructed from a store, and remains OPEN", async () => {
+      const storeMap = new Map<string, string>();
+      const storage = {
+        getItem: (k: string) => storeMap.get(k) ?? null,
+        setItem: (k: string, v: string) => {
+          storeMap.set(k, v);
+        },
+      };
+
+      const breaker1 = createCircuitBreaker({ failureThreshold: 1, storage });
+      await expect(breaker1.execute(async () => Promise.reject(new Error("fail")))).rejects.toThrow();
+      expect(breaker1.state).toBe("open");
+
+      // Construct breaker2 from the same store — it must hydrate as OPEN
+      const breaker2 = createCircuitBreaker({ failureThreshold: 1, storage });
+      expect(breaker2.state).toBe("open");
+      await expect(breaker2.execute(async () => "call")).rejects.toBeInstanceOf(CircuitOpenError);
+    });
+
+    it("resolves corrupt or unreadable storage payload to CLOSED without throwing", () => {
+      const storage = {
+        getItem: () => "invalid-json-payload{{{",
+        setItem: () => {},
+      };
+
+      expect(() => {
+        const breaker = createCircuitBreaker({ storage });
+        expect(breaker.state).toBe("closed");
+      }).not.toThrow();
+    });
+
+    it("does not break the call path when store.setItem throws an error", async () => {
+      const storage = {
+        getItem: () => null,
+        setItem: () => {
+          throw new Error("Storage write failed");
+        },
+      };
+
+      const breaker = createCircuitBreaker({ failureThreshold: 1, storage });
+      await expect(breaker.execute(async () => "success")).resolves.toBe("success");
+      await expect(breaker.execute(async () => Promise.reject(new Error("fail")))).rejects.toThrow("fail");
+    });
+  });
 });
 
 describe("createCircuitBreakingBackend", () => {
