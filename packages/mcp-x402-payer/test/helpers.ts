@@ -28,14 +28,19 @@ export interface TestEnvOverrides {
   assets?: string;
   network?: string;
   maxResponseBytes?: string;
+  requestTimeoutMs?: string;
+  [key: string]: string | undefined;
 }
 
 export function testEnv(over: TestEnvOverrides = {}): NodeJS.ProcessEnv {
+  const { secret, assets, network, maxResponseBytes, requestTimeoutMs, ...rest } = over;
   return {
-    VELLAR_X402_SECRET: over.secret ?? freshSecret(),
-    VELLAR_X402_ASSETS: over.assets ?? `${ASSET_A}:1000000,${ASSET_B}:500`,
-    VELLAR_X402_NETWORK: over.network ?? "testnet",
-    ...(over.maxResponseBytes ? { VELLAR_X402_MAX_RESPONSE_BYTES: over.maxResponseBytes } : {}),
+    VELLAR_X402_SECRET: secret ?? freshSecret(),
+    VELLAR_X402_ASSETS: assets ?? `${ASSET_A}:1000000,${ASSET_B}:500`,
+    VELLAR_X402_NETWORK: network ?? "testnet",
+    ...(maxResponseBytes ? { VELLAR_X402_MAX_RESPONSE_BYTES: maxResponseBytes } : {}),
+    ...(requestTimeoutMs ? { VELLAR_X402_REQUEST_TIMEOUT_MS: requestTimeoutMs } : {}),
+    ...rest,
   };
 }
 

@@ -171,6 +171,55 @@ export function divertStdoutToStderr(): () => void {
   };
 }
 
+// ── startup diagnostics ──────────────────────────────────────────────────────
+
+export interface StartupDiagnosticEvent {
+  schemaVersion: 1;
+  network: string;
+  payer: string;
+  assets: number;
+  spendLimit: "chain-enforced (smart account policy)" | "process-only (hot wallet)";
+  policies?: number;
+}
+
+export interface CreateStartupDiagnosticParams {
+  network: string;
+  payer: string;
+  assets: number;
+  spendLimit?: "chain-enforced (smart account policy)" | "process-only (hot wallet)";
+  smartAccount?: boolean;
+  policies?: number;
+}
+
+/**
+ * Construct a typed startup diagnostic event.
+ */
+export function createStartupDiagnosticEvent(
+  params: CreateStartupDiagnosticParams,
+): StartupDiagnosticEvent {
+  const spendLimit =
+    params.spendLimit ??
+    (params.smartAccount
+      ? "chain-enforced (smart account policy)"
+      : "process-only (hot wallet)");
+
+  return {
+    schemaVersion: 1,
+    network: params.network,
+    payer: params.payer,
+    assets: params.assets,
+    spendLimit,
+    ...(params.policies !== undefined ? { policies: params.policies } : {}),
+  };
+}
+
+/**
+ * Emit structured startup diagnostics as a machine-readable line to stderr.
+ */
+export function emitStartupDiagnostic(event: StartupDiagnosticEvent): void {
+  log("info", "vellar x402 payer ready", event as unknown as Record<string, unknown>);
+}
+
 /** Structured log line → stderr. NEVER stdout: stdout is the MCP transport. */
 export function log(level: LogLevel, message: string, fields: Record<string, unknown> = {}): void {
   const line = {
@@ -186,3 +235,4 @@ export function log(level: LogLevel, message: string, fields: Record<string, unk
   }
   process.stderr.write(`${redact(serialized)}\n`);
 }
+

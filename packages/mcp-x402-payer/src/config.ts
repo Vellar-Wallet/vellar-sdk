@@ -24,6 +24,15 @@ const CAIP2_BY_NETWORK: Record<PayerNetwork, Caip2> = {
 /** 256 KiB of inlined resource text is already a lot for a model context. */
 const DEFAULT_MAX_RESPONSE_BYTES = 262_144;
 
+/**
+ * Default timeout for outbound HTTP requests (quote and pay).
+ *
+ * 25 seconds is justified against MIN_VIABLE_EXPIRATION_LEDGERS = 5 in
+ * smart-account-scheme.ts (~25s on Stellar, ~2x measured worst-case settlement
+ * latency of ~12-15s / 2-3 ledgers).
+ */
+export const DEFAULT_REQUEST_TIMEOUT_MS = 25_000;
+
 export interface PayerConfig {
   readonly network: PayerNetwork;
   /** CAIP-2 id the 402 challenge must advertise, derived from `network`. */
@@ -43,6 +52,8 @@ export interface PayerConfig {
   readonly allowedAssets: readonly string[];
   /** Inlined resource text is truncated past this many bytes, with a marker. */
   readonly maxResponseBytes: number;
+  /** Timeout in milliseconds for outbound HTTP requests. */
+  readonly requestTimeoutMs: number;
   /**
    * The paying smart account (`C…`). Present ⇒ LAYER 2: payments are signed for
    * this wallet and its on-chain spending-limit policy is the real bound.
@@ -218,6 +229,21 @@ function parseMaxResponseBytes(raw: string | undefined): number {
   return value;
 }
 
+function parseRequestTimeoutMs(raw: string | undefined): number {
+  if (raw === undefined || raw.trim() === "") return DEFAULT_REQUEST_TIMEOUT_MS;
+  const trimmed = raw.trim();
+  if (!/^\d+$/.test(trimmed)) {
+    throw new ConfigError(
+      `VELLAR_X402_REQUEST_TIMEOUT_MS must be a positive integer, got ${JSON.stringify(trimmed)}.`,
+    );
+  }
+  const value = Number(trimmed);
+  if (value <= 0) {
+    throw new ConfigError("VELLAR_X402_REQUEST_TIMEOUT_MS must be greater than 0.");
+  }
+  return value;
+}
+
 /**
  * Build the payer configuration from the environment. Throws `ConfigError` with
  * an actionable message — and never with any part of the secret — on bad input.
@@ -228,6 +254,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PayerConfig {
   const ceilings = parseAssets(required(env, "VELLAR_X402_ASSETS"));
   const rpcUrl = env.VELLAR_X402_RPC_URL?.trim() || undefined;
   const maxResponseBytes = parseMaxResponseBytes(env.VELLAR_X402_MAX_RESPONSE_BYTES);
+  const requestTimeoutMs = parseRequestTimeoutMs(env.VELLAR_X402_REQUEST_TIMEOUT_MS);
 
   const walletAddress = env.VELLAR_X402_WALLET?.trim() || undefined;
   if (walletAddress !== undefined && !StrKey.isValidContract(walletAddress)) {
@@ -253,6 +280,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PayerConfig {
     ceilings,
     allowedAssets: Object.freeze([...ceilings.keys()]),
     maxResponseBytes,
+    requestTimeoutMs,
     ...(walletAddress !== undefined ? { walletAddress } : {}),
     policies,
   };

@@ -8,10 +8,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { createX402Client, expirationOffsetFor, type FetchLike } from "./x402-client";
 import {
+  CircuitOpenError,
   DisallowedAssetError,
+  FacilitatorServerError,
   InvalidRequirementsError,
   MaxAmountExceededError,
   NoUsablePaymentOptionError,
+  PaymentRejectedError,
   X402NotConfiguredError,
   type SmartAccountX402Signer,
 } from "./x402-types";
@@ -362,3 +365,135 @@ describe("body replay (bug #3)", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 });
+
+describe("circuitBreaker (#419) — facilitator health probe and outage fast-fail", () => {
+  it("is disabled by default (opt-in)", async () => {
+    const fetchImpl = vi.fn(async () => new Response("ok", { status: 200 }));
+    const c = client(fetchImpl);
+    expect(c.circuitBreaker).toBeUndefined();
+  });
+
+  it("opens circuit after failure threshold of transport-level errors and fast-fails with CircuitOpenError", async () => {
+    let now = 1000;
+    const fetchImpl = vi.fn(async () => {
+      throw new Error("network down / ECONNREFUSED");
+    });
+
+    const c = createX402Client({
+      signer: stubSigner,
+      rpcUrl: "https://soroban-testnet.stellar.org",
+      network: "testnet",
+      simulationSourceAccount: SIM_SOURCE,
+      fetchImpl,
+      circuitBreaker: {
+        failureThreshold: 2,
+        openDurationMs: 10_000,
+        now: () => now,
+      },
+    });
+
+    expect(c.circuitBreaker?.state).toBe("closed");
+
+    // Failure 1
+    await expect(c.fetch("https://res.test/paid", { maxAmount: 10n })).rejects.toThrow(
+      "network down / ECONNREFUSED",
+    );
+    expect(c.circuitBreaker?.state).toBe("closed");
+    expect(c.circuitBreaker?.failureCount).toBe(1);
+
+    // Failure 2 -> opens
+    await expect(c.fetch("https://res.test/paid", { maxAmount: 10n })).rejects.toThrow(
+      "network down / ECONNREFUSED",
+    );
+    expect(c.circuitBreaker?.state).toBe("open");
+
+    // Once open, fast-fails immediately with CircuitOpenError
+    // Stating explicitly that no payment was attempted and nothing was spent
+    const err = await c
+      .fetch("https://res.test/paid", { maxAmount: 10n })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(CircuitOpenError);
+    expect(err.message).toContain("No payment was attempted and nothing was spent.");
+
+    // fetchImpl was NOT called on the third invocation
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+
+    // After openDurationMs elapses, moves to half-open
+    now += 10_001;
+    expect(c.circuitBreaker?.state).toBe("half-open");
+  });
+
+  it("5xx responses trip the circuit breaker", async () => {
+    const fetchImpl = vi.fn(async () => new Response("Internal Server Error", { status: 500 }));
+
+    const c = createX402Client({
+      signer: stubSigner,
+      rpcUrl: "https://soroban-testnet.stellar.org",
+      network: "testnet",
+      simulationSourceAccount: SIM_SOURCE,
+      fetchImpl,
+      circuitBreaker: { failureThreshold: 2 },
+    });
+
+    await expect(c.fetch("https://res.test/paid", { maxAmount: 10n })).rejects.toBeInstanceOf(
+      FacilitatorServerError,
+    );
+    expect(c.circuitBreaker?.failureCount).toBe(1);
+
+    await expect(c.fetch("https://res.test/paid", { maxAmount: 10n })).rejects.toBeInstanceOf(
+      FacilitatorServerError,
+    );
+    expect(c.circuitBreaker?.state).toBe("open");
+  });
+
+  it("HTTP 402 challenge and successful responses do NOT trip the breaker", async () => {
+    let calls = 0;
+    const fetchImpl = vi.fn(async () => {
+      calls++;
+      return new Response("ok", { status: 200 });
+    });
+
+    const c = createX402Client({
+      signer: stubSigner,
+      rpcUrl: "https://soroban-testnet.stellar.org",
+      network: "testnet",
+      simulationSourceAccount: SIM_SOURCE,
+      fetchImpl,
+      circuitBreaker: { failureThreshold: 2 },
+    });
+
+    await c.fetch("https://res.test/free", { maxAmount: 10n });
+    await c.fetch("https://res.test/free", { maxAmount: 10n });
+
+    expect(c.circuitBreaker?.state).toBe("closed");
+    expect(c.circuitBreaker?.failureCount).toBe(0);
+  });
+
+  it("PaymentRejectedError (deterministic policy refusal) does NOT trip the breaker", async () => {
+    // Return 402 challenge, then client-level payment rejection
+    const fetchImpl = vi.fn(async () =>
+      response402([requirements({ amount: "5000000" })]),
+    );
+
+    const c = createX402Client({
+      signer: stubSigner,
+      rpcUrl: "https://soroban-testnet.stellar.org",
+      network: "testnet",
+      simulationSourceAccount: SIM_SOURCE,
+      fetchImpl,
+      circuitBreaker: { failureThreshold: 2 },
+    });
+
+    // Guard rejection (MaxAmountExceededError)
+    await expect(c.fetch("https://res.test/paid", { maxAmount: 1000n })).rejects.toBeInstanceOf(
+      MaxAmountExceededError,
+    );
+    await expect(c.fetch("https://res.test/paid", { maxAmount: 1000n })).rejects.toBeInstanceOf(
+      MaxAmountExceededError,
+    );
+
+    expect(c.circuitBreaker?.state).toBe("closed");
+    expect(c.circuitBreaker?.failureCount).toBe(0);
+  });
+});
+

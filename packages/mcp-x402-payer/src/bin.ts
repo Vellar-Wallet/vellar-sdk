@@ -8,12 +8,28 @@
 
 import { loadConfig } from "./config.js";
 import { createSpendLedger } from "./ledger.js";
-import { formatError, log, registerSecret } from "./output.js";
+import { createStartupDiagnosticEvent, formatError, log, registerSecret } from "./output.js";
 import { createPayer } from "./payer.js";
+import { runPreflight } from "./preflight.js";
 import { createMcpServer, startStdio } from "./server.js";
 import { createOfficialSigner, createSmartAccountSigner } from "./signer.js";
 
 async function main(): Promise<void> {
+  if (process.argv.includes("--preflight") || process.argv.includes("preflight")) {
+    const result = await runPreflight();
+    process.stderr.write(`vellar x402 preflight self-check: ${result.ok ? "PASSED" : "FAILED"}\n`);
+    process.stderr.write(`effective spend mode: ${result.spendMode}\n`);
+    if (!result.ok) {
+      process.stderr.write(`problems found (${result.problems.length}):\n`);
+      for (const problem of result.problems) {
+        process.stderr.write(`  - ${problem}\n`);
+      }
+      process.exit(1);
+    }
+    process.stderr.write("all preflight checks passed.\n");
+    process.exit(0);
+  }
+
   const config = loadConfig();
 
   // First thing after parsing: nothing emitted from here on can carry it.
@@ -27,15 +43,15 @@ async function main(): Promise<void> {
   const signer = smartAccount ? createSmartAccountSigner(config) : createOfficialSigner(config);
   const payer = createPayer({ config, ledger, signer });
 
-  log("info", "vellar x402 payer ready", {
+  const diagnostic = createStartupDiagnosticEvent({
     network: config.network,
     payer: signer.address,
     assets: config.allowedAssets.length,
-    // Stated at startup because it is the difference between a limit a
-    // compromised agent can escape and one it cannot.
-    spendLimit: smartAccount ? "chain-enforced (smart account policy)" : "process-only (hot wallet)",
+    smartAccount,
     ...(smartAccount ? { policies: config.policies.length } : {}),
   });
+
+  log("info", "vellar x402 payer ready", diagnostic as unknown as Record<string, unknown>);
 
   await startStdio(createMcpServer({ payer, config, ledger }));
 }
@@ -45,3 +61,4 @@ main().catch((err) => {
   process.stderr.write(`vellar-mcp-x402-payer failed to start: ${formatError(err)}\n`);
   process.exit(1);
 });
+

@@ -9,6 +9,27 @@
 // time. See docs/design-x402-sdk-client.md and technical-doc.md §17.
 
 import type { Network } from "./types";
+import type {
+  CircuitBreaker,
+  CircuitBreakerOptions,
+  CircuitBreakerState,
+} from "./circuit-breaker";
+import { CircuitOpenError } from "./circuit-breaker";
+
+export type {
+  CircuitBreaker,
+  CircuitBreakerOptions,
+  CircuitBreakerState,
+};
+export { CircuitOpenError };
+
+export interface X402ClientOptions {
+  /**
+   * Optional circuit breaker to bound downstream facilitator outage calls (#419).
+   * Fast-fails with CircuitOpenError when open without attempting payments.
+   */
+  circuitBreaker?: boolean | CircuitBreakerOptions;
+}
 
 /**
  * Payment requirements for one accepted payment option, as carried in a 402
@@ -128,6 +149,8 @@ export interface X402Client {
     requirements: PaymentRequirements,
     opts: X402PayOptions,
   ): Promise<SignedPayment>;
+  /** The circuit breaker attached to this client, if enabled (#419). */
+  readonly circuitBreaker?: CircuitBreaker;
 }
 
 // ── errors ───────────────────────────────────────────────────────────────────
@@ -219,5 +242,16 @@ export class InvalidRequirementsError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "InvalidRequirementsError";
+  }
+}
+
+/** Downstream facilitator or resource responded with a 5xx server error (#419). */
+export class FacilitatorServerError extends Error {
+  constructor(
+    readonly status: number,
+    message?: string,
+  ) {
+    super(message ?? `Facilitator service error (HTTP ${status}).`);
+    this.name = "FacilitatorServerError";
   }
 }

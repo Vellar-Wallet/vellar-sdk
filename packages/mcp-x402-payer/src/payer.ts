@@ -190,6 +190,48 @@ export function createPayer(deps: PayerDeps): Payer {
   // One key, one budget, one payment at a time.
   const exclusive = createMutex();
 
+  function isTimeoutError(err: unknown): boolean {
+    if (!err) return false;
+    if (err instanceof Error) {
+      if (err.name === "TimeoutError") return true;
+      if (err.name === "AbortError" && /timeout|timed out/i.test(err.message)) return true;
+      if (/timeout|timed out/i.test(err.message)) return true;
+    }
+    return false;
+  }
+
+  async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
+    const timeoutMs = config.requestTimeoutMs;
+    const controller = new AbortController();
+    let timer: NodeJS.Timeout | undefined;
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        const timeoutErr = new Error(`Request timed out after ${timeoutMs}ms`);
+        timeoutErr.name = "TimeoutError";
+        controller.abort(timeoutErr);
+        reject(timeoutErr);
+      }, timeoutMs);
+    });
+
+    if (init?.signal) {
+      if (init.signal.aborted) {
+        controller.abort(init.signal.reason);
+      } else {
+        init.signal.addEventListener("abort", () => controller.abort(init.signal!.reason));
+      }
+    }
+
+    try {
+      return await Promise.race([
+        doFetch(url, { ...init, signal: controller.signal }),
+        timeoutPromise,
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
   /**
    * Run the guards and return the single option we are willing to pay, together
    * with its official-shaped twin (the guards work on a widened view, and it is
@@ -222,7 +264,7 @@ export function createPayer(deps: PayerDeps): Payer {
     // Implementing it as "build the payment but don't send it" would cost four
     // chain round-trips and would sign for a call the agent asked to be free of
     // payment.
-    const res = await doFetch(url, { method: "GET" });
+    const res = await fetchWithTimeout(url, { method: "GET" });
 
     if (res.status !== 402) {
       await discardBody(res);
@@ -277,7 +319,7 @@ export function createPayer(deps: PayerDeps): Payer {
     // 2^53 are refused here exactly as they are for a server-supplied price.
     const ceiling = parseAmount(maxAmount);
 
-    const first = await doFetch(url, { method: "GET" });
+    const first = await fetchWithTimeout(url, { method: "GET" });
 
     if (first.status !== 402) {
       // No challenge — nothing to pay for. Return what the server gave us.
@@ -308,7 +350,23 @@ export function createPayer(deps: PayerDeps): Payer {
 
       // FRESH signature per attempt — never reuse a payload across attempts.
       const headers = await signer.signPayment(narrowed);
-      const res = await doFetch(url, { method: "GET", headers });
+      let res: Response;
+      try {
+        res = await fetchWithTimeout(url, { method: "GET", headers });
+      } catch (err: unknown) {
+        if (isTimeoutError(err)) {
+          // A timeout while awaiting the paid response means the transaction may
+          // have reached the network. We cannot tell whether money moved. Retrying
+          // could pay twice, so we stop — and we DEBIT the ledger, matching audit V-2.
+          ledger.record(chosen.asset, amount);
+          throw new IndeterminateSettlementError(
+            `Request timed out after ${config.requestTimeoutMs}ms awaiting paid response.`,
+            chosen.asset,
+            amount,
+          );
+        }
+        throw err;
+      }
 
       if (res.status === 402 || res.status >= 400) {
         // Not every failed paid response is a rejection. Verified live: the

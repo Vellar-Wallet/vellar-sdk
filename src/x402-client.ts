@@ -24,6 +24,7 @@ import {
   assertBudgetAttributes,
   assertValidBudgetAttributeRules,
   matchingBudgetRule,
+  BudgetAttributeDeniedError,
   type BudgetAttributeRequest,
   type BudgetAttributeRule,
   type BudgetAttributeTracker,
@@ -39,8 +40,16 @@ import {
   utf8ToBase64,
 } from "./x402-guards";
 import {
+  CircuitOpenError,
+  createCircuitBreaker,
+  type CircuitBreaker,
+  type CircuitBreakerOptions,
+} from "./circuit-breaker";
+import {
   assertValidX402RpcUrl,
   DisallowedAssetError,
+  FacilitatorServerError,
+  InvalidRequirementsError,
   MaxAmountExceededError,
   NoUsablePaymentOptionError,
   PaymentRejectedError,
@@ -48,6 +57,7 @@ import {
   type SignedPayment,
   type SmartAccountX402Signer,
   type X402Client,
+  type X402ClientOptions,
   type X402FetchInit,
   type X402PayOptions,
   type X402Response,
@@ -59,7 +69,7 @@ export * from "./x402-guards";
 /** Minimal fetch surface (injectable for tests). */
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
-export interface X402ClientDeps {
+export interface X402ClientDeps extends X402ClientOptions {
   signer: SmartAccountX402Signer;
   /** Soroban RPC URL for the network the wallet is on. */
   rpcUrl: string;
@@ -273,7 +283,39 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
     return { header, requirements, amount };
   }
 
-  async function x402Fetch(url: string, init: X402FetchInit): Promise<X402Response> {
+  // Circuit breaker for facilitator requests (#419). Opt-in: bounds downstream
+  // outage calls and fast-fails with CircuitOpenError without attempting payment.
+  const breaker = deps.circuitBreaker
+    ? createCircuitBreaker({
+        ...(typeof deps.circuitBreaker === "object" ? deps.circuitBreaker : {}),
+        isFailure: (result) => {
+          if (typeof deps.circuitBreaker === "object" && deps.circuitBreaker.isFailure) {
+            return deps.circuitBreaker.isFailure(result);
+          }
+          if (!result.ok) {
+            const err = result.error;
+            // Deterministic refusal (policy / budget rejection) does NOT trip breaker
+            if (err instanceof PaymentRejectedError) return false;
+            // Client-side guard / validation errors do NOT trip breaker
+            if (
+              err instanceof MaxAmountExceededError ||
+              err instanceof DisallowedAssetError ||
+              err instanceof NoUsablePaymentOptionError ||
+              err instanceof InvalidRequirementsError ||
+              err instanceof BudgetAttributeDeniedError
+            ) {
+              return false;
+            }
+            if (err instanceof CircuitOpenError) return false;
+            // Transport-level errors and 5xx responses count as failures
+            return true;
+          }
+          return false;
+        },
+      })
+    : undefined;
+
+  async function performX402Fetch(url: string, init: X402FetchInit): Promise<X402Response> {
     // A single-use body (a ReadableStream) is consumed by the first request and
     // cannot be replayed for the paid retry — the retry would silently send an
     // empty body. Reject it with a clear error; callers should pass a
@@ -292,6 +334,14 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
     };
 
     const first = await doFetch(url, baseInit);
+
+    if (breaker && first.status >= 500) {
+      throw new FacilitatorServerError(
+        first.status,
+        `Facilitator service error (HTTP ${first.status}).`,
+      );
+    }
+
     if (first.status !== 402) {
       return { response: first, paid: false };
     }
@@ -304,6 +354,14 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
       ...baseInit,
       headers: { ...(init.headers ?? {}), "PAYMENT-SIGNATURE": header },
     });
+
+    if (paid.status >= 500) {
+      const reason = extractRejectionReason(paid);
+      throw new FacilitatorServerError(
+        paid.status,
+        `Facilitator service error (HTTP ${paid.status}${reason ? `: ${reason}` : ""}).`,
+      );
+    }
 
     if (paid.status === 402 || paid.status >= 400) {
       const reason = extractRejectionReason(paid);
@@ -329,7 +387,27 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
     return { response: paid, paid: true, settlement };
   }
 
-  return { fetch: x402Fetch, createPayment };
+  async function x402Fetch(url: string, init: X402FetchInit): Promise<X402Response> {
+    if (breaker) {
+      try {
+        return await breaker.execute(() => performX402Fetch(url, init));
+      } catch (err) {
+        if (err instanceof CircuitOpenError) {
+          throw new CircuitOpenError(
+            "The vellar-facilitator circuit is open (downstream outage); call refused. No payment was attempted and nothing was spent.",
+          );
+        }
+        throw err;
+      }
+    }
+    return performX402Fetch(url, init);
+  }
+
+  return {
+    fetch: x402Fetch,
+    createPayment,
+    ...(breaker ? { circuitBreaker: breaker } : {}),
+  };
 }
 
 function readSettlement(
