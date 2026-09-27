@@ -18,6 +18,11 @@
  * the real clock; tests pass a fake to drive state transitions deterministically). */
 export type CircuitBreakerClock = () => number;
 
+export interface CircuitBreakerStorage {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+}
+
 export interface CircuitBreakerOptions {
   /**
    * Number of consecutive failures that trip the breaker CLOSED → OPEN.
@@ -35,6 +40,10 @@ export interface CircuitBreakerOptions {
   isFailure?: (result: { ok: boolean; error?: unknown }) => boolean;
   /** Injectable clock for tests. */
   now?: CircuitBreakerClock;
+  /** Optional storage interface for state persistence across process restarts. */
+  storage?: CircuitBreakerStorage;
+  /** Storage key name when storage is enabled. Default 'vellar:circuit-breaker:state' */
+  storageKey?: string;
 }
 
 export type CircuitBreakerState = "closed" | "open" | "half-open";
@@ -67,6 +76,8 @@ export function createCircuitBreaker(options: CircuitBreakerOptions = {}): Circu
   const halfOpenMaxCalls = options.halfOpenMaxCalls ?? 1;
   const isFailure = options.isFailure;
   const now = options.now ?? (() => Date.now());
+  const storage = options.storage;
+  const storageKey = options.storageKey ?? "vellar:circuit-breaker:state";
 
   // Reading state lazily keeps `state()` honest even after simulateState jumps
   // the clock. These transaction-level numbers reset on success, so a single
@@ -76,15 +87,45 @@ export function createCircuitBreaker(options: CircuitBreakerOptions = {}): Circu
   let openedAt = 0;
   let halfOpenUsed = 0;
 
+  // Restore state from persistence if available
+  if (storage) {
+    try {
+      const raw = storage.getItem(storageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.state) state = parsed.state;
+        if (typeof parsed.failures === "number") failures = parsed.failures;
+        if (typeof parsed.openedAt === "number") openedAt = parsed.openedAt;
+        if (typeof parsed.halfOpenUsed === "number") halfOpenUsed = parsed.halfOpenUsed;
+      }
+    } catch {
+      // Ignore storage read error fallback to default closed state
+    }
+  }
+
+  function persistState(): void {
+    if (!storage) return;
+    try {
+      storage.setItem(
+        storageKey,
+        JSON.stringify({ state, failures, openedAt, halfOpenUsed }),
+      );
+    } catch {
+      // Ignore storage write error
+    }
+  }
+
   function open(): void {
     state = "open";
     openedAt = now();
     failures = failureThreshold;
+    persistState();
   }
 
   function halfOpen(): void {
     state = "half-open";
     halfOpenUsed = 0;
+    persistState();
   }
 
   function close(): void {
@@ -92,6 +133,7 @@ export function createCircuitBreaker(options: CircuitBreakerOptions = {}): Circu
     failures = 0;
     openedAt = 0;
     halfOpenUsed = 0;
+    persistState();
   }
 
   function recordFailure(): void {
@@ -103,6 +145,8 @@ export function createCircuitBreaker(options: CircuitBreakerOptions = {}): Circu
     }
     if (failures >= failureThreshold) {
       open();
+    } else {
+      persistState();
     }
   }
 

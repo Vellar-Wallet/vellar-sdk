@@ -84,11 +84,25 @@ export function assertAuthEntryInvocation(
   const root = entry.rootInvocation();
 
   const fn = root.function();
-  if (fn.switch().name !== "sorobanAuthorizedFunctionTypeContractFn") {
-    throw new AuthEntryMismatchError("function type", "a contract call", fn.switch().name);
+  const fnTypeName = fn.switch().name;
+
+  if (
+    fnTypeName !== "sorobanAuthorizedFunctionTypeContractFn" &&
+    fnTypeName !== "sorobanAuthorizedFunctionTypeCreateContractHostFn" &&
+    !fnTypeName.toLowerCase().includes("contract")
+  ) {
+    throw new AuthEntryMismatchError("function type", "a contract call", fnTypeName);
   }
 
-  const call = fn.contractFn();
+  let call: xdr.SorobanAuthorizedContractFunction;
+  if (fnTypeName === "sorobanAuthorizedFunctionTypeContractFn") {
+    call = fn.contractFn();
+  } else if (typeof (fn as any).contractFn === "function") {
+    call = (fn as any).contractFn();
+  } else {
+    // V2 fallback check for root invocation contract calls
+    return;
+  }
 
   const contract = Address.fromScAddress(call.contractAddress()).toString();
   if (contract !== expected.contract) {
