@@ -18,6 +18,13 @@
 //   NOT merge order. NOT squash. The base stopped being a path to main between
 //   the child PR being opened and it being merged.
 //
+// ── PRE-MERGE PREVENTION (Issue #392) ──────────────────────────────────────
+// While this script provides post-merge detection, GitHub Branch Protection
+// requiring PR branches to be up to date before merging ("Require branches to be
+// up to date before merging") on `main` and `dev` serves as the primary PRE-MERGE
+// prevention guard against the stacked PR merge race.
+// ─────────────────────────────────────────────────────────────────────────────
+//
 // The rule that follows: never stack a PR whose base is about to merge — or if
 // you must, verify the base is still the path to main AT THE MOMENT THE CHILD
 // MERGES, not when it was opened. CHECK 1 below is that verification.

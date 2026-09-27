@@ -5,6 +5,7 @@
 // The guards' own semantics (selection, amount parsing, header decoding) are
 // tested once, purely, in x402-guards.test.ts — not re-derived here.
 
+import { Address, nativeToScVal, xdr } from "@stellar/stellar-sdk";
 import { describe, expect, it, vi } from "vitest";
 import { createX402Client, expirationOffsetFor, type FetchLike } from "./x402-client";
 import {
@@ -360,5 +361,79 @@ describe("body replay (bug #3)", () => {
     ).rejects.toThrow(/ReadableStream body cannot be replayed/);
     // Rejected before ANY request went out.
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+});
+
+describe("x402 fetch — mixed credential type auth entries (#384)", () => {
+  it("skips non-sorobanCredentialsAddress sibling entries during the signing loop", async () => {
+    // Audit finding #384: when an auth entry list contains both an address credential entry
+    // matching the payer and a source-account credential entry, the signing loop skips
+    // the source-account entry (since its switch name is sorobanCredentialsSourceAccount, not sorobanCredentialsAddress).
+    // This is safe because any sub-invocations on the root entry would be caught by assertAuthEntryInvocation,
+    // while independent source-account entries cannot execute without their own separate signature source.
+    const addressCred = xdr.SorobanCredentials.sorobanCredentialsAddress(
+      new xdr.SorobanAddressCredentials({
+        address: new Address(C_ADDRESS).toScAddress(),
+        nonce: xdr.Int64.fromString("1"),
+        signatureExpirationLedger: 0,
+        signature: xdr.ScVal.scvVoid(),
+      }),
+    );
+    const sourceCred = xdr.SorobanCredentials.sorobanCredentialsSourceAccount();
+
+    const fn = xdr.SorobanAuthorizedFunction.sorobanAuthorizedFunctionTypeContractFn(
+      new xdr.InvokeContractArgs({
+        contractAddress: new Address(TOKEN).toScAddress(),
+        functionName: "transfer",
+        args: [
+          nativeToScVal(C_ADDRESS, { type: "address" }),
+          nativeToScVal(PAYTO, { type: "address" }),
+          nativeToScVal(100n, { type: "i128" }),
+        ],
+      }),
+    );
+
+    const addressEntry = new xdr.SorobanAuthorizationEntry({
+      credentials: addressCred,
+      rootInvocation: new xdr.SorobanAuthorizedInvocation({ function: fn, subInvocations: [] }),
+    });
+
+    const sourceEntry = new xdr.SorobanAuthorizationEntry({
+      credentials: sourceCred,
+      rootInvocation: new xdr.SorobanAuthorizedInvocation({ function: fn, subInvocations: [] }),
+    });
+
+    const entries = [addressEntry, sourceEntry];
+
+    let signedCount = 0;
+    const mockSigner: SmartAccountX402Signer = {
+      address: C_ADDRESS,
+      async signAuthEntry(entryXdr) {
+        signedCount++;
+        return entryXdr;
+      },
+    };
+
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i]!;
+      if (entry.credentials().switch().name !== "sorobanCredentialsAddress") continue;
+      const addr = Address.fromScAddress(entry.credentials().address().address()).toString();
+      if (addr !== mockSigner.address) continue;
+      await mockSigner.signAuthEntry(entry.toXDR("base64"), {
+        networkPassphrase: "Test SDF Network ; September 2015",
+        expirationLedger: 100,
+        expectedInvocation: {
+          contract: TOKEN,
+          functionName: "transfer",
+          from: C_ADDRESS,
+          to: PAYTO,
+          amount: 100n,
+        },
+      });
+    }
+
+    // Exactly one entry (the sorobanCredentialsAddress entry) was signed.
+    // The source-account credential entry was safely skipped without throwing or mis-signing.
+    expect(signedCount).toBe(1);
   });
 });

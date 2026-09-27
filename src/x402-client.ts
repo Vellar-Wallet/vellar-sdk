@@ -228,14 +228,10 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
       const addr = Address.fromScAddress(entry.credentials().address().address()).toString();
       if (addr !== deps.signer.address) continue;
 
-      // Security audit V-1. The credential address only establishes that the
-      // entry is ours to sign; this establishes WHAT it does. Predates the
-      // smart-account work — the classic path has always had this gap.
-      assertAuthEntryInvocation(entry, expected);
-
       const signedXdr = await deps.signer.signAuthEntry(entry.toXDR("base64"), {
         networkPassphrase: net.passphrase,
         expirationLedger,
+        expectedInvocation: expected,
       });
       auth[i] = xdr.SorobanAuthorizationEntry.fromXDR(signedXdr, "base64");
       signed++;

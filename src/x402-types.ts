@@ -38,6 +38,8 @@ export interface PaymentRequired {
   resource?: { url: string; description?: string; mimeType?: string };
 }
 
+import type { ExpectedInvocation } from "./x402-auth-entry";
+
 /**
  * A Vellar smart-account x402 signer. Produces V1 (`sorobanCredentialsAddress`)
  * auth-entry signatures that a Vellar wallet's `__check_auth` accepts — i.e. the
@@ -55,7 +57,11 @@ export interface SmartAccountX402Signer {
    */
   signAuthEntry(
     entryXdr: string,
-    opts: { networkPassphrase: string; expirationLedger: number },
+    opts: {
+      networkPassphrase: string;
+      expirationLedger: number;
+      expectedInvocation?: ExpectedInvocation;
+    },
   ): Promise<string>;
 }
 
