@@ -55,7 +55,8 @@ export interface PayerConfig {
    * consulted — `Error(Contract, #110)`, which reads as a broken signer rather
    * than a missing co-signer.
    */
-  readonly policies: readonly string[];
+  /** Optional file path for durable spend ledger persistence across restarts. */
+  readonly ledgerFile?: string;
   /** The payer secret. Non-enumerable — see the module comment. */
   readonly secret: string;
 }
@@ -246,6 +247,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PayerConfig {
     );
   }
 
+  const ledgerFile = env.VELLAR_X402_LEDGER_FILE?.trim() || undefined;
+
   const config = {
     network,
     caip2: CAIP2_BY_NETWORK[network],
@@ -254,6 +257,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PayerConfig {
     allowedAssets: Object.freeze([...ceilings.keys()]),
     maxResponseBytes,
     ...(walletAddress !== undefined ? { walletAddress } : {}),
+    ...(ledgerFile !== undefined ? { ledgerFile } : {}),
     policies,
   };
 

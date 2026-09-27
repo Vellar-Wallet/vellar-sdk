@@ -21,7 +21,8 @@ exactly one key.
 > **Leave it unset and the key is a hot wallet.** The ceiling is then ordinary
 > code in the same process the agent is talking to — stronger than a prompt,
 > weaker than a contract. On that path the limit is *not* on-chain, it **resets
-> when the process restarts**, and it protects nothing if the key is exfiltrated,
+> when the process restarts** (unless `VELLAR_X402_LEDGER_FILE` is configured to persist spend across restarts), and it protects nothing if the key is exfiltrated,
+
 > because an attacker simply doesn't run this server. It guards against
 > **mistakes** — a typo, a runaway loop, a resource that costs more than expected
 > — not against a compromised agent. Fund such a key with only what you are
@@ -91,7 +92,9 @@ one prompt injection away from being echoed back out.
 | `VELLAR_X402_POLICIES` | no² | Policy contracts in the key's `SignerLimits`, comma-separated |
 | `VELLAR_X402_NETWORK` | no | `testnet` (default) or `mainnet` |
 | `VELLAR_X402_RPC_URL` | no | Soroban RPC; defaults per network |
+| `VELLAR_X402_LEDGER_FILE` | no | File path for durable spend ledger state across restarts |
 | `VELLAR_X402_MAX_RESPONSE_BYTES` | no | Inline-content cap, default `262144` |
+
 
 ¹ Set exactly one of the two. `VELLAR_X402_SECRET_FILE` keeps the secret out of
 the process environment, where it is visible to child processes.

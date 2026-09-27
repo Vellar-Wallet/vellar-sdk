@@ -65,6 +65,7 @@ export function makePayCommand(): Command {
     )
     .option("--body <json>", "JSON body to send with the paid request (default {})")
     .option("--json", "Output raw JSON")
+    .option("--dry-run", "Construct and sign payment payload without transmitting it")
     .action(
       async (
         url: string,
@@ -77,6 +78,7 @@ export function makePayCommand(): Command {
           method: string;
           body?: string;
           json?: boolean;
+          dryRun?: boolean;
         },
       ) => {
         try {
@@ -228,6 +230,48 @@ export function makePayCommand(): Command {
             process.exit(1);
             return;
           }
+
+          if (opts.dryRun) {
+            const paymentHeader = http.encodePaymentSignatureHeader(payload);
+            const expirationLedger =
+              (payload as any)?.expirationLedger ??
+              (payload as any)?.validUntil ??
+              (payload as any)?.maxTimeoutSeconds ??
+              "unknown";
+
+            if (opts.json) {
+              console.log(
+                JSON.stringify(
+                  {
+                    dryRun: true,
+                    payer: keypair.publicKey(),
+                    asset: chosen.asset ?? "?",
+                    amount: price.toString(),
+                    payTo: chosen.payTo,
+                    expirationLedger,
+                    paymentHeader,
+                    disclaimer:
+                      "Verification happens server-side; this dry-run does NOT prove the facilitator will accept the payment.",
+                  },
+                  null,
+                  2,
+                ),
+              );
+              return;
+            }
+
+            console.log("DRY RUN: Payment constructed and signed successfully.");
+            console.error(`Payer:             ${keypair.publicKey()}`);
+            console.error(`Asset:             ${chosen.asset ?? "?"}`);
+            console.error(`Amount:            ${price} base units`);
+            console.error(`Recipient (payTo): ${chosen.payTo}`);
+            console.error(`Expiration Ledger: ${expirationLedger}`);
+            console.error(
+              "Note: Verification happens server-side; this dry-run does NOT prove the facilitator will accept the payment.",
+            );
+            return;
+          }
+
 
           // 4. Retry with the payment attached, same method/body as the probe.
           const paid = await fetch(url, {

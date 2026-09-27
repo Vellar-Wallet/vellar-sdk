@@ -354,7 +354,7 @@ export function createPayer(deps: PayerDeps): Payer {
         // ignored it would under-count real spend and let the ceiling be
         // exceeded later. Over-counting refuses a legitimate payment; the other
         // direction permits an illegitimate one. (Security audit V-2.)
-        ledger.record(chosen.asset, amount);
+        await ledger.record(chosen.asset, amount);
         await discardBody(res);
         throw new IndeterminateSettlementError(
           outcome.reason,
@@ -365,7 +365,7 @@ export function createPayer(deps: PayerDeps): Payer {
       }
 
       // Confirmed settlement — debit exactly once, here and nowhere else.
-      ledger.record(chosen.asset, amount);
+      await ledger.record(chosen.asset, amount);
 
       return {
         url,

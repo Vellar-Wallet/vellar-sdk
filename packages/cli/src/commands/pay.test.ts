@@ -54,6 +54,11 @@ describe("pay command", () => {
     expect(optionFor("--network")?.defaultValue).toBe("testnet");
   });
 
+  it("registers --dry-run option", () => {
+    expect(optionFor("--dry-run")).toBeDefined();
+  });
+
+
   it("defaults --method to GET", () => {
     expect(optionFor("--method")?.defaultValue).toBe("GET");
   });

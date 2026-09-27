@@ -7,7 +7,7 @@
 // on stdout, which belongs to the MCP transport.
 
 import { loadConfig } from "./config.js";
-import { createSpendLedger } from "./ledger.js";
+import { createDurableSpendLedger, createFileLedgerStore, createSpendLedger, type SpendLedger } from "./ledger.js";
 import { formatError, log, registerSecret } from "./output.js";
 import { createPayer } from "./payer.js";
 import { createMcpServer, startStdio } from "./server.js";
@@ -19,7 +19,14 @@ async function main(): Promise<void> {
   // First thing after parsing: nothing emitted from here on can carry it.
   registerSecret(config.secret);
 
-  const ledger = createSpendLedger(config.ceilings);
+  let ledger: SpendLedger;
+  if (config.ledgerFile) {
+    const store = createFileLedgerStore(config.ledgerFile);
+    ledger = await createDurableSpendLedger(config.ceilings, store);
+  } else {
+    ledger = createSpendLedger(config.ceilings);
+  }
+
   // Built once: the key is derived a single time, and a malformed secret fails
   // here rather than at the first payment. A configured wallet selects the
   // smart-account path, where the spending limit is enforced on-chain.
@@ -34,6 +41,7 @@ async function main(): Promise<void> {
     // Stated at startup because it is the difference between a limit a
     // compromised agent can escape and one it cannot.
     spendLimit: smartAccount ? "chain-enforced (smart account policy)" : "process-only (hot wallet)",
+    ledgerPersistence: config.ledgerFile ? `durable (${config.ledgerFile})` : "in-memory (resets on restart)",
     ...(smartAccount ? { policies: config.policies.length } : {}),
   });
 
