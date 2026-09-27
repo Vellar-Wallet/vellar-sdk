@@ -5,6 +5,14 @@
 // entry as V1 (via the injected signer) → retry with the `PAYMENT-SIGNATURE`
 // header → return the unlocked response + on-chain settlement.
 //
+// ABORT (#410): `requestInit.signal` is honoured for the whole payment flow,
+// not only the initial fetch — the probe, the simulation, getLatestLedger,
+// and the paid retry all observe it. An abort AFTER a signature has been
+// produced but BEFORE the paid retry still cancels the retry (this client
+// will not submit). The thrown `X402AbortedError.paymentMayHaveBeenSigned`
+// is then `true`, because a signed payload can still settle if it already
+// left the process. Abort before any signature keeps that flag `false`.
+//
 // The PURE decision layer (decode / select / validate) lives in ./x402-guards so
 // payers that don't share this signing path can reuse it — see that file. It is
 // re-exported here so this module's public API is unchanged.
@@ -44,6 +52,7 @@ import {
   MaxAmountExceededError,
   NoUsablePaymentOptionError,
   PaymentRejectedError,
+  X402AbortedError,
   type PaymentRequirements,
   type SignedPayment,
   type SmartAccountX402Signer,
@@ -119,6 +128,47 @@ const MIN_EXPIRATION_LEDGERS = 3;
  */
 const DEFAULT_MAX_EXPIRATION_LEDGERS = 58;
 
+function isAbortError(err: unknown): boolean {
+  if (err instanceof X402AbortedError) return true;
+  return typeof err === "object" && err !== null && "name" in err && (err as { name: string }).name === "AbortError";
+}
+
+function throwIfAborted(signal: AbortSignal | undefined, paymentMayHaveBeenSigned: boolean): void {
+  if (signal?.aborted) throw new X402AbortedError(paymentMayHaveBeenSigned);
+}
+
+async function runWithSignal<T>(
+  signal: AbortSignal | undefined,
+  paymentMayHaveBeenSigned: boolean,
+  work: () => Promise<T>,
+): Promise<T> {
+  throwIfAborted(signal, paymentMayHaveBeenSigned);
+  const mapAbort = (err: unknown): never => {
+    if (err instanceof X402AbortedError) throw err;
+    if (isAbortError(err)) throw new X402AbortedError(paymentMayHaveBeenSigned);
+    throw err;
+  };
+  if (signal === undefined) {
+    try {
+      return await work();
+    } catch (err) {
+      return mapAbort(err);
+    }
+  }
+  let onAbort: (() => void) | undefined;
+  try {
+    return await Promise.race([
+      work().catch(mapAbort),
+      new Promise<never>((_, reject) => {
+        onAbort = () => reject(new X402AbortedError(paymentMayHaveBeenSigned));
+        signal.addEventListener("abort", onAbort, { once: true });
+      }),
+    ]);
+  } finally {
+    if (onAbort) signal.removeEventListener("abort", onAbort);
+  }
+}
+
 /**
  * Ledgers-from-now to set as the signature expiration. Derived from the server's
  * `maxTimeoutSeconds` so we stay inside the facilitator's own `maxLedger` window
@@ -172,7 +222,9 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
 
   async function buildSignedPayment(
     requirements: PaymentRequirements,
+    signal?: AbortSignal,
   ): Promise<{ header: string; amount: bigint }> {
+    throwIfAborted(signal, false);
     const net = NETWORKS[requirements.network];
     if (!net) throw new NoUsablePaymentOptionError(`Unknown network ${requirements.network}`);
 
@@ -183,21 +235,25 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
     await assertBudgetAttributes(budgetAttributes, budgetRequest, deps.budgetAttributeTracker);
 
     // Build the SEP-41 transfer(from = C-address, to = payTo, amount).
-    const tx = await AssembledTransaction.build({
-      contractId: requirements.asset,
-      method: "transfer",
-      args: [
-        nativeToScVal(deps.signer.address, { type: "address" }),
-        nativeToScVal(requirements.payTo, { type: "address" }),
-        nativeToScVal(parseAmount(requirements.amount), { type: "i128" }),
-      ],
-      networkPassphrase: net.passphrase,
-      rpcUrl: deps.rpcUrl,
-      publicKey: deps.simulationSourceAccount,
-      parseResultXdr: (r: unknown) => r,
-    });
+    // Simulation is a network call — honour the caller signal so an abort
+    // after the 402 does not leave RPC work running (#410).
+    const tx = await runWithSignal(signal, false, () =>
+      AssembledTransaction.build({
+        contractId: requirements.asset,
+        method: "transfer",
+        args: [
+          nativeToScVal(deps.signer.address, { type: "address" }),
+          nativeToScVal(requirements.payTo, { type: "address" }),
+          nativeToScVal(parseAmount(requirements.amount), { type: "i128" }),
+        ],
+        networkPassphrase: net.passphrase,
+        rpcUrl: deps.rpcUrl,
+        publicKey: deps.simulationSourceAccount,
+        parseResultXdr: (r: unknown) => r,
+      }),
+    );
 
-    const latest = await server.getLatestLedger();
+    const latest = await runWithSignal(signal, false, () => server.getLatestLedger());
     const expirationLedger =
       latest.sequence + expirationOffsetFor(requirements.maxTimeoutSeconds, expirationCeiling);
 
@@ -233,6 +289,7 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
       // smart-account work — the classic path has always had this gap.
       assertAuthEntryInvocation(entry, expected);
 
+      throwIfAborted(signal, signed > 0);
       const signedXdr = await deps.signer.signAuthEntry(entry.toXDR("base64"), {
         networkPassphrase: net.passphrase,
         expirationLedger,
@@ -284,26 +341,37 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
           "Pass a buffered body (string, Uint8Array, Blob, FormData) instead.",
       );
     }
+    const signal = init.requestInit?.signal ?? undefined;
+    // Refuse before any network call so an already-aborted signal is a
+    // no-op on the wire, not a race the fetch implementation might ignore.
+    throwIfAborted(signal, false);
     const baseInit: RequestInit = {
       ...init.requestInit,
       method: init.method ?? "GET",
       headers: init.headers,
       body: init.body ?? undefined,
+      signal,
     };
 
-    const first = await doFetch(url, baseInit);
+    const first = await runWithSignal(signal, false, () => doFetch(url, baseInit));
     if (first.status !== 402) {
       return { response: first, paid: false };
     }
 
     const decoded = decodePaymentRequired(first);
     const requirements = selectRequirements(decoded, init, ourCaip2);
-    const { header, amount } = await buildSignedPayment(requirements);
+    const { header, amount } = await buildSignedPayment(requirements, signal);
 
-    const paid = await doFetch(url, {
-      ...baseInit,
-      headers: { ...(init.headers ?? {}), "PAYMENT-SIGNATURE": header },
-    });
+    // Signature exists; abort still cancels the retry, but the error must
+    // say a payment may already have been signed (#410).
+    throwIfAborted(signal, true);
+    const paid = await runWithSignal(signal, true, () =>
+      doFetch(url, {
+        ...baseInit,
+        headers: { ...(init.headers ?? {}), "PAYMENT-SIGNATURE": header },
+        signal,
+      }),
+    );
 
     if (paid.status === 402 || paid.status >= 400) {
       const reason = extractRejectionReason(paid);

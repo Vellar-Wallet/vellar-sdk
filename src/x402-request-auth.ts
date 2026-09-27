@@ -25,6 +25,24 @@
 //     timestamps / replayed nonces); this module only PRODUCES a correctly
 //     shaped, correctly signed header. A client cannot enforce anti-replay on
 //     its own requests.
+//
+// VERIFIER CONTRACT (#407) — what a compliant facilitator MUST do. The
+// canonical string, field order, and encoding live in
+// {@link canonicalRequestString} and {@link REQUEST_AUTH_VERIFIER_CONTRACT}.
+// Conformance vectors are in ./x402-request-auth-vectors so a second
+// implementation can check itself without copying this file.
+//
+//   1. Reconstruct the canonical string exactly: uppercase method, path as
+//      signed (not the full URL), timestamp, nonce, body — newline-joined,
+//      in that order. An absent body is the empty string (a trailing newline
+//      with nothing after it), never the literal "undefined" or "null".
+//   2. Reject a timestamp whose absolute skew from the verifier clock is
+//      greater than REQUEST_AUTH_MAX_SKEW_SECONDS (300).
+//   3. Track every accepted nonce for at least that same window
+//      (REQUEST_AUTH_NONCE_WINDOW_SECONDS). A nonce seen again inside the
+//      window MUST be rejected even if the signature and timestamp are valid.
+//   4. Compare signatures in constant time. The algorithm prefix is
+//      "HMAC-SHA256" followed by a space and a base64 digest.
 
 /** A signed-request credential: a key id (so the facilitator can look up which
  * secret to verify against without guessing) and the shared secret itself. */
@@ -50,6 +68,10 @@ export interface SignedRequestHeaders {
 }
 
 const ALGORITHM = "HMAC-SHA256";
+/** Maximum |now − timestamp| a compliant verifier may accept (#407). */
+export const REQUEST_AUTH_MAX_SKEW_SECONDS = 300;
+/** How long a compliant verifier must remember a nonce, matching the skew. */
+export const REQUEST_AUTH_NONCE_WINDOW_SECONDS = REQUEST_AUTH_MAX_SKEW_SECONDS;
 const HEADER_KEY_ID = "X-Vellar-Key-Id";
 const HEADER_TIMESTAMP = "X-Vellar-Timestamp";
 const HEADER_NONCE = "X-Vellar-Nonce";
@@ -198,13 +220,22 @@ export async function verifyFacilitatorRequest(
     signature: string;
   },
   request: { method: string; path: string; body?: string },
-  opts: { toleranceSeconds?: number; now?: () => number } = {},
+  opts: {
+    toleranceSeconds?: number;
+    now?: () => number;
+    /** When set, a nonce already in the set is rejected (replay). A
+     * successful verify records the nonce so a later call with the same
+     * set fails. Callers that omit this still get timestamp-only checks —
+     * a production verifier MUST supply a store covering at least
+     * {@link REQUEST_AUTH_NONCE_WINDOW_SECONDS}. */
+    seenNonces?: Set<string>;
+  } = {},
 ): Promise<boolean> {
   const subtle = requireSubtleCrypto("verifyFacilitatorRequest");
   const [algorithm, provided] = headers.signature.split(" ", 2);
   if (algorithm !== ALGORITHM || !provided) return false;
 
-  const tolerance = opts.toleranceSeconds ?? 300;
+  const tolerance = opts.toleranceSeconds ?? REQUEST_AUTH_MAX_SKEW_SECONDS;
   const nowSeconds = Math.floor((opts.now ?? Date.now)() / 1000);
   const requestSeconds = Number(headers.timestamp);
   if (!Number.isFinite(requestSeconds) || Math.abs(nowSeconds - requestSeconds) > tolerance) {
@@ -231,8 +262,22 @@ export async function verifyFacilitatorRequest(
   );
   const expected = toBase64(digest);
 
-  return timingSafeEqual(expected, provided);
+  const ok = timingSafeEqual(expected, provided);
+  // Replay is checked AFTER the signature so an attacker cannot probe the
+  // nonce store with a forged signature. A production verifier must keep
+  // this set (or equivalent) for at least REQUEST_AUTH_NONCE_WINDOW_SECONDS.
+  if (ok && opts.seenNonces) {
+    if (opts.seenNonces.has(headers.nonce)) return false;
+    opts.seenNonces.add(headers.nonce);
+  }
+  return ok;
 }
+
+export {
+  REQUEST_AUTH_VECTORS,
+  REQUEST_AUTH_VERIFIER_CONTRACT,
+  type RequestAuthVector,
+} from "./x402-request-auth-vectors";
 
 /** Constant-time string comparison — length is not secret, but content is. */
 function timingSafeEqual(a: string, b: string): boolean {

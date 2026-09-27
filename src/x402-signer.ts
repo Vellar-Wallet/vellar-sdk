@@ -228,6 +228,7 @@ export interface SessionKeySignerConfig {
    * to keep a tamper-evident record of who authorized or was denied which payment.
    */
   onSignerAction?: X402SignerActionHook;
+  /**
    * Client-side capability scoping (#224): restrict which resource
    * type (contract) + action (function name) combinations this signer will
    * sign, independent of the on-chain policy. Omit for no scoping (signs
@@ -271,6 +272,14 @@ export function createSessionKeySigner(config: SessionKeySignerConfig): SmartAcc
     async signAuthEntry(entryXdr, { networkPassphrase, expirationLedger }) {
       try {
         const entry = xdr.SorobanAuthorizationEntry.fromXDR(entryXdr, "base64");
+        // Capability check lives inside the signer so a caller that invokes
+        // signAuthEntry directly (bypassing x402-client.ts) cannot skip it
+        // (#408). Empty rules permit everything — same as a signer that never
+        // opted in. Runs before hashing so a denied entry never produces a
+        // payload this key could sign. Complements #382's invocation-shape
+        // guard; this is the allowlist, not the expected-payment assertion.
+        const request = capabilityRequestFor(entry);
+        if (request) assertCapability(capabilities, request);
         assertEntryAddress(entry, config.address);
         const payload = payloadHashForEntry(entry, networkPassphrase, expirationLedger);
         const signature = keypair.sign(payload);
@@ -282,14 +291,6 @@ export function createSessionKeySigner(config: SessionKeySignerConfig): SmartAcc
         await fire("deny", "error", networkPassphrase, err);
         throw err;
       }
-      const entry = xdr.SorobanAuthorizationEntry.fromXDR(entryXdr, "base64");
-      assertEntryAddress(entry, config.address);
-      const request = capabilityRequestFor(entry);
-      if (request) assertCapability(capabilities, request);
-      const payload = payloadHashForEntry(entry, networkPassphrase, expirationLedger);
-      const signature = keypair.sign(payload);
-      setSignatureMap(entry, ed25519SignerKey(rawPk), ed25519Signature(signature), policies);
-      return entry.toXDR("base64");
     },
   };
 }
@@ -358,6 +359,11 @@ export function createPasskeyX402Signer(config: PasskeyX402SignerConfig): SmartA
     async signAuthEntry(entryXdr, { networkPassphrase, expirationLedger }) {
       try {
         const entry = xdr.SorobanAuthorizationEntry.fromXDR(entryXdr, "base64");
+        // Same unbypassable check as createSessionKeySigner (#408) — a
+        // passkey ceremony must not run for an invocation outside the
+        // configured capabilities.
+        const request = capabilityRequestFor(entry);
+        if (request) assertCapability(capabilities, request);
         assertEntryAddress(entry, config.address);
         const payload = payloadHashForEntry(entry, networkPassphrase, expirationLedger);
         const assertion = await config.webAuthn.sign(new Uint8Array(payload));
@@ -374,19 +380,6 @@ export function createPasskeyX402Signer(config: PasskeyX402SignerConfig): SmartA
         await fire("deny", "error", networkPassphrase, err);
         throw err;
       }
-      const entry = xdr.SorobanAuthorizationEntry.fromXDR(entryXdr, "base64");
-      assertEntryAddress(entry, config.address);
-      const request = capabilityRequestFor(entry);
-      if (request) assertCapability(capabilities, request);
-      const payload = payloadHashForEntry(entry, networkPassphrase, expirationLedger);
-      const assertion = await config.webAuthn.sign(new Uint8Array(payload));
-      setSignatureMap(
-        entry,
-        secp256r1SignerKey(assertion.keyId),
-        secp256r1Signature(assertion),
-        config.policies ?? [],
-      );
-      return entry.toXDR("base64");
     },
   };
 }

@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import { Keypair } from "@stellar/stellar-sdk";
 import type { Network } from "@x402/core/types";
+import { fail, handleCommandError } from "../errors.js";
 import { decodeChallenge, type Requirement } from "./quote.js";
 
 const RPC_URLS: Record<string, string> = {
@@ -81,8 +82,7 @@ export function makePayCommand(): Command {
       ) => {
         try {
           if (!RPC_URLS[opts.network]) {
-            console.error(`Error: --network must be 'testnet' or 'mainnet', got '${opts.network}'`);
-            process.exit(1);
+            fail("USAGE", `--network must be 'testnet' or 'mainnet', got '${opts.network}'`, false);
           }
 
           // A secret on the command line lands in shell history and in the
@@ -93,11 +93,11 @@ export function makePayCommand(): Command {
             secret = (await readFile(opts.secretFile, "utf8")).trim();
           }
           if (!secret) {
-            console.error(
-              "Error: provide --secret-file (preferred), --secret, or the VELLAR_SECRET env var.",
+            fail(
+              "USAGE",
+              "provide --secret-file (preferred), --secret, or the VELLAR_SECRET env var.",
+              false,
             );
-            process.exit(1);
-            return;
           }
 
           let keypair: Keypair;
@@ -105,27 +105,23 @@ export function makePayCommand(): Command {
             keypair = Keypair.fromSecret(secret);
           } catch {
             // Never echo the value back: it is a secret even when malformed.
-            console.error("Error: invalid Stellar secret key (expected an S... seed).");
-            process.exit(1);
-            return;
+            fail("USAGE", "invalid Stellar secret key (expected an S... seed).", false);
           }
 
           let maxAmount: bigint;
           try {
             maxAmount = BigInt(opts.max);
           } catch {
-            console.error(`Error: --max must be an integer in base units, got '${opts.max}'`);
-            process.exit(1);
-            return;
+            fail("USAGE", `--max must be an integer in base units, got '${opts.max}'`, false);
           }
 
           const method = opts.method.toUpperCase();
           if (!ALLOWED_METHODS.includes(method)) {
-            console.error(
-              `Error: --method must be one of ${ALLOWED_METHODS.join(", ")}, got '${opts.method}'`,
+            fail(
+              "USAGE",
+              `--method must be one of ${ALLOWED_METHODS.join(", ")}, got '${opts.method}'`,
+              false,
             );
-            process.exit(1);
-            return;
           }
           // GET never carries a body: fetch throws ("Request with GET/HEAD
           // method cannot have body") if one is attached, so both requests
@@ -137,9 +133,7 @@ export function makePayCommand(): Command {
           let requestBody = "{}";
           if (opts.body !== undefined) {
             if (safeJsonParse(opts.body) === null && opts.body.trim() !== "null") {
-              console.error(`Error: --body must be valid JSON, got '${opts.body}'`);
-              process.exit(1);
-              return;
+              fail("USAGE", `--body must be valid JSON, got '${opts.body}'`, false);
             }
             requestBody = opts.body;
           }
@@ -157,9 +151,7 @@ export function makePayCommand(): Command {
             return;
           }
           if (unpaid.status !== 402) {
-            console.error(`Unexpected status: ${unpaid.status} ${unpaid.statusText}`);
-            process.exit(1);
-            return;
+            fail("NETWORK", `Unexpected status: ${unpaid.status} ${unpaid.statusText}`, true);
           }
 
           const required = decodeChallenge(
@@ -167,38 +159,33 @@ export function makePayCommand(): Command {
             await unpaid.text(),
           );
           if (!required?.accepts?.length) {
-            console.error("Got a 402 but could not decode the payment challenge.");
-            process.exit(1);
-            return;
+            fail("NETWORK", "Got a 402 but could not decode the payment challenge.", true);
           }
 
           const networkId = NETWORK_IDS[opts.network] as Network;
           const { chosen, reason } = selectRequirement(required.accepts, networkId);
           if (!chosen) {
-            console.error(`Error: ${reason}`);
-            process.exit(1);
-            return;
+            fail("REFUSED", reason ?? "no payable option", false);
           }
 
           // 2. Enforce the ceiling BEFORE signing. A refusal here costs nothing
           //    and spends nothing.
           const price = BigInt(chosen.amount ?? "0");
           if (price > maxAmount) {
-            console.error(
-              `Refused: price ${price} exceeds --max ${maxAmount} (base units). Nothing was signed.`,
+            fail(
+              "REFUSED",
+              `price ${price} exceeds --max ${maxAmount} (base units). Nothing was signed.`,
+              false,
             );
-            process.exit(1);
-            return;
           }
 
           // Without sponsorship the payer needs XLM of its own for the fee.
           if (chosen.extra?.areFeesSponsored !== true) {
-            console.error(
-              "Refused: the seller does not advertise sponsored fees " +
-                "(extra.areFeesSponsored is not true). Nothing was signed.",
+            fail(
+              "REFUSED",
+              "the seller does not advertise sponsored fees (extra.areFeesSponsored is not true). Nothing was signed.",
+              false,
             );
-            process.exit(1);
-            return;
           }
 
           // 3. Build and sign. The scheme assembles the SEP-41 transfer, signs
@@ -221,12 +208,11 @@ export function makePayCommand(): Command {
           try {
             payload = await client.createPaymentPayload(required);
           } catch (err) {
-            console.error(
-              `Could not build the payment: ${err instanceof Error ? err.message : String(err)}`,
+            fail(
+              "NETWORK",
+              `Could not build the payment: ${err instanceof Error ? err.message : String(err)}. Common causes: no trustline to the asset, or an empty balance.`,
+              true,
             );
-            console.error("  Common causes: no trustline to the asset, or an empty balance.");
-            process.exit(1);
-            return;
           }
 
           // 4. Retry with the payment attached, same method/body as the probe.
@@ -247,22 +233,11 @@ export function makePayCommand(): Command {
           const extensionResponses = paid.headers.get("extension-responses");
 
           if (paid.status !== 200) {
-            if (opts.json) {
-              console.log(
-                JSON.stringify({ response: safeJsonParse(text), extensionResponses }, null, 2),
-              );
-              process.exit(1);
-              return;
-            }
-            console.error(`Not unlocked: HTTP ${paid.status}`);
-            console.error(text);
-            console.error(
-              "\n  Roughly one settle in three fails on testnet with an empty transaction " +
-                "field.\n  An empty transaction means nothing was spent: retry, signing a " +
-                "fresh payload.\n  A non-empty transaction means fees were charged: do not retry.",
+            fail(
+              "PAYMENT_MAY_HAVE_SETTLED",
+              `Not unlocked: HTTP ${paid.status}. A payment may already have settled; inspect before retrying.`,
+              false,
             );
-            process.exit(1);
-            return;
           }
 
           const body = safeJsonParse(text);
@@ -282,8 +257,7 @@ export function makePayCommand(): Command {
           }
           console.log(text);
         } catch (err) {
-          console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
-          process.exit(1);
+          handleCommandError(err, opts.json);
         }
       },
     );

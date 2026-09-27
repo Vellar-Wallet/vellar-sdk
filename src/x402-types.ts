@@ -221,3 +221,23 @@ export class InvalidRequirementsError extends Error {
     this.name = "InvalidRequirementsError";
   }
 }
+
+/**
+ * The caller aborted the x402 payment flow via `AbortSignal`.
+ *
+ * `paymentMayHaveBeenSigned` is the fact a caller must branch on after an
+ * abort mid-flow (#410): `false` means nothing was signed (a clean cancel);
+ * `true` means at least one auth entry was signed before the abort. This
+ * client will not send the paid retry, but a signed payload can still settle
+ * if it already left the process or is submitted by someone else.
+ */
+export class X402AbortedError extends Error {
+  readonly name = "X402AbortedError";
+  constructor(readonly paymentMayHaveBeenSigned: boolean) {
+    super(
+      paymentMayHaveBeenSigned
+        ? "x402 payment flow aborted after a payment may have been signed"
+        : "x402 payment flow aborted before any payment was signed",
+    );
+  }
+}

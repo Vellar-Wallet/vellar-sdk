@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { fail, handleCommandError } from "../errors.js";
 
 export const HORIZON_URLS: Record<string, string> = {
   testnet: "https://horizon-testnet.stellar.org",
@@ -25,31 +26,28 @@ export function makeInspectCommand(): Command {
       try {
         const base = HORIZON_URLS[opts.network];
         if (!base) {
-          console.error(`Error: --network must be 'testnet' or 'mainnet', got '${opts.network}'`);
-          process.exit(1);
-          return;
+          fail("USAGE", `--network must be 'testnet' or 'mainnet', got '${opts.network}'`, false);
         }
 
         // Catch a malformed hash here rather than reporting Horizon's 404 as
         // "not found", which reads as "this payment never happened".
         if (!/^[0-9a-f]{64}$/i.test(txHash)) {
-          console.error(
-            `Error: '${txHash}' is not a transaction hash (expected 64 hex characters).`,
+          fail(
+            "USAGE",
+            `'${txHash}' is not a transaction hash (expected 64 hex characters).`,
+            false,
           );
-          process.exit(1);
-          return;
         }
 
         const res = await fetch(`${base}/transactions/${txHash}`);
         if (!res.ok) {
-          if (res.status === 404) {
-            console.error(`Transaction not found on ${opts.network}: ${txHash}`);
-            console.error("  A testnet hash returns 404 on mainnet Horizon and vice versa.");
-          } else {
-            console.error(`Horizon returned ${res.status} ${res.statusText}`);
-          }
-          process.exit(1);
-          return;
+          fail(
+            "NETWORK",
+            res.status === 404
+              ? `Transaction not found on ${opts.network}: ${txHash}`
+              : `Horizon returned ${res.status} ${res.statusText}`,
+            true,
+          );
         }
 
         const tx = (await res.json()) as HorizonTransaction;
@@ -75,8 +73,7 @@ export function makeInspectCommand(): Command {
           console.log("(fee sponsorship shown on-chain, not asserted).");
         }
       } catch (err) {
-        console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
-        process.exit(1);
+        handleCommandError(err, opts.json);
       }
     });
 }

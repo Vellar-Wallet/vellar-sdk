@@ -99,7 +99,10 @@ export function createRpcTxSubmitter(options: RpcTxSubmitterOptions): RpcTxSubmi
       if (limiter && !limiter.tryConsume()) {
         throw new RateLimitError();
       }
-      const tx = Transaction.fromXDR(signedXdr, "base64");
+      // stellar-sdk 16 dropped Transaction.fromXDR; the constructor takes the
+      // envelope XDR plus a network passphrase. sendTransaction only calls
+      // toXDR() (the envelope bytes), so the passphrase is not used here.
+      const tx = new Transaction(signedXdr, "");
       const res = await server.sendTransaction(tx);
       if (res.status === "ERROR") {
         throw new Error(

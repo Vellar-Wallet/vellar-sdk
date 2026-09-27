@@ -73,9 +73,9 @@ describe("pay command", () => {
 
     await expect(
       makePayCommand().parseAsync(["node", "pay", "https://example.test/paid"]),
-    ).rejects.toThrow("exit:1");
+    ).rejects.toThrow("exit:2");
 
-    expect(exit).toHaveBeenCalledWith(1);
+    expect(exit).toHaveBeenCalledWith(2);
     expect(err.mock.calls.flat().join(" ")).toMatch(/--secret-file/);
   });
 
@@ -97,9 +97,9 @@ describe("pay command", () => {
         "--method",
         "TRACE",
       ]),
-    ).rejects.toThrow("exit:1");
+    ).rejects.toThrow("exit:2");
 
-    expect(exit).toHaveBeenCalledWith(1);
+    expect(exit).toHaveBeenCalledWith(2);
     expect(err.mock.calls.flat().join(" ")).toMatch(/--method must be one of/);
     expect(fetchSpy).not.toHaveBeenCalled();
 
@@ -124,7 +124,7 @@ describe("pay command", () => {
         "--method",
         "delete",
       ]),
-    ).rejects.toThrow("exit:1");
+    ).rejects.toThrow("exit:4");
 
     const [, calledInit] = fetchSpy.mock.calls[0] as [string, RequestInit];
     expect(calledInit.method).toBe("DELETE");
@@ -152,9 +152,9 @@ describe("pay command", () => {
         "--body",
         "{not valid json",
       ]),
-    ).rejects.toThrow("exit:1");
+    ).rejects.toThrow("exit:2");
 
-    expect(exit).toHaveBeenCalledWith(1);
+    expect(exit).toHaveBeenCalledWith(2);
     expect(err.mock.calls.flat().join(" ")).toMatch(/--body must be valid JSON/);
     expect(fetchSpy).not.toHaveBeenCalled();
 
@@ -185,7 +185,7 @@ describe("pay command", () => {
         "--body",
         '{"accountId":"G..."}',
       ]),
-    ).rejects.toThrow("exit:1");
+    ).rejects.toThrow("exit:4");
 
     // Only the probe fires on this path (a non-402 status returns before any
     // payment is built), so this is unambiguously the probe request.
@@ -216,13 +216,95 @@ describe("pay command", () => {
         "--secret",
         FAKE_SECRET,
       ]),
-    ).rejects.toThrow("exit:1");
+    ).rejects.toThrow("exit:4");
 
     const [, calledInit] = fetchSpy.mock.calls[0] as [string, RequestInit];
     expect(calledInit.method).toBe("GET");
     expect(calledInit.body).toBeUndefined();
     expect(calledInit.headers).toBeUndefined();
 
+    vi.unstubAllGlobals();
+  });
+
+  it("emits a JSON USAGE envelope on --json when no secret is supplied", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const exit = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`exit:${code}`);
+    }) as never);
+
+    await expect(
+      makePayCommand().parseAsync(["node", "pay", "https://example.test/paid", "--json"]),
+    ).rejects.toThrow("exit:2");
+
+    const printed = JSON.parse(String(log.mock.calls[0]?.[0]));
+    expect(printed.code).toBe("USAGE");
+    expect(printed.retryable).toBe(false);
+    expect(printed.message).toMatch(/secret/);
+    expect(printed).not.toHaveProperty("stack");
+    expect(exit).toHaveBeenCalledWith(2);
+  });
+
+  it("emits a JSON REFUSED envelope when the price exceeds --max", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`exit:${code}`);
+    }) as never);
+    const challenge = {
+      x402Version: 2,
+      accepts: [req({ amount: "9999999999" })],
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: false,
+      status: 402,
+      statusText: "Payment Required",
+      headers: { get: (n: string) => (n.toLowerCase() === "payment-required" ? Buffer.from(JSON.stringify(challenge)).toString("base64") : null) },
+      text: async () => "",
+    }));
+
+    await expect(
+      makePayCommand().parseAsync([
+        "node",
+        "pay",
+        "https://example.test/paid",
+        "--secret",
+        FAKE_SECRET,
+        "--max",
+        "1",
+        "--json",
+      ]),
+    ).rejects.toThrow("exit:3");
+
+    const printed = JSON.parse(String(log.mock.calls[0]?.[0]));
+    expect(printed.code).toBe("REFUSED");
+    expect(printed.retryable).toBe(false);
+    expect(printed.message).toMatch(/exceeds --max/);
+    vi.unstubAllGlobals();
+  });
+
+  it("emits a JSON NETWORK envelope on an unexpected probe status", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`exit:${code}`);
+    }) as never);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500, statusText: "boom" }));
+
+    await expect(
+      makePayCommand().parseAsync([
+        "node",
+        "pay",
+        "https://example.test/paid",
+        "--secret",
+        FAKE_SECRET,
+        "--json",
+      ]),
+    ).rejects.toThrow("exit:4");
+
+    const printed = JSON.parse(String(log.mock.calls[0]?.[0]));
+    expect(printed.code).toBe("NETWORK");
+    expect(printed.retryable).toBe(true);
     vi.unstubAllGlobals();
   });
 });

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_FACILITATOR_URL, makeSearchCommand } from "./search.js";
 
 function optionFor(flags: string) {
@@ -39,4 +39,46 @@ describe("search command", () => {
     expect(url.searchParams.get("query")).toBe("weather data");
     expect(url.pathname).toBe("/discovery/search");
   });
+
+  it("emits a JSON USAGE envelope for a non-integer --limit", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`exit:${code}`);
+    }) as never);
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await expect(
+      makeSearchCommand().parseAsync(["node", "search", "weather", "--limit", "nope", "--json"]),
+    ).rejects.toThrow("exit:2");
+
+    const printed = JSON.parse(String(log.mock.calls[0]?.[0]));
+    expect(printed.code).toBe("USAGE");
+    expect(printed.retryable).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("emits a JSON NETWORK envelope when the facilitator is down", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`exit:${code}`);
+    }) as never);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 503, statusText: "down" }));
+
+    await expect(
+      makeSearchCommand().parseAsync(["node", "search", "weather", "--json"]),
+    ).rejects.toThrow("exit:4");
+
+    const printed = JSON.parse(String(log.mock.calls[0]?.[0]));
+    expect(printed.code).toBe("NETWORK");
+    expect(printed.retryable).toBe(true);
+    vi.unstubAllGlobals();
+  });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });

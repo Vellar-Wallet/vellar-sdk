@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { decodeChallenge, makeQuoteCommand } from "./quote.js";
 
 const CHALLENGE = {
@@ -26,6 +26,29 @@ describe("quote command", () => {
   it("registers --json", () => {
     expect(makeQuoteCommand().options.find((o) => o.long === "--json")).toBeDefined();
   });
+
+  it("emits a JSON NETWORK envelope on an unexpected status", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`exit:${code}`);
+    }) as never);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500, statusText: "boom" }));
+
+    await expect(
+      makeQuoteCommand().parseAsync(["node", "quote", "https://example.test/paid", "--json"]),
+    ).rejects.toThrow("exit:4");
+
+    const printed = JSON.parse(String(log.mock.calls[0]?.[0]));
+    expect(printed.code).toBe("NETWORK");
+    expect(printed.retryable).toBe(true);
+    expect(printed).not.toHaveProperty("stack");
+    vi.unstubAllGlobals();
+  });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe("decodeChallenge", () => {

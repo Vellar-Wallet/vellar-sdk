@@ -167,7 +167,9 @@ describe("createSessionKeySigner", () => {
     expect(events[0]!.outcome).toBe("error");
     expect(events[0]!.actor).toBe(C_ADDRESS);
     expect(events[0]!.error).toBeDefined();
-  describe("capability scoping (#224)", () => {
+  });
+
+  describe("capability scoping (#224 / #408)", () => {
     it("signs as before when no capabilities are configured (backward compatible)", async () => {
       const kp = Keypair.random();
       const signer = createSessionKeySigner({ address: C_ADDRESS, secretKey: kp.secret() });
@@ -194,6 +196,24 @@ describe("createSessionKeySigner", () => {
           expirationLedger: 1000,
         }),
       ).resolves.toBeDefined();
+    });
+
+    it("throws when signAuthEntry is called directly with an entry outside capabilities (#408)", async () => {
+      // Bypasses x402-client.ts entirely: the check must live inside the
+      // signer, or any direct caller can skip it.
+      const kp = Keypair.random();
+      const signer = createSessionKeySigner({
+        address: C_ADDRESS,
+        secretKey: kp.secret(),
+        capabilities: [{ resourceType: C_ADDRESS, action: "transfer" }],
+      });
+      const entry = makeV1AuthEntry(C_ADDRESS); // invocation is on OTHER_C
+      await expect(
+        signer.signAuthEntry(entry.toXDR("base64"), {
+          networkPassphrase: PASSPHRASE,
+          expirationLedger: 1000,
+        }),
+      ).rejects.toBeInstanceOf(CapabilityDeniedError);
     });
 
     it("refuses to sign an invocation on a resource not in the capability rules", async () => {
@@ -287,7 +307,6 @@ describe("createPasskeyX402Signer", () => {
   it("fires onSignerAction for both `authorize` (success) and `deny` (error)", async () => {
     const events: X402SignerActionEvent[] = [];
     const keyId = new Uint8Array(20).fill(9);
-  describe("capability scoping (#224)", () => {
     const assertion: WebAuthnAssertion = {
       authenticatorData: new Uint8Array(37).fill(1),
       clientDataJSON: new Uint8Array(50).fill(2),
@@ -326,6 +345,13 @@ describe("createPasskeyX402Signer", () => {
       "deny:error",
     ]);
     expect(events.every((e) => e.actor === C_ADDRESS)).toBe(true);
+  });
+
+  describe("capability scoping (#224 / #408)", () => {
+    const assertion: WebAuthnAssertion = {
+      authenticatorData: new Uint8Array(37).fill(1),
+      clientDataJSON: new Uint8Array(50).fill(2),
+      signature: new Uint8Array(64).fill(3),
       keyId: new Uint8Array(20).fill(9),
     };
 

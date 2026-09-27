@@ -99,6 +99,17 @@
         "types": "./dist/x402-request-auth.d.cts",
         "default": "./dist/x402-request-auth.cjs"
       }
+    },
+    "./x402-request-auth-vectors": {
+      "source": "./src/x402-request-auth-vectors.ts",
+      "import": {
+        "types": "./dist/x402-request-auth-vectors.d.ts",
+        "default": "./dist/x402-request-auth-vectors.js"
+      },
+      "require": {
+        "types": "./dist/x402-request-auth-vectors.d.cts",
+        "default": "./dist/x402-request-auth-vectors.cjs"
+      }
     }
   },
   "main": "./dist/index.cjs",

@@ -12,6 +12,7 @@ import {
   InvalidRequirementsError,
   MaxAmountExceededError,
   NoUsablePaymentOptionError,
+  X402AbortedError,
   X402NotConfiguredError,
   type SmartAccountX402Signer,
 } from "./x402-types";
@@ -343,6 +344,48 @@ describe("budgetAttributes (#225) — attribute-scoped budget checked before sig
     await expect(
       c.createPayment(requirements(), { maxAmount: 10_000_000n }),
     ).rejects.toBeInstanceOf(BudgetAttributeDeniedError);
+  });
+});
+
+describe("x402 fetch — abort signal (#410)", () => {
+  it("aborting before the first request performs no network call", async () => {
+    const fetchImpl = vi.fn(async () => new Response("ok", { status: 200 }));
+    const c = client(fetchImpl);
+    const ac = new AbortController();
+    ac.abort();
+    await expect(
+      c.fetch("https://res.test/paid", { maxAmount: 10n, requestInit: { signal: ac.signal } }),
+    ).rejects.toBeInstanceOf(X402AbortedError);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("aborting mid-flow surfaces a typed abort error that spent nothing", async () => {
+    const ac = new AbortController();
+    const fetchImpl = vi.fn(async () => {
+      ac.abort();
+      return response402([requirements()]);
+    });
+    const c = client(fetchImpl);
+    const err = await c
+      .fetch("https://res.test/paid", {
+        maxAmount: 10_000_000n,
+        requestInit: { signal: ac.signal },
+      })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(X402AbortedError);
+    expect((err as X402AbortedError).paymentMayHaveBeenSigned).toBe(false);
+  });
+
+  it("post-signature abort reports that a payment may have been signed", () => {
+    // The client sets this flag once signAuthEntry has returned and before
+    // the paid retry. The error class is the documented contract for that
+    // case — a clean cancel vs "do not assume nothing was spent".
+    const err = new X402AbortedError(true);
+    expect(err.paymentMayHaveBeenSigned).toBe(true);
+    expect(err.message).toMatch(/may have been signed/);
+    const clean = new X402AbortedError(false);
+    expect(clean.paymentMayHaveBeenSigned).toBe(false);
+    expect(clean.message).toMatch(/before any payment was signed/);
   });
 });
 

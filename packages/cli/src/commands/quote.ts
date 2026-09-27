@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import type { PaymentRequired, PaymentRequirements } from "@x402/core/types";
+import { fail, handleCommandError } from "../errors.js";
 
 /**
  * One payment option from a 402 challenge. Aliased from the library type so
@@ -50,16 +51,13 @@ export function makeQuoteCommand(): Command {
             console.log("Resource is free (no payment required).");
             return;
           }
-          console.error(`Unexpected status: ${res.status} ${res.statusText}`);
-          process.exit(1);
+          fail("NETWORK", `Unexpected status: ${res.status} ${res.statusText}`, true);
         }
 
         const body = await res.text();
         const challenge = decodeChallenge(res.headers.get("payment-required"), body);
         if (!challenge) {
-          console.error("Got a 402 but could not decode the payment challenge.");
-          process.exit(1);
-          return;
+          fail("NETWORK", "Got a 402 but could not decode the payment challenge.", true);
         }
 
         if (opts.json) {
@@ -91,8 +89,7 @@ export function makeQuoteCommand(): Command {
         console.log("");
         console.log("No payment was made and nothing was signed by this call.");
       } catch (err) {
-        console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
-        process.exit(1);
+        handleCommandError(err, opts.json);
       }
     });
 }

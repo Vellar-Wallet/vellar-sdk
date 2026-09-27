@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { fail, handleCommandError } from "../errors.js";
 
 export const DEFAULT_FACILITATOR_URL = "https://vellar-facilitator.onrender.com";
 
@@ -68,13 +69,16 @@ export function makeSearchCommand(): Command {
         const url = new URL("/discovery/search", opts.facilitator);
         // The endpoint takes `query`, not `q`. A wrong key is not an error:
         // it returns an unfiltered listing, which looks like a working search.
+        const limit = Number(opts.limit);
+        if (!Number.isInteger(limit) || limit < 1) {
+          fail("USAGE", `--limit must be a positive integer, got '${opts.limit}'`, false);
+        }
         url.searchParams.set("query", query);
-        url.searchParams.set("limit", opts.limit);
+        url.searchParams.set("limit", String(limit));
 
         const res = await fetch(url.toString());
         if (!res.ok) {
-          console.error(`Search failed: ${res.status} ${res.statusText}`);
-          process.exit(1);
+          fail("NETWORK", `Search failed: ${res.status} ${res.statusText}`, true);
         }
 
         const data = (await res.json()) as { resources?: CatalogResource[]; partialResults?: boolean };
@@ -101,8 +105,7 @@ export function makeSearchCommand(): Command {
           console.log("Note: partial results. Part of the search pipeline was unavailable.");
         }
       } catch (err) {
-        console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
-        process.exit(1);
+        handleCommandError(err, opts.json);
       }
     });
 }
