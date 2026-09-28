@@ -3,7 +3,7 @@ import { Command } from "commander";
 import { makeSearchCommand } from "./commands/search.js";
 import { makeQuoteCommand } from "./commands/quote.js";
 import { makePayCommand } from "./commands/pay.js";
-import { makeInspectCommand } from "./commands/inspect.js";
+import { makeInspectCommand } from "./commands/inspect.js";`nimport { makeBalanceCommand } from "./commands/balance.js";
 
 const program = new Command();
 
@@ -15,6 +15,6 @@ program
 program.addCommand(makeSearchCommand());
 program.addCommand(makeQuoteCommand());
 program.addCommand(makePayCommand());
-program.addCommand(makeInspectCommand());
+program.addCommand(makeInspectCommand());`nprogram.addCommand(makeBalanceCommand());
 
 program.parse();
