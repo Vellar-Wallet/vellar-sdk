@@ -22,7 +22,10 @@ export interface BalanceReader {
 export interface BalanceService {
   getBalances(holder: string): Promise<TokenBalance[]>;
   /** Fetch balances for many assets in one call; partial failures are per-item. */
-  getBalancesBatch(holder: string, tokens: TokenInfo[]): Promise<BatchBalanceResult[]>;
+  getBalancesBatch(
+    holder: string,
+    tokens: Pick<TokenInfo, "contractId">[],
+  ): Promise<BatchBalanceResult[]>;
 }
 
 /** Maximum number of assets in a single batch balance request. */

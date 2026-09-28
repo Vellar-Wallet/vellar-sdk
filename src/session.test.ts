@@ -178,6 +178,9 @@ describe("createSessionStore teardown", () => {
     // No active timers remain after dispose (a leak would fail here by keeping
     // the interval scheduled).
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
 describe("createSessionStore — refresh & expiry edge cases", () => {
   it("refreshes lastActiveAt just before session expiry (boundary condition)", async () => {
     const storage = createMemoryStorageAdapter();

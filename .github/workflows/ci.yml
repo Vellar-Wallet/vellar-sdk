@@ -23,11 +23,20 @@ jobs:
       # Gate softened from --audit-level=high to --audit-level=critical on
       # 2026-09-07. Remaining highs are in the toml chain via passkey-kit →
       # @openzeppelin/relayer-plugin-channels → @stellar/stellar-sdk ≤15.x — a
-      # major-version override is unsafe inside the passkey signing path.
-      # Tracked: https://github.com/Vellar-Wallet/vellar-sdk/issues/378
-      # Restore to --audit-level=high when upstream resolves.
+      # major-version override (passkey-kit@0.19.1) is outside the declared
+      # peer range and was assessed, not just deferred: the vulnerable toml
+      # parser is only reachable via `passkey-kit/server`'s relayer module,
+      # which this SDK never imports (see docs/security-audit.md V-8).
+      # Tracked: https://github.com/Vellar-Wallet/vellar-sdk/issues/390
+      # Restore to --audit-level=high when passkey-kit resolves upstream.
       - run: npm audit --audit-level=critical
       - run: npm run typecheck
+      # Issue #389: TESTNET.walletWasmHash must match the WASM the INSTALLED
+      # passkey-kit version actually deploys, or wallet creation fails (wrong
+      # hash) or silently targets a superseded, previously-vulnerable contract
+      # (stale hash — this check's first run caught exactly that). Nothing else
+      # ties the configured hash to a passkey-kit bump.
+      - run: npm run verify:wasm-hash
       # Docs snippets typecheck against the current source — a quickstart that
       # drifts from the real API fails the PR that introduces the drift.
       - run: npm run check:docs

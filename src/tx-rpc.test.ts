@@ -35,6 +35,7 @@ describe("createRpcTxSubmitter", () => {
     const sendTransaction = vi.fn();
     const submitter = createRpcTxSubmitter({
       rpcUrl: "https://rpc.test",
+      networkPassphrase: "Test SDF Network ; September 2015",
       rateLimit: { bucketSize: 0, refillRate: 0 },
       server: { sendTransaction } as never,
     });

@@ -194,7 +194,33 @@ function setSignatureMap(
     .signature(xdr.ScVal.scvVec([xdr.ScVal.scvMap(entries)]));
 }
 
-/** Order two policy contract ids by their raw address bytes, as ScVal ordering does. */
+/**
+ * Order two policy contract ids by their raw address bytes, as ScVal ordering does.
+ *
+ * VERIFIED LIVE ON TESTNET WITH TWO POLICIES PRESENT (issue #386). Prior unit
+ * tests (x402-signer-policies.test.ts) only proved internal self-consistency —
+ * a forward and a reversed policy list produce the same output order — which
+ * would pass even if raw-byte comparison were the wrong rule, since it is at
+ * least consistent with itself. This does not establish that Soroban's host
+ * ACCEPTS that order.
+ *
+ * A fresh wallet (`CACD4K6KT6TWVGFKFACWTM4GWBRYUB4EPVFDI7VUXRUULFFS4EITRHNE`)
+ * was deployed on testnet with an Ed25519 agent signer whose `SignerLimits`
+ * require TWO deployed `sample-policy` instances as co-signers
+ * (`CCRKBE7P4Z2I6LHSN2DI2DBL26QVHHHHJT6HMFA3RHM3QM4HE6I4OXRX` and
+ * `CBRLYBQZOJAKO3Q3KFG3KKYQKYPDR2ZWLLYVG6KIRXZBW63VVNT5EZUJ`) on a native-XLM
+ * SEP-41 `transfer`. This function (via `createSessionKeySigner`, unmodified)
+ * sorted them as `Ed25519 -> Policy(CBRLY…) -> Policy(CCRKB…)` — raw-byte order,
+ * lexically consistent with their `C…` StrKey prefixes. The signed payment was
+ * submitted and settled: testnet tx
+ * `7d9f1fa15e6a6220ce3731f7205ef32b2c8dd94621ecb5fcda15f9a5ece1eff4`,
+ * `successful: true` (ledger 4907382, 2026-09-28), confirmed via Horizon. Both
+ * policies' `policy__` ran (each approved a `transfer` under its cumulative
+ * allowance) — the map order did not trip Soroban's own map-key-ordering
+ * validation, which would otherwise reject `__check_auth` before any contract
+ * logic runs at all. No change to this function was required: raw address
+ * bytes is the correct rule, not merely an internally-consistent one.
+ */
 function comparePolicyAddresses(a: string, b: string): number {
   const ab = new Address(a).toBuffer();
   const bb = new Address(b).toBuffer();
@@ -228,6 +254,7 @@ export interface SessionKeySignerConfig {
    * to keep a tamper-evident record of who authorized or was denied which payment.
    */
   onSignerAction?: X402SignerActionHook;
+  /**
    * Client-side capability scoping (#224): restrict which resource
    * type (contract) + action (function name) combinations this signer will
    * sign, independent of the on-chain policy. Omit for no scoping (signs
@@ -272,6 +299,8 @@ export function createSessionKeySigner(config: SessionKeySignerConfig): SmartAcc
       try {
         const entry = xdr.SorobanAuthorizationEntry.fromXDR(entryXdr, "base64");
         assertEntryAddress(entry, config.address);
+        const request = capabilityRequestFor(entry);
+        if (request) assertCapability(capabilities, request);
         const payload = payloadHashForEntry(entry, networkPassphrase, expirationLedger);
         const signature = keypair.sign(payload);
         setSignatureMap(entry, ed25519SignerKey(rawPk), ed25519Signature(signature), policies);
@@ -282,14 +311,6 @@ export function createSessionKeySigner(config: SessionKeySignerConfig): SmartAcc
         await fire("deny", "error", networkPassphrase, err);
         throw err;
       }
-      const entry = xdr.SorobanAuthorizationEntry.fromXDR(entryXdr, "base64");
-      assertEntryAddress(entry, config.address);
-      const request = capabilityRequestFor(entry);
-      if (request) assertCapability(capabilities, request);
-      const payload = payloadHashForEntry(entry, networkPassphrase, expirationLedger);
-      const signature = keypair.sign(payload);
-      setSignatureMap(entry, ed25519SignerKey(rawPk), ed25519Signature(signature), policies);
-      return entry.toXDR("base64");
     },
   };
 }
@@ -359,6 +380,8 @@ export function createPasskeyX402Signer(config: PasskeyX402SignerConfig): SmartA
       try {
         const entry = xdr.SorobanAuthorizationEntry.fromXDR(entryXdr, "base64");
         assertEntryAddress(entry, config.address);
+        const request = capabilityRequestFor(entry);
+        if (request) assertCapability(capabilities, request);
         const payload = payloadHashForEntry(entry, networkPassphrase, expirationLedger);
         const assertion = await config.webAuthn.sign(new Uint8Array(payload));
         setSignatureMap(
@@ -374,19 +397,6 @@ export function createPasskeyX402Signer(config: PasskeyX402SignerConfig): SmartA
         await fire("deny", "error", networkPassphrase, err);
         throw err;
       }
-      const entry = xdr.SorobanAuthorizationEntry.fromXDR(entryXdr, "base64");
-      assertEntryAddress(entry, config.address);
-      const request = capabilityRequestFor(entry);
-      if (request) assertCapability(capabilities, request);
-      const payload = payloadHashForEntry(entry, networkPassphrase, expirationLedger);
-      const assertion = await config.webAuthn.sign(new Uint8Array(payload));
-      setSignatureMap(
-        entry,
-        secp256r1SignerKey(assertion.keyId),
-        secp256r1Signature(assertion),
-        config.policies ?? [],
-      );
-      return entry.toXDR("base64");
     },
   };
 }

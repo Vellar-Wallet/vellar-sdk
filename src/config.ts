@@ -1,8 +1,10 @@
 // Network configuration constants a consumer needs to construct PasskeyKit and
 // SACClient. These are easy to get wrong or not know at all, so the SDK ships
 // them. The wasm hash is the canonical passkey-kit smart-wallet contract — it
-// MUST match the passkey-kit version (see the passkey-kit deployment manifest);
-// re-check it on every passkey-kit upgrade.
+// MUST match the passkey-kit version (see the passkey-kit deployment manifest).
+// `npm run verify:wasm-hash` (also gated in CI, issue #389) checks TESTNET's
+// value against the installed passkey-kit version automatically — it caught
+// this value pinned to a superseded, pre-fix contract once already.
 
 export interface NetworkConfig {
   network: "testnet" | "mainnet";
@@ -25,7 +27,7 @@ export const TESTNET: NetworkConfig = {
   rpcUrl: "https://soroban-testnet.stellar.org",
   networkPassphrase: "Test SDF Network ; September 2015",
   horizonUrl: "https://horizon-testnet.stellar.org",
-  walletWasmHash: "fdefad64b96837147e1c333e51f537b696eab925e9f147e63d597c04e3c903f0",
+  walletWasmHash: "502ea4e7bdb3ea99880941f1d35ceb67fb598692c0bb40f842ef9c9f17d58b58",
   nativeTokenContractId: "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
   // Derived from Circle's official USDC issuer for this network. Verify against:
   // https://www.circle.com/multi-chain-usdc/stellar

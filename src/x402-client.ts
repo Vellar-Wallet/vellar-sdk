@@ -97,6 +97,14 @@ export interface X402ClientDeps {
   /** Clock for time-window budget rules (defaults to `() => new Date()`);
    * overridable for tests. */
   now?: () => Date;
+  /**
+   * Permit a plaintext `http://` RPC. Default false, and deliberately NOT
+   * exposed as an environment variable — a plaintext RPC is exactly the
+   * position an attacker needs for V-1 (see ./x402-auth-entry.ts), so enabling
+   * it must be a code decision, not a deployment typo. Used by the hostile-RPC
+   * test.
+   */
+  allowHttp?: boolean;
 }
 
 // Estimated ledger close time (seconds). The facilitator fetches its own estimate
@@ -149,7 +157,8 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
   const budgetAttributes = deps.budgetAttributes ?? [];
   assertValidBudgetAttributeRules(budgetAttributes);
   const now = deps.now ?? (() => new Date());
-  const server = new rpc.Server(deps.rpcUrl);
+  const allowHttp = deps.allowHttp ?? false;
+  const server = new rpc.Server(deps.rpcUrl, { allowHttp });
   const baseFetch: FetchLike = deps.fetchImpl ?? ((url, init) => fetch(url, init));
   // Request signing wraps whatever fetch the caller already injected, so a
   // test double or logging wrapper composes with it rather than being replaced.
@@ -193,6 +202,7 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
       ],
       networkPassphrase: net.passphrase,
       rpcUrl: deps.rpcUrl,
+      allowHttp,
       publicKey: deps.simulationSourceAccount,
       parseResultXdr: (r: unknown) => r,
     });
