@@ -15,6 +15,7 @@ import { loadConfig } from "../src/config.js";
 import { createSpendLedger } from "../src/ledger.js";
 import {
   clearRegisteredSecrets,
+  divertStdoutToStderr,
   formatError,
   log,
   redact,
@@ -321,5 +322,62 @@ describe("log discipline", () => {
 
     expect(error).toBeUndefined();
     expect(stderr).toContain("circular");
+  });
+});
+
+describe("divertStdoutToStderr secret redaction (#416)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    clearRegisteredSecrets();
+  });
+
+  it("redacts a registered secret written directly to process.stdout while diversion is active", () => {
+    clearRegisteredSecrets();
+    const secret = freshSecret();
+    registerSecret(secret);
+
+    let stderrOutput = "";
+    const errSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((chunk: unknown) => {
+        stderrOutput += String(chunk);
+        return true;
+      });
+
+    const restore = divertStdoutToStderr();
+    try {
+      process.stdout.write(`dependency noisy write with secret: ${secret}\n`);
+      expect(stderrOutput).not.toContain(secret);
+      expect(stderrOutput).toContain("[REDACTED]");
+      expect(stderrOutput).toContain("[diverted-stdout]");
+    } finally {
+      restore();
+      errSpy.mockRestore();
+      clearRegisteredSecrets();
+    }
+  });
+
+  it("redacts an unregistered secret-shaped seed via regex pattern fallback on stdout diversion", () => {
+    clearRegisteredSecrets();
+    const unregisteredSecret = freshSecret(); // S... seed, never registered
+
+    let stderrOutput = "";
+    const errSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((chunk: unknown) => {
+        stderrOutput += String(chunk);
+        return true;
+      });
+
+    const restore = divertStdoutToStderr();
+    try {
+      process.stdout.write(`dependency noisy write with unknown seed: ${unregisteredSecret}\n`);
+      expect(stderrOutput).not.toContain(unregisteredSecret);
+      expect(stderrOutput).toContain("[REDACTED]");
+      expect(stderrOutput).toContain("[diverted-stdout]");
+    } finally {
+      restore();
+      errSpy.mockRestore();
+    }
   });
 });

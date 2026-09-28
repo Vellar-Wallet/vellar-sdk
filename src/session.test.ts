@@ -58,6 +58,58 @@ describe("createSessionStore", () => {
     const store = createSessionStore(broken);
     await store.getState().restore();
     expect(store.getState().status).toBe("disconnected");
+    expect(store.getState().disconnectReason).toBe("corrupt_storage");
+  });
+
+  describe("network mismatch at restore (#409)", () => {
+    it("restores successfully when network matches expected network", async () => {
+      const storage = createMemoryStorageAdapter();
+      await storage.save(session); // session has network: "testnet"
+      const store = createSessionStore(storage, { network: "testnet" });
+
+      await store.getState().restore();
+
+      expect(store.getState().status).toBe("connected");
+      expect(store.getState().session).toEqual(session);
+      expect(store.getState().disconnectReason).toBeNull();
+    });
+
+    it("discards mismatched session, clears storage, and leaves status disconnected", async () => {
+      const storage = createMemoryStorageAdapter();
+      const clearSpy = vi.spyOn(storage, "clear");
+      await storage.save(session); // session has network: "testnet"
+      const onSessionMismatch = vi.fn();
+
+      const store = createSessionStore(storage, {
+        network: "mainnet",
+        onSessionMismatch,
+      });
+
+      await store.getState().restore();
+
+      // Discarded and storage cleared
+      expect(store.getState().status).toBe("disconnected");
+      expect(store.getState().session).toBeNull();
+      expect(store.getState().disconnectReason).toBe("network_mismatch");
+      expect(clearSpy).toHaveBeenCalledTimes(1);
+      expect(await storage.load()).toBeNull();
+
+      // Callback invoked with rejected session and expected network
+      expect(onSessionMismatch).toHaveBeenCalledTimes(1);
+      expect(onSessionMismatch).toHaveBeenCalledWith(session, "mainnet");
+    });
+
+    it("also respects expectedNetwork option alias", async () => {
+      const storage = createMemoryStorageAdapter();
+      await storage.save(session); // network: "testnet"
+
+      const store = createSessionStore(storage, { expectedNetwork: "mainnet" });
+      await store.getState().restore();
+
+      expect(store.getState().status).toBe("disconnected");
+      expect(store.getState().disconnectReason).toBe("network_mismatch");
+      expect(await storage.load()).toBeNull();
+    });
   });
 
   it("restore() rejects malformed persisted data", async () => {
@@ -178,6 +230,9 @@ describe("createSessionStore teardown", () => {
     // No active timers remain after dispose (a leak would fail here by keeping
     // the interval scheduled).
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
 describe("createSessionStore — refresh & expiry edge cases", () => {
   it("refreshes lastActiveAt just before session expiry (boundary condition)", async () => {
     const storage = createMemoryStorageAdapter();

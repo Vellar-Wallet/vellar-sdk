@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { makePayCommand, safeJsonParse, selectRequirement } from "./pay.js";
+import { CLI_PAY_EXIT_CODES, makePayCommand, safeJsonParse, selectRequirement } from "./pay.js";
 import type { Requirement } from "./quote.js";
 
 function optionFor(flags: string) {
@@ -272,5 +272,180 @@ describe("safeJsonParse", () => {
 
   it("returns null for an empty string", () => {
     expect(safeJsonParse("")).toBeNull();
+  });
+});
+
+describe("pay settlement retry semantics & outcomes (#412)", () => {
+  const challengeHeader = Buffer.from(
+    JSON.stringify({
+      x402Version: 2,
+      accepts: [req()],
+    }),
+  ).toString("base64");
+
+  it("handles settled outcome with exit code 0 and outputs content", async () => {
+    const x402ClientModule = await import("@x402/core/client");
+    vi.spyOn(x402ClientModule.x402Client.prototype, "createPaymentPayload").mockResolvedValue({
+      x402Version: 2,
+      accepted: req(),
+      payload: { authorization: "test" },
+    } as never);
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`exit:${code}`);
+    }) as never);
+
+    const txHash = "a".repeat(64);
+    const settleHeader = Buffer.from(
+      JSON.stringify({
+        success: true,
+        transaction: txHash,
+        network: "stellar:testnet",
+      }),
+    ).toString("base64");
+
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response("", {
+          status: 402,
+          headers: { "payment-required": challengeHeader },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response("unlocked payload content", {
+          status: 200,
+          headers: { "x-payment-response": settleHeader },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await makePayCommand().parseAsync([
+      "node",
+      "pay",
+      "https://example.test/resource",
+      "--secret",
+      FAKE_SECRET,
+    ]);
+
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(logSpy).toHaveBeenCalledWith("unlocked payload content");
+    expect(errSpy.mock.calls.flat().join(" ")).toContain(`Settlement: ${txHash}`);
+    vi.unstubAllGlobals();
+  });
+
+  it("handles not-spent outcome with exit code 3 and retryable guidance", async () => {
+    const x402ClientModule = await import("@x402/core/client");
+    vi.spyOn(x402ClientModule.x402Client.prototype, "createPaymentPayload").mockResolvedValue({
+      x402Version: 2,
+      accepted: req(),
+      payload: { authorization: "test" },
+    } as never);
+
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`exit:${code}`);
+    }) as never);
+
+    const settleHeader = Buffer.from(
+      JSON.stringify({
+        success: false,
+        transaction: "",
+        errorReason: "submission_failed_empty_tx",
+        network: "stellar:testnet",
+      }),
+    ).toString("base64");
+
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response("", {
+          status: 402,
+          headers: { "payment-required": challengeHeader },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response("failed before submit", {
+          status: 402,
+          headers: { "x-payment-response": settleHeader },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await expect(
+      makePayCommand().parseAsync([
+        "node",
+        "pay",
+        "https://example.test/resource",
+        "--secret",
+        FAKE_SECRET,
+      ]),
+    ).rejects.toThrow(`exit:${CLI_PAY_EXIT_CODES.NOT_SPENT}`);
+
+    expect(exitSpy).toHaveBeenCalledWith(CLI_PAY_EXIT_CODES.NOT_SPENT);
+    const errOutput = errSpy.mock.calls.flat().join(" ");
+    expect(errOutput).toMatch(/nothing was spent/i);
+    expect(errOutput).toMatch(/retry/i);
+    vi.unstubAllGlobals();
+  });
+
+  it("handles indeterminate outcome with exit code 5 and warns to check on-chain without auto-retrying", async () => {
+    const x402ClientModule = await import("@x402/core/client");
+    vi.spyOn(x402ClientModule.x402Client.prototype, "createPaymentPayload").mockResolvedValue({
+      x402Version: 2,
+      accepted: req(),
+      payload: { authorization: "test" },
+    } as never);
+
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`exit:${code}`);
+    }) as never);
+
+    const txHash = "c".repeat(64);
+    const settleHeader = Buffer.from(
+      JSON.stringify({
+        success: false,
+        transaction: txHash,
+        errorReason: "submitted_then_failed",
+        network: "stellar:testnet",
+      }),
+    ).toString("base64");
+
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response("", {
+          status: 402,
+          headers: { "payment-required": challengeHeader },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response("tx submitted but failed", {
+          status: 402,
+          headers: { "x-payment-response": settleHeader },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await expect(
+      makePayCommand().parseAsync([
+        "node",
+        "pay",
+        "https://example.test/resource",
+        "--secret",
+        FAKE_SECRET,
+      ]),
+    ).rejects.toThrow(`exit:${CLI_PAY_EXIT_CODES.INDETERMINATE}`);
+
+    expect(exitSpy).toHaveBeenCalledWith(CLI_PAY_EXIT_CODES.INDETERMINATE);
+    const errOutput = errSpy.mock.calls.flat().join(" ");
+    expect(errOutput).toContain("check the payer account on-chain before paying again");
+    expect(errOutput).toContain("NOT retried");
+    vi.unstubAllGlobals();
   });
 });

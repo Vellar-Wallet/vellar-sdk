@@ -1,4 +1,4 @@
-import { rpc, StrKey, Transaction } from "@stellar/stellar-sdk";
+import { rpc, StrKey, Transaction, TransactionBuilder } from "@stellar/stellar-sdk";
 import type { TxStatus, TxStatusReader } from "./tx-status";
 
 // RPC-backed pieces of the payment flow (subpath export — see rpc.ts).
@@ -8,20 +8,65 @@ export function isValidStellarAddress(address: string): boolean {
   return StrKey.isValidEd25519PublicKey(address) || StrKey.isValidContract(address);
 }
 
-export function createRpcTxStatusReader(options: { rpcUrl: string }): TxStatusReader {
-  const server = new rpc.Server(options.rpcUrl);
+export interface RpcTxStatusReaderOptions {
+  /** Primary RPC endpoint URL. */
+  rpcUrl: string;
+  /** Prioritized list of fallback RPC endpoints used when the primary errors or times out (#218). */
+  fallbackRpcUrls?: string[];
+  /** Optional per-endpoint timeout in milliseconds. */
+  timeoutMs?: number;
+  /** Injected RPC servers (for testing). When provided, replaces default rpc.Server instantiation. */
+  servers?: Pick<rpc.Server, "getTransaction">[];
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, url: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`RPC request to ${url} timed out after ${ms}ms`));
+    }, ms);
+  });
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+export function createRpcTxStatusReader(options: RpcTxStatusReaderOptions): TxStatusReader {
+  const urls = [options.rpcUrl, ...(options.fallbackRpcUrls ?? [])];
+  const servers: Pick<rpc.Server, "getTransaction">[] =
+    options.servers ??
+    urls.map((url) => new rpc.Server(url, options.timeoutMs ? { timeout: options.timeoutMs } : undefined));
+
   return {
     async getStatus(hash): Promise<TxStatus> {
-      const res = await server.getTransaction(hash);
-      switch (res.status) {
-        case rpc.Api.GetTransactionStatus.SUCCESS:
-          return "success";
-        case rpc.Api.GetTransactionStatus.FAILED:
-          return "failed";
-        default:
-          // NOT_FOUND: not yet included in a ledger.
-          return "pending";
+      let lastError: unknown;
+
+      for (let i = 0; i < servers.length; i++) {
+        const server = servers[i]!;
+        try {
+          const fetchPromise = server.getTransaction(hash);
+          const res = options.timeoutMs
+            ? await withTimeout(fetchPromise, options.timeoutMs, urls[i] ?? `endpoint #${i}`)
+            : await fetchPromise;
+
+          switch (res.status) {
+            case rpc.Api.GetTransactionStatus.SUCCESS:
+              return "success";
+            case rpc.Api.GetTransactionStatus.FAILED:
+              return "failed";
+            default:
+              // NOT_FOUND: not yet included in a ledger.
+              return "pending";
+          }
+        } catch (err) {
+          lastError = err;
+          // Failover: route to the next prioritized endpoint on error or timeout
+        }
       }
+
+      throw lastError ?? new Error("All configured RPC endpoints failed to fetch transaction status");
     },
   };
 }
@@ -99,7 +144,7 @@ export function createRpcTxSubmitter(options: RpcTxSubmitterOptions): RpcTxSubmi
       if (limiter && !limiter.tryConsume()) {
         throw new RateLimitError();
       }
-      const tx = Transaction.fromXDR(signedXdr, "base64");
+      const tx = TransactionBuilder.fromXDR(signedXdr, "") as Transaction;
       const res = await server.sendTransaction(tx);
       if (res.status === "ERROR") {
         throw new Error(

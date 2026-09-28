@@ -1,7 +1,15 @@
 import { Command } from "commander";
 import { Keypair } from "@stellar/stellar-sdk";
 import type { Network } from "@x402/core/types";
+import { classifySettlement } from "vellar-sdk/x402-guards";
 import { decodeChallenge, type Requirement } from "./quote.js";
+
+export const CLI_PAY_EXIT_CODES = {
+  SETTLED: 0,
+  ERROR: 1,
+  NOT_SPENT: 3,
+  INDETERMINATE: 5,
+} as const;
 
 const RPC_URLS: Record<string, string> = {
   testnet: "https://soroban-testnet.stellar.org",
@@ -246,25 +254,69 @@ export function makePayCommand(): Command {
           // (e.g. settlement failed before reaching the success branch).
           const extensionResponses = paid.headers.get("extension-responses");
 
-          if (paid.status !== 200) {
+          const outcome = classifySettlement(paid);
+
+          if (outcome.kind === "not-spent") {
             if (opts.json) {
               console.log(
-                JSON.stringify({ response: safeJsonParse(text), extensionResponses }, null, 2),
+                JSON.stringify(
+                  {
+                    outcome: "not-spent",
+                    retryable: true,
+                    reason: outcome.reason,
+                    response: safeJsonParse(text),
+                    extensionResponses,
+                  },
+                  null,
+                  2,
+                ),
               );
-              process.exit(1);
-              return;
+            } else {
+              console.error(`Not unlocked: settlement failed before submission (${outcome.reason})`);
+              console.error(text);
+              console.error(
+                "\n  Roughly one settle in three fails on testnet with an empty transaction field.\n" +
+                  "  An empty transaction means nothing was spent: retry, signing a fresh payload.",
+              );
             }
-            console.error(`Not unlocked: HTTP ${paid.status}`);
-            console.error(text);
-            console.error(
-              "\n  Roughly one settle in three fails on testnet with an empty transaction " +
-                "field.\n  An empty transaction means nothing was spent: retry, signing a " +
-                "fresh payload.\n  A non-empty transaction means fees were charged: do not retry.",
-            );
-            process.exit(1);
+            process.exit(CLI_PAY_EXIT_CODES.NOT_SPENT);
             return;
           }
 
+          if (outcome.kind === "indeterminate") {
+            const operatorMsg =
+              `The payment may have completed, but this could not be confirmed: ${outcome.reason}. ` +
+              `It was NOT retried, because retrying could pay a second time. ` +
+              (outcome.raw
+                ? `The server reported "${outcome.raw}", which is not a valid transaction hash — check the payer account on-chain before paying again.`
+                : `Check the payer account on-chain before paying again.`);
+
+            if (opts.json) {
+              console.log(
+                JSON.stringify(
+                  {
+                    outcome: "indeterminate",
+                    retryable: false,
+                    reason: outcome.reason,
+                    raw: outcome.raw,
+                    message: operatorMsg,
+                    response: safeJsonParse(text),
+                    extensionResponses,
+                  },
+                  null,
+                  2,
+                ),
+              );
+            } else {
+              console.error(`Not unlocked: HTTP ${paid.status}`);
+              console.error(text);
+              console.error(`\n  ${operatorMsg}`);
+            }
+            process.exit(CLI_PAY_EXIT_CODES.INDETERMINATE);
+            return;
+          }
+
+          // outcome.kind === "settled"
           const body = safeJsonParse(text);
 
           if (opts.json) {
@@ -272,16 +324,16 @@ export function makePayCommand(): Command {
             return;
           }
 
-          const settlement = (body as { settlement?: { transaction?: string } } | null)?.settlement;
-          if (settlement?.transaction) {
-            console.error(`Payer:      ${keypair.publicKey()}`);
-            console.error(`Paid:       ${price} base units of ${chosen.asset ?? "?"}`);
-            console.error(`Settlement: ${settlement.transaction}`);
-            if (extensionResponses) console.error(`Extensions: ${extensionResponses}`);
-            console.error("---");
-          }
+          console.error(`Payer:      ${keypair.publicKey()}`);
+          console.error(`Paid:       ${price} base units of ${chosen.asset ?? "?"}`);
+          console.error(`Settlement: ${outcome.transaction}`);
+          if (extensionResponses) console.error(`Extensions: ${extensionResponses}`);
+          console.error("---");
           console.log(text);
         } catch (err) {
+          if (err instanceof Error && err.message.startsWith("exit:")) {
+            throw err;
+          }
           console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
           process.exit(1);
         }

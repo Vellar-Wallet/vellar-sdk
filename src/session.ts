@@ -1,5 +1,5 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
-import type { WalletSession } from "./types";
+import type { Network, WalletSession } from "./types";
 
 // Session persistence seam (idea.md §6.1 WalletSessionStore). The store is a
 // vanilla zustand store so the web app (React) and the extension (background
@@ -14,9 +14,13 @@ export interface SessionStorageAdapter {
 
 export type SessionStatus = "loading" | "connected" | "disconnected";
 
+export type DisconnectReason = "explicit" | "corrupt_storage" | "network_mismatch";
+
 export interface SessionState {
   session: WalletSession | null;
   status: SessionStatus;
+  /** Observable reason when status is "disconnected", distinguishing empty from rejected sessions (#409). */
+  disconnectReason?: DisconnectReason | null;
   /** Begin a session (after wallet create/connect) and persist it. */
   start(session: WalletSession): Promise<void>;
   /** Update lastActiveAt on user activity and persist. No-op when disconnected. */
@@ -45,6 +49,19 @@ export interface CreateSessionStoreOptions {
    * `dispose()`.
    */
   refreshIntervalMs?: number;
+  /**
+   * Expected network for this client instance ("testnet" | "mainnet").
+   * When configured, `restore()` rejects any stored session whose network does
+   * not match, clearing storage and leaving status as disconnected (#409).
+   */
+  network?: Network;
+  /** Alias for `network`. */
+  expectedNetwork?: Network;
+  /**
+   * Callback invoked when a stored session is discarded due to a network mismatch (#409).
+   * Allows the UI to differentiate an empty session from a rejected session.
+   */
+  onSessionMismatch?: (rejectedSession: WalletSession, expectedNetwork: Network) => void;
 }
 
 export function isWalletSession(value: unknown): value is WalletSession {
@@ -96,10 +113,11 @@ export function createSessionStore(
   store = createStore<SessionState>((set, get) => ({
     session: null,
     status: "loading",
+    disconnectReason: null,
 
     async start(session) {
       await storage.save(session);
-      set({ session, status: "connected" });
+      set({ session, status: "connected", disconnectReason: null });
       // Begin periodic refresh only once connected (and only if configured).
       startRefresh();
     },
@@ -116,21 +134,31 @@ export function createSessionStore(
       await storage.clear();
       // Disconnect stops any in-flight refresh polling.
       stopRefresh();
-      set({ session: null, status: "disconnected" });
+      set({ session: null, status: "disconnected", disconnectReason: "explicit" });
     },
 
     async restore() {
       try {
         const stored = await storage.load();
         if (stored && isWalletSession(stored)) {
-          set({ session: stored, status: "connected" });
+          const expected = options.expectedNetwork ?? options.network;
+          if (expected && stored.network !== expected) {
+            // Session network mismatch (#409): discard the stale session,
+            // clear storage, and remain disconnected without throwing.
+            await storage.clear();
+            stopRefresh();
+            set({ session: null, status: "disconnected", disconnectReason: "network_mismatch" });
+            options.onSessionMismatch?.(stored, expected);
+            return;
+          }
+          set({ session: stored, status: "connected", disconnectReason: null });
           startRefresh();
         } else {
-          set({ session: null, status: "disconnected" });
+          set({ session: null, status: "disconnected", disconnectReason: null });
         }
       } catch {
         // Unreadable storage must not brick the app on startup.
-        set({ session: null, status: "disconnected" });
+        set({ session: null, status: "disconnected", disconnectReason: "corrupt_storage" });
       }
     },
 

@@ -60,9 +60,17 @@ is reported rather than half-attempted.
 > history and is visible in the process table. `VELLAR_SECRET` works too, and
 > keeps it off the command line.
 
-Roughly one testnet settlement in three fails with an empty `transaction` field,
-which means nothing was spent and a fresh attempt is safe. A non-empty
-`transaction` means fees were charged: do not retry.
+### Settlement Outcomes & Exit Codes
+
+`vellar pay` classifies settlement results using `classifySettlement` from `vellar-sdk/x402-guards` into three distinct outcomes with specific retry semantics:
+
+| Outcome | Exit Code | Behavior & Retry Semantics |
+| --- | --- | --- |
+| `settled` | `0` | Confirmed settlement with valid on-chain transaction hash. Unlocked content is output. |
+| `not-spent` | `3` | Positive evidence nothing reached the chain (empty `transaction` field, facilitator released fee reservation). Nothing was spent; safe to retry with a freshly signed payload. |
+| `indeterminate` | `5` | Payment may have completed or fees were charged (e.g. non-empty transaction on failure, unconfirmed state, or missing/malformed settle response). **Never auto-retry** (to avoid paying twice). The operator must check the payer account on-chain before attempting to pay again. |
+
+General argument, pre-signing validation, or transport errors exit with code `1`.
 
 ### `vellar inspect <tx-hash>`
 

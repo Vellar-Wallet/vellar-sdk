@@ -197,6 +197,30 @@ if (!health.reachable) {
 `{ reachable: true, latencyMs } | { reachable: false, error }` result, timing
 out after `timeoutMs` (default 5000ms) so a hung endpoint can't block you.
 
+### Multi-endpoint RPC configuration
+
+For read-heavy operations such as transaction status polling (`createRpcTxStatusReader`),
+you can configure a prioritized list of fallback RPC endpoints. If the primary endpoint
+times out or returns an error, reads automatically fail over to the next endpoint in the list:
+
+```ts
+import { createRpcTxStatusReader } from "vellar-sdk/rpc";
+
+const reader = createRpcTxStatusReader({
+  rpcUrl: "https://soroban-rpc.mainnet.stellar.org",
+  fallbackRpcUrls: [
+    "https://mainnet.sorobanrpc.com",
+    "https://rpc-backup.stellar.org",
+  ],
+  timeoutMs: 3000, // optional per-endpoint timeout (ms)
+});
+
+const status = await reader.getStatus(txHash); // "success" | "failed" | "pending"
+```
+
+If all endpoints degrade or fail, the call rejects with the error returned from the
+final endpoint.
+
 ### Session lifecycle
 
 A session persists across reloads (keyId resumption) and can hold long-lived
