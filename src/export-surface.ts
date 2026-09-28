@@ -14,7 +14,7 @@ export const STABLE_V1_EXPORTS = [
   "BatchBalanceSizeError",
   "MAX_BATCH_BALANCE_SIZE",
   "createPasskeyKitConnector",
-  "createPaymentClient",
+  "createPaymentClient",`n  "tryParseTokenAmount",
   "createPolicyClient",
   "createPolicyFacade",
   "createAgentsFacade",
