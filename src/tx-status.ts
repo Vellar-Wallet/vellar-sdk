@@ -20,6 +20,7 @@ export interface WaitOptions {
   intervalMs?: number;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
+  maxReaderFailures?: number;
 }
 
 /** Polls until the transaction reaches a final state; throws TransactionTimeoutError on timeout. */
@@ -32,6 +33,8 @@ export async function waitForTransaction(
   const intervalMs = options.intervalMs ?? 2_000;
   const sleep = options.sleep ?? ((ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const now = options.now ?? Date.now;
+  const maxReaderFailures = options.maxReaderFailures ?? 3;
+  let consecutiveReaderFailures = 0;
 
   const deadline = now() + timeoutMs;
   for (;;) {
@@ -39,13 +42,15 @@ export async function waitForTransaction(
     try {
       status = await reader.getStatus(hash);
     } catch {
-      // Transient network drop mid-poll (e.g. the RPC reader threw): back off
-      // and keep polling instead of bailing — recovery eventually resolves.
-      // Only a drop that outlives the whole deadline surfaces as a timeout.
+      consecutiveReaderFailures += 1;
+      if (consecutiveReaderFailures >= maxReaderFailures) {
+        throw new TransactionReaderError(hash, consecutiveReaderFailures);
+      }
       if (now() + intervalMs > deadline) throw new TransactionTimeoutError(hash, timeoutMs);
       await sleep(intervalMs);
       continue;
     }
+    consecutiveReaderFailures = 0;
     if (status !== "pending") return status;
     if (now() + intervalMs > deadline) throw new TransactionTimeoutError(hash, timeoutMs);
     await sleep(intervalMs);

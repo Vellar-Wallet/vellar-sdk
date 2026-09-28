@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   TransactionTimeoutError,
+  TransactionReaderError,
   waitForTransaction,
   type TxStatus,
   type TxStatusReader,
@@ -66,7 +67,7 @@ describe("waitForTransaction", () => {
     expect(reader.getStatus).toHaveBeenCalledTimes(4);
   });
 
-  it("throws TransactionTimeoutError when the network stays down past the deadline", async () => {
+  it("throws TransactionReaderError when the network stays down past the failure threshold", async () => {
     let time = 0;
     const reader: TxStatusReader = {
       getStatus: vi.fn().mockRejectedValue(new Error("rpc down")),
