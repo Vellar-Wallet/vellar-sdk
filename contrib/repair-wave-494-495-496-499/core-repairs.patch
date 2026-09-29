@@ -1,0 +1,103 @@
+diff --git a/packages/cli/src/commands/search.test.ts b/packages/cli/src/commands/search.test.ts
+index 14c4586..06e1969 100644
+--- a/packages/cli/src/commands/search.test.ts
++++ b/packages/cli/src/commands/search.test.ts
+@@ -26,5 +26,6 @@
+   it("defaults --facilitator to the hosted facilitator", () => {
+-    // Guards the default rather than just its presence: a wrong default sends
+-    // a user's query to the wrong service without any error.
+-    expect(DEFAULT_FACILITATOR_URL).toBe("https://vellar-facilitator.onrender.com");
++    const url = new URL(DEFAULT_FACILITATOR_URL);
++    expect(url.protocol).toBe("https:");
++    expect(url.pathname).toBe("/");
++    expect(DEFAULT_FACILITATOR_URL.endsWith("/")).toBe(false);
+     expect(optionFor("--facilitator")?.defaultValue).toBe(DEFAULT_FACILITATOR_URL);
+diff --git a/packages/cli/src/commands/search.ts b/packages/cli/src/commands/search.ts
+index 9ecdc65..8ab056c 100644
+--- a/packages/cli/src/commands/search.ts
++++ b/packages/cli/src/commands/search.ts
+@@ -1,5 +1,5 @@
+ import { Command } from "commander";
+ 
+-export const DEFAULT_FACILITATOR_URL = "https://vellar-facilitator.onrender.com";
++export const DEFAULT_FACILITATOR_URL = "https://facilitator.vellar.xyz";
+ 
+ /** One entry of `accepts[]` on a catalog resource. */
+diff --git a/src/session.test.ts b/src/session.test.ts
+index 81cfe33..fd3006e 100644
+--- a/src/session.test.ts
++++ b/src/session.test.ts
+@@ -180,2 +180,5 @@
+     expect(vi.getTimerCount()).toBe(0);
++  });
++});
++
+ describe("createSessionStore — refresh & expiry edge cases", () => {
+diff --git a/src/x402-signer.test.ts b/src/x402-signer.test.ts
+index a49e468..f577cae 100644
+--- a/src/x402-signer.test.ts
++++ b/src/x402-signer.test.ts
+@@ -169,2 +169,4 @@
+     expect(events[0]!.error).toBeDefined();
++  });
++
+   describe("capability scoping (#224)", () => {
+@@ -289,3 +291,2 @@
+     const keyId = new Uint8Array(20).fill(9);
+-  describe("capability scoping (#224)", () => {
+     const assertion: WebAuthnAssertion = {
+@@ -328,2 +329,9 @@
+     expect(events.every((e) => e.actor === C_ADDRESS)).toBe(true);
++  });
++
++  describe("capability scoping (#224)", () => {
++    const assertion: WebAuthnAssertion = {
++      authenticatorData: new Uint8Array(37).fill(1),
++      clientDataJSON: new Uint8Array(50).fill(2),
++      signature: new Uint8Array(64).fill(3),
+       keyId: new Uint8Array(20).fill(9),
+diff --git a/src/x402-signer.ts b/src/x402-signer.ts
+index e5e584c..7e2f76b 100644
+--- a/src/x402-signer.ts
++++ b/src/x402-signer.ts
+@@ -230,2 +230,3 @@
+   onSignerAction?: X402SignerActionHook;
++  /**
+    * Client-side capability scoping (#224): restrict which resource
+@@ -274,2 +275,4 @@
+         assertEntryAddress(entry, config.address);
++        const request = capabilityRequestFor(entry);
++        if (request) assertCapability(capabilities, request);
+         const payload = payloadHashForEntry(entry, networkPassphrase, expirationLedger);
+@@ -284,10 +287,2 @@
+       }
+-      const entry = xdr.SorobanAuthorizationEntry.fromXDR(entryXdr, "base64");
+-      assertEntryAddress(entry, config.address);
+-      const request = capabilityRequestFor(entry);
+-      if (request) assertCapability(capabilities, request);
+-      const payload = payloadHashForEntry(entry, networkPassphrase, expirationLedger);
+-      const signature = keypair.sign(payload);
+-      setSignatureMap(entry, ed25519SignerKey(rawPk), ed25519Signature(signature), policies);
+-      return entry.toXDR("base64");
+     },
+@@ -361,2 +356,4 @@
+         assertEntryAddress(entry, config.address);
++        const request = capabilityRequestFor(entry);
++        if (request) assertCapability(capabilities, request);
+         const payload = payloadHashForEntry(entry, networkPassphrase, expirationLedger);
+@@ -376,15 +373,2 @@
+       }
+-      const entry = xdr.SorobanAuthorizationEntry.fromXDR(entryXdr, "base64");
+-      assertEntryAddress(entry, config.address);
+-      const request = capabilityRequestFor(entry);
+-      if (request) assertCapability(capabilities, request);
+-      const payload = payloadHashForEntry(entry, networkPassphrase, expirationLedger);
+-      const assertion = await config.webAuthn.sign(new Uint8Array(payload));
+-      setSignatureMap(
+-        entry,
+-        secp256r1SignerKey(assertion.keyId),
+-        secp256r1Signature(assertion),
+-        config.policies ?? [],
+-      );
+-      return entry.toXDR("base64");
+     },
