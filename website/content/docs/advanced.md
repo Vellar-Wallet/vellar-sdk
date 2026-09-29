@@ -1,5 +1,10 @@
 # Advanced Usage
 
+> **Building a wallet?** This page covers the Vellar wallet SDK internals. If
+> you want to pay for Bazaar resources from an AI agent, see
+> [Agent Keys](./agent-tooling/agent-keys.md) and
+> [Spend Controls](./buyers/spend-controls.md) instead.
+
 `createVellarWallet` is the paved road. For custom flows, the package also exports
 the underlying building blocks it composes.
 
