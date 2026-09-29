@@ -11,7 +11,7 @@
 // Scenario documented in CONTRIBUTING.md (Testing → tx-rpc chaos test).
 //
 import { describe, expect, it } from "vitest";
-import { waitForTransaction, type TxStatus, type TxStatusReader } from "../src/tx-rpc";
+import { waitForTransaction, type TxStatus, type TxStatusReader } from "../../src/tx-status";
 
 /** A reader that simulates `dropCount` network failures, then serves `statuses`. */
 function droppingReader(dropCount: number, statuses: TxStatus[]): { reader: TxStatusReader; attempts: number[] } {
