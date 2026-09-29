@@ -51,56 +51,12 @@ A key restricted by both can pay for API calls all day, but cannot spend past it
 
 ## 1. Configure agentKeys
 
-`mint` and `revoke` are wallet-admin actions, so they are passkey-signed through an `agentKeys` runtime you wire to your `PasskeyKit`, exactly like [`policyAttach`](./policies.md). Without it, `wallet.agents` calls throw a clear error and the rest of the wallet still works.
-
-```ts
-const vellar = createVellarWallet({
-  network: "testnet",
-  appName: "My App",
-  kit,
-  sac,
-  backend,
-  isValidAddress,
-  agentKeys: {
-    // Resume the connected passkey without a prompt, when possible.
-    resume: (keyId) => resumeKitConnection(kit, keyId),
-
-    // Add the agent key as a policy-limited signer. Build the SignerLimits
-    // from the grants, passkey-sign, submit via your backend.
-    async addAgentKey({ publicKey, grants, expirationSeconds, store }) {
-      const { SignerStore, SignerKey } = await import("passkey-kit");
-      const limits = new Map(
-        grants.map((g) => [g.token, g.policies.map((p) => SignerKey.Policy(p))]),
-      );
-      const tx = await kit.addEd25519(
-        publicKey,
-        limits,
-        store === "temporary" ? SignerStore.Temporary : SignerStore.Persistent,
-        expirationSeconds,
-      );
-      const signed = (await kit.sign(tx)) ?? tx;
-      const { hash } = await backend.submitTransaction({
-        signedXdr: typeof signed === "string" ? signed : signed.toXDR(),
-        network: "testnet",
-      });
-      return { hash };
-    },
-
-    async removeAgentKey(publicKey) {
-      const { SignerKey } = await import("passkey-kit");
-      const tx = await kit.remove(SignerKey.Ed25519(publicKey));
-      const signed = (await kit.sign(tx)) ?? tx;
-      const { hash } = await backend.submitTransaction({
-        signedXdr: typeof signed === "string" ? signed : signed.toXDR(),
-        network: "testnet",
-      });
-      return { hash };
-    },
-  },
-});
-```
-
-The SDK stays free of a `passkey-kit` dependency by keeping this a seam, the same reason `policyAttach` is wired on the host side.
+`mint` and `revoke` are wallet-admin actions gated behind an `agentKeys`
+runtime you wire to `createVellarWallet` once. For the full wallet SDK
+integration — including the passkey-signed key-management wiring itself — see
+[Wallet API Reference](../api-reference.md). Without that runtime configured,
+`wallet.agents` calls throw a clear error and the rest of the wallet still
+works.
 
 ## 2. Mint the key
 
@@ -167,7 +123,7 @@ The blast radius, stated honestly: a compromised agent key can at worst spend up
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| `wallet.agents` calls throw a clear error | No `agentKeys` runtime was wired to `createVellarWallet` | Wire `resume`, `addAgentKey` and `removeAgentKey` as in step 1. The rest of the wallet works without it |
+| `wallet.agents` calls throw a clear error | No `agentKeys` runtime was wired to `createVellarWallet` | See [Wallet API Reference](../api-reference.md) to wire it. The rest of the wallet works without it |
 | `mint` fails | A grant named no policy; an unrestricted grant is deliberately not mintable through `wallet.agents` | Give every grant at least one policy contract id |
 | Agent payment rejected with `invalid_exact_stellar_payload_unsupported_credential_type` | `simulationSourceAccount` is the payer itself, so Soroban authorized with source-account credentials | Point `simulationSourceAccount` at a different funded `G...` account |
 | The key stopped working before `expiresAt` | It was revoked on-chain | Mint a new key. Revocation is permanent for that public key |

@@ -1,5 +1,8 @@
 # Policies
 
+Spending policies let you cap what an AI agent can spend — enforced on-chain
+so no code change or server compromise can override the limit.
+
 > On-chain rules that govern what a smart account can do. A spending-limit policy caps how much an agent can spend per window; a verified-only policy restricts it to contracts with verifiable source. Both are enforced by Stellar consensus, not by your code.
 
 By the end of this page you will have deployed a spending-limit policy, know what a fixed tumbling window means and why it implies a 2x edge case, understand the difference between verified and audited, and have smoke-tested the policy gateway with no wallet involved.
@@ -25,35 +28,11 @@ Neither is complete alone. Stack both on one agent key and you bound the amount 
 
 ## 1. Configure the policy gateway
 
-Pass `apiUrl` (your policy API gateway) to `createVellarWallet`. To *deploy* a policy you also pass a `policyAttach` runtime that signs `addPolicy` with the passkey.
-
-```ts
-const vellar = createVellarWallet({
-  network: "testnet",
-  appName: "My App",
-  kit,
-  sac,
-  backend,
-  isValidAddress,
-  // The hosted testnet policy gateway (same host as the wallet backend).
-  // Production: your own gateway.
-  apiUrl: "https://vellar-backend-production.up.railway.app",
-  policyAttach: {
-    // build kit.addPolicy(contractId), passkey-sign, submit via your backend
-    async attachPolicy(policyContractId) {
-      const tx = await kit.addPolicy(policyContractId);
-      const signed = await kit.sign(tx);
-      return backend.submitTransaction({ signedXdr: signed.toXDR(), network });
-    },
-    // optional: resume the passkey for a keyId without prompting
-    async resume(keyId) {
-      await kit.connectWallet({ keyId });
-    },
-  },
-});
-```
-
-Without `apiUrl`, `wallet.policies` throws. Without `policyAttach`, the read, generate and simulate calls still work, but `deploy()` throws a clear error.
+Pass `apiUrl` (your policy API gateway) to `createVellarWallet`. To *deploy* a
+policy you also pass a `policyAttach` runtime — see
+[Wallet API Reference](../api-reference.md) for passkey-specific setup.
+Without `apiUrl`, `wallet.policies` throws. Without `policyAttach`, the read,
+generate and simulate calls still work, but `deploy()` throws a clear error.
 
 ## 2. Smoke test the gateway
 
@@ -91,7 +70,7 @@ const policy = await vellar.policies.generate({
 // 3. (optional) dry-run the on-chain deploy, surfaces cost and errors, no submit
 const sim = await vellar.policies.simulate(policy.id);
 
-// 4. attach it to the wallet, the ONLY passkey prompt in this flow
+// 4. attach it to the wallet — see "What deploy() actually does" below
 const { contractId, attachTxHash } = await vellar.policies.deploy(policy.id);
 ```
 
@@ -128,7 +107,7 @@ It is attached exactly like a spending limit, through `wallet.policies`. Stack b
 | `policies.listTemplates()` | Available policy templates plus their on-chain enforcement |
 | `policies.generate(def)` | Validate a definition and produce the deployable artifacts |
 | `policies.simulate(id)` | Dry-run the deploy for the connected wallet (no submit) |
-| `policies.deploy(id)` | Instance deploy, passkey-sign `addPolicy`, record `{ contractId, attachTxHash }` |
+| `policies.deploy(id)` | Instance deploy, attach (see "What deploy() actually does" in step 3), record `{ contractId, attachTxHash }` |
 
 ## Your gateway
 
@@ -143,7 +122,7 @@ POST /policies/:id/deploy-instance
 POST /policies/deploy
 ```
 
-> **Note:** Instance deploys are funded by **your** sponsor account, server-side. A policy is inert until the passkey-signed attach lands.
+> **Note:** Instance deploys are funded by **your** sponsor account, server-side. A policy is inert until the attach lands — see "What deploy() actually does" in step 3.
 
 ## Honesty
 
@@ -154,7 +133,7 @@ Each template declares how it is **actually** enforced on-chain, as `enforcement
 | Symptom | Cause | Fix |
 | --- | --- | --- |
 | `wallet.policies` throws immediately | `apiUrl` was not configured on `createVellarWallet` | Pass `apiUrl` pointing at your policy gateway |
-| `deploy()` throws a clear error while `listTemplates`, `generate` and `simulate` work | `policyAttach` was not configured | Add the `policyAttach` runtime that builds `kit.addPolicy`, passkey-signs and submits |
+| `deploy()` throws a clear error while `listTemplates`, `generate` and `simulate` work | `policyAttach` was not configured | See [Wallet API Reference](../api-reference.md) for passkey-specific setup |
 | Policy deployed, but the agent is not limited | The policy is not named in the agent key's grants, so it never co-signs | Mint the agent key with that policy contract in the grant for the token (see [Agent keys](./agent-keys.md)) |
 | More than the cap moved in a short span | Expected: the window tumbles rather than slides, so up to 2x the cap can move around a boundary | Size the window for that worst case, or pair the limit with a cryptographic co-signer |
 
