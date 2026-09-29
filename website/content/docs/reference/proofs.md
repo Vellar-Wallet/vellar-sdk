@@ -5,9 +5,9 @@
 > independently on Horizon.
 
 By the end of this page you will have independently verified that Vellar settles
-real payments on Stellar testnet, that fees are paid by the facilitator and not
-the buyer, that the `upto` contract is reproducible from published source, and
-that the F11 security fix works exactly as claimed.
+real payments on Stellar testnet and mainnet, that fees are paid by the
+facilitator and not the buyer, that the `upto` contract is reproducible from
+published source, and that the F11 security fix works exactly as claimed.
 
 ## Prerequisites
 
@@ -150,6 +150,62 @@ These settlements are fee-bumped: `source_account` is a channel account from the
 pool and `fee_account` is the sponsor. The buyer's address appears in neither,
 which is the non-custodial property to check.
 
+## Mainnet settlements (stellar:pubnet)
+
+A mainnet facilitator is deployed at `https://vellar-facilitator-production.up.railway.app`
+and has settled real USDC payments on `stellar:pubnet`. Eleven confirmed
+settlements, 2026-09-17 to 2026-09-21, totaling roughly 3.6 USDC, all charged
+to the mainnet sponsor `GBB7PVDR642MJSALMD3PN4SAPZHUJP555XQMFJJNUH3AN33UQY7FVL3H`
+against the mainnet USDC SAC
+`CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75`. These are exact-scheme
+settlements — the same wire format verified against testnet above, now proven
+against pubnet.
+
+| # | Hash | Ledger |
+|---|---|---|
+| 1 | `7288cd138c5e2770784738b2903b3728f049f659d3d6da42e19976783edefef3` | 64473073 |
+| 2 | `b6898a10abebce5de92b9610fadfac470c48379bffdefb9ce81b581f4e0d3c07` | 64474688 |
+| 3 | `6ec03c83e5d7a45ed87603fae5dea18f4c205f65ff73e5fcef6614b606001275` | 64478864 |
+| 4 | `3b40e5b23d52388c7905b3a46b31c5e0b709e0b8a4a95125ac674937cbe37925` | 64500684 |
+| 5 | `237c91c3044dfc66e7498096637c10ce65041e7a744d9cd65a0cbc3f9d29c1f7` | 64507904 |
+| 6 | `09b24dc9fb78c5596cb780fee26c57bb17d5eee0e9cc7035ebae938e54752a14` | 64512734 |
+| 7 | `a2d6ee5eab785d6b5a5401028fa7ba414d8b2a6cac0a3568b3f8a8cf98f87f57` | 64517288 |
+| 8 | `babb0a72bcb94e80be61dff1fa56ec9a5ebd45c62caa139e03076ced5f55962f` | 64524041 |
+| 9 | `3401e34161883219abd3543752f19731fba39b31c108119add8138903ad0d742` | 64524446 |
+| 10 | `f5137a9cf90c39bd6680eb5dae3548a0ee2e2b0dffec059072e72882709cefe0` | 64524688 |
+| 11 | `4abe6af7e71acb3ceea0fa30a9649768e05d2efb67e04f573112e214a40db458` | 64541455 |
+
+Verify any one of them against **mainnet** Horizon — note the different host
+from every other command on this page:
+
+```bash
+curl -s "https://horizon.stellar.org/transactions/7288cd138c5e2770784738b2903b3728f049f659d3d6da42e19976783edefef3" \
+  | python3 -c \
+  "import json,sys; \
+  d=json.load(sys.stdin); \
+  print('successful:', d['successful']); \
+  print('ledger:', d['ledger']); \
+  print('fee_account:', d['fee_account']); \
+  print('fee_charged:', d['fee_charged'])"
+```
+
+Expected:
+
+```
+successful: True
+ledger: 64473073
+fee_account: GBB7PVDR642MJSALMD3PN4SAPZHUJP555XQMFJJNUH3AN33UQY7FVL3H
+fee_charged: 23565
+```
+
+`fee_account` is the mainnet sponsor, not the buyer — the same non-custodial
+property as every testnet settlement on this page, now shown with real funds.
+
+> **Note:** These are the only mainnet settlements claimed anywhere on this
+> site. "What is not proven here" below is updated accordingly: mainnet
+> settlement is no longer unproven, but everything else in that section still
+> is.
+
 ## Upto scheme settlements
 
 The `upto` scheme settles the actual metered amount rather than the signed
@@ -277,14 +333,74 @@ curl -s "https://horizon-testnet.stellar.org/transactions/a909e4748c83f55972d6ce
 > showing the hijack actually worked, "blocked" would be indistinguishable from
 > a settlement that broke for unrelated reasons.
 
+## Testnet traction
+
+Two independent sources report testnet usage, and they disagree by design, not
+by error — the gap tells you what the smaller number leaves out.
+
+The **Bazaar catalog** counts settlements only for resources tagged with the
+discovery extension. Sum `trust.settlements` across every entry and you get
+the number below, which you can reproduce yourself with no facilitator trust
+required beyond the read itself:
+
+```bash
+curl -s "https://vellar-facilitator-testnet-production.up.railway.app/discovery/resources?limit=100" \
+  | python3 -c \
+  "import json,sys; \
+  d=json.load(sys.stdin); \
+  items=d['items']; \
+  print('resources:', len(items)); \
+  print('sum of settlements:', sum((i.get('trust') or {}).get('settlements',0) for i in items))"
+```
+
+Expected:
+
+```
+resources: 20
+sum of settlements: 371
+```
+
+The **operator console**, at `vellar-admin-console-production.up.railway.app`,
+reads the full settlement audit log rather than the Bazaar-tagged subset — it
+counts every settlement type, including ones whose payload never carried the
+discovery extension and so never entered the catalog above. As of this
+writing it reports:
+
+- **390** total testnet settlements
+- **303** unique buyers
+- **4** sellers
+- Period: 2026-08-20 to 2026-09-29
+
+The console renders client-side, so it isn't a bare `curl` target the way the
+catalog endpoint is — check it in a browser to see the current numbers
+yourself. Both 371 and 390 are real: 371 is what the public catalog can prove
+about Bazaar-discoverable resources specifically, and 390 is the fuller
+operational count the smaller number is a subset of.
+
+## Ecosystem recognition
+
+Vellar is listed in the official Stellar developer documentation as a
+community x402 facilitator, under Build → Agentic Payments → x402.
+
+**stellar/stellar-docs PR #2836** — "docs: add Vellar x402 facilitator to
+Stellar ecosystem" — merged 2026-09-28.
+
+```bash
+# The merge is on GitHub, not Horizon — check the PR itself.
+# https://github.com/stellar/stellar-docs/pull/2836
+```
+
+Verify it yourself: open the PR, confirm the merged state and merge date.
+
 ## Upstream contributions
 
-Nothing merged at time of writing. Both PRs are signed and verified.
+Of the four contributions below, one has since merged — see Ecosystem
+recognition above. The other three remain open.
 
 | Contribution | Status |
 |---|---|
 | x402-foundation/x402 PR #3428, upto convergence spec, 349 lines | Open, signed, 0 reviews |
-| stellar/stellar-docs PR #2836, community facilitators section | Open, ready for review |
+| stellar/stellar-docs PR #2836, community facilitators section | **Merged** 2026-09-28 |
 | x402-foundation/x402 issue #3125, settle discards RPC status | Fix in progress via PR #3293 by wakqasahmed |
 | x402-foundation/x402 issue #3158, canonical client cannot sign for smart accounts | Open |
 
@@ -296,14 +412,19 @@ These claims exist in the codebase but cannot be verified from outside it:
 - The security audit findings and their resolution
 - The search evaluation, which is small and unmeasured (see
   [Honesty](./honesty.md))
-- Pubnet: a mainnet facilitator is deployed, but no mainnet settlement is
-  claimed anywhere on this site. Every hash here is Stellar testnet
+- The testnet operator console's 390/303/4 figures — real, but the console
+  renders client-side rather than serving a plain `curl`-able JSON endpoint,
+  so verifying them yourself means opening it in a browser, not copy-pasting a
+  command from this page
+- Mainnet volume beyond the 11 settlements above: those are the only mainnet
+  hashes claimed on this site, and 3.6 USDC total. Every other transaction
+  hash on this page is Stellar testnet
 
 ## When it fails
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| A hash returns 404 on Horizon | Querying pubnet Horizon rather than testnet | Every hash here is Stellar **testnet**; use `horizon-testnet.stellar.org` |
+| A hash returns 404 on Horizon | Querying the wrong network's Horizon | Every hash on this page is Stellar **testnet** (`horizon-testnet.stellar.org`) **except** the 11 in Mainnet settlements, which use `horizon.stellar.org` |
 | `fee_account` shows an address you do not recognise | Older settlements used earlier sponsors, and the F11 test used its own | Check it against the sponsor named in that section. The test is that it is never the buyer |
 | `stellar contract fetch` is not found | The Stellar CLI is not installed | Install it, or skip the contract check: every other command needs only curl and python3 |
 
