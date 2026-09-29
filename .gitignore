@@ -8,3 +8,9 @@ coverage/
 # product to the next person — name it *-tmp.mjs and it stays local.
 *-tmp.mjs
 .doc-snippets/
+
+# Scratch files from ad-hoc agent sessions (RFP context-pack Q&A, prompt
+# drafts) — not product, not documentation, stays local.
+answers.md
+questions.md
+build-prompt.md
