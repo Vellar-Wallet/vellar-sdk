@@ -77,11 +77,21 @@ describe("buildLlmsIndex", () => {
     expect(out).toContain(`${SITE_URL}/llms-full.txt`);
   });
 
-  it("lists every registry page by default", () => {
+  it("lists every non-hidden registry page by default", () => {
+    // The default source is DOC_SECTIONS, which excludes `hidden` pages (see
+    // docs-registry.ts) — those still build and resolve at their URL, just
+    // outside the sidebar and this index.
     const out = buildLlmsIndex();
-    for (const p of DOC_PAGES) {
+    for (const p of DOC_PAGES.filter((p) => !p.hidden)) {
       expect(out).toContain(`${SITE_URL}/docs/${p.slug}.md`);
     }
+  });
+
+  it("omits a hidden page from the default index", () => {
+    const hiddenPage = DOC_PAGES.find((p) => p.hidden);
+    expect(hiddenPage).toBeDefined();
+    const out = buildLlmsIndex();
+    expect(out).not.toContain(`${SITE_URL}/docs/${hiddenPage!.slug}.md`);
   });
 });
 

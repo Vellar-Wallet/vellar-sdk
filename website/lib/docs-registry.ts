@@ -16,6 +16,13 @@ export interface DocPage {
   tab: DocTabId;
   /** One-line summary — page <meta> description and the llms.txt index. */
   description: string;
+  /**
+   * Still statically generated and reachable at its URL, but left out of
+   * DOC_SECTIONS/getTabSections, so it doesn't appear in the sidebar. Use for
+   * a page that should stay live (existing links, search engines) without
+   * fronting the nav — e.g. a closed, dated event page.
+   */
+  hidden?: boolean;
 }
 
 // Ordered table of contents — drives the sidebar and next/prev.
@@ -73,12 +80,16 @@ export const DOC_PAGES: DocPage[] = [
     description: "Accept usage-based payments: the buyer authorizes a ceiling and only the actual usage settles." },
 
   // Agent tooling — the servers and editor tooling an agent developer wires
-  // up. Agent Keys and Policies are wallet-admin surfaces rather than x402
-  // tooling, so they sit under Reference — same demotion as the passkey
-  // wallet pages below, not featured here even though they're agent-facing.
+  // up, plus spending policies: how you cap what an agent can spend, a
+  // Vellar differentiator kept prominent here. Agent Keys stays demoted under
+  // Reference — it's wallet-admin key minting, not agent-facing spend
+  // control — same demotion as the passkey wallet pages there.
   { slug: "agent-tooling/mcp-payer", title: "MCP Payer", nav: "MCP payer",
     section: "Agent Tooling", tab: "guides",
     description: "An MCP server that lets an AI agent pay for x402 resources, with process-level and on-chain budget layers." },
+  { slug: "agent-tooling/policies", title: "Policies", nav: "Policies",
+    section: "Agent Tooling", tab: "guides",
+    description: "Deploy and attach spending-limit and verified-only policies enforced inside the wallet's __check_auth." },
   { slug: "agent-tooling/cli", title: "Vellar CLI", nav: "CLI",
     section: "Agent Tooling", tab: "guides",
     description: "Command-line tool for discovering, quoting, paying for, and inspecting x402 resources on Stellar." },
@@ -104,7 +115,7 @@ export const DOC_PAGES: DocPage[] = [
     description: "Trustlines, SEP-41 amounts, fee sponsorship, authorization entries, and G versus C accounts." },
 
   // Reference
-  { slug: "api-reference", title: "API Reference", nav: "createVellarWallet", section: "Reference", tab: "reference",
+  { slug: "api-reference", title: "API Reference", nav: "Wallet API Reference", section: "Reference", tab: "reference",
     description: "Configuration reference for createVellarWallet and the runtime seams it accepts." },
   { slug: "advanced", title: "Advanced Usage", nav: "Advanced", section: "Reference", tab: "reference",
     description: "Lower-level building blocks the SDK exports for custom transports and integrations." },
@@ -130,9 +141,7 @@ export const DOC_PAGES: DocPage[] = [
     description: "Every method on the wallet handle: create, connect, pay, balances, transaction status, and sessions." },
   { slug: "agent-tooling/agent-keys", title: "Agent Keys", nav: "Agent keys", section: "Reference", tab: "reference",
     description: "Mint scoped agent session keys bounded by on-chain policies, and revoke them remotely." },
-  { slug: "agent-tooling/policies", title: "Policies", nav: "Policies", section: "Reference", tab: "reference",
-    description: "Deploy and attach spending-limit and verified-only policies enforced inside the wallet's __check_auth." },
-  { slug: "security", title: "Security", nav: "Security", section: "Reference", tab: "reference",
+  { slug: "security", title: "Security", nav: "Wallet & SDK Security", section: "Reference", tab: "reference",
     description: "The wallet and SDK security model: no key custody, no silent signing, and the on-chain policy guarantees." },
 
   // Operators — running your own facilitator rather than the hosted instance.
@@ -167,13 +176,21 @@ export const DOC_PAGES: DocPage[] = [
     section: "Architecture", tab: "architecture",
     description: "The ranking pipeline, measured quality numbers, and the pre-mainnet evaluation plan." },
 
-  // Hackathon — a dated event page, kept last so it never fronts the docs.
+  // Hackathon — closed. Kept reachable at its URL (existing links, search
+  // engines) but hidden from the sidebar entirely rather than merely demoted.
   { slug: "hackathon", title: "Vellar × Stellar Hackathon", nav: "Hackathon", section: "Hackathon", tab: "reference",
-    description: "Hackathon tracks, judging criteria, and starter ideas for building on Vellar's x402 payment stack." },
+    description: "Hackathon tracks, judging criteria, and starter ideas for building on Vellar's x402 payment stack.",
+    hidden: true },
 ];
 
-/** Sections in sidebar order, derived from DOC_PAGES. */
-export const DOC_SECTIONS: { section: string; pages: DocPage[] }[] = DOC_PAGES.reduce(
+/**
+ * Sections in sidebar order, derived from DOC_PAGES. Excludes `hidden` pages
+ * — they still build and resolve at their URL (see DOC_PAGES / the catch-all
+ * route), just not in the sidebar.
+ */
+export const DOC_SECTIONS: { section: string; pages: DocPage[] }[] = DOC_PAGES.filter(
+  (page) => !page.hidden,
+).reduce(
   (acc, page) => {
     const existing = acc.find((s) => s.section === page.section);
     if (existing) existing.pages.push(page);
