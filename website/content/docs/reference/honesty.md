@@ -95,14 +95,21 @@ once the service recovers, with no change in the response shape.
 This is documented in [Search and
 Retrieval](../architecture/search-and-retrieval.md).
 
-## The catalog is ephemeral on the hosted instance
+## Catalog entries persist on the hosted instance; `ownerVerified` still resets
 
-The hosted instance has no persistent disk. The catalog resets on every
-restart, and `ownerVerified` data resets with it. A resource re-catalogs
-after its next settled payment, and `ownerVerified` self-heals the same way.
+The hosted instance has `CATALOG_DB_URL` configured (libSQL/Turso), so catalog
+entries and URL ownership bindings survive a restart — a resource's
+`trust.statsSource` reads `"persisted"` when its stats were restored rather
+than observed live by the current process, which is the normal state for an
+established entry there, not a fault.
 
-A payment still settles on-chain when the catalog is empty. Cataloging and
-settlement are independent.
+`ownerVerified` is the exception: it resets on every restart by design (it's
+computed fresh, not stored) and self-heals after the next settled payment,
+subject to a 15-minute cooldown.
+
+A payment still settles on-chain regardless of catalog or `ownerVerified`
+state. Cataloging, `ownerVerified`, and settlement are three independent
+concerns.
 
 ## Mainnet readiness
 

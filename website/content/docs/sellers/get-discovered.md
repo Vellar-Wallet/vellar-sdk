@@ -158,7 +158,30 @@ with, and a trust block the facilitator assembled from what it observed.
 | `settlements` | Count of observed on-chain settlements for this resource | Yes |
 | `uniquePayers` | Distinct accounts that have paid it | Yes |
 | `observedSettlements` | Settlements this process watched land itself | Yes, more reliable than `settlements` on restored entries |
-| `statsSource` | Provenance of the stats: `"observed"` (watched live by this process) or `"persisted"` (restored) | Yes, it tells you how much to trust the two counts above |
+| `statsSource` | Provenance of the stats: `"observed"` (watched live by this process) or `"persisted"` (restored from storage) | Yes, it tells you how much to trust the two counts above |
+
+`"observed"` is what you'll see on a resource settled since the current
+process started. `"persisted"` is what you'll see on the hosted instance for
+any entry that has survived a restart — its catalog is libSQL/Turso-backed, so
+this is the common case for an established listing there, not a sign anything
+is wrong:
+
+```json
+{
+  "settlements": 293,
+  "uniquePayers": 270,
+  "observedSettlements": 0,
+  "statsSource": "persisted",
+  "ownerVerified": false,
+  "verification": "unknown",
+  "acceptsVerification": "unknown"
+}
+```
+
+`ownerVerified` reads `false` here for a different reason than persistence: it
+resets on every restart by design (computed fresh, not stored) and self-heals
+after the next settlement, subject to a 15-minute cooldown — it is not tied to
+whether the surrounding entry was `"observed"` or `"persisted"`.
 | `ownerVerified` | The facilitator fetched the URL and found this `payTo` in the challenge | Yes, this is the signal |
 | `verification` | Always `"unknown"` | No |
 | `acceptsVerification` | Always `"unknown"` | No |

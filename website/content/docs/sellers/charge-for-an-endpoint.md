@@ -199,9 +199,10 @@ signal only. If `cataloged` is `false`, read the `reason` field:
 `invalid_tool_name`, or `cataloging_error`. Each one is explained in
 [Bazaar and discovery](../concepts/bazaar-and-discovery.md).
 
-> **Note:** The hosted catalog is ephemeral. There is no persistent disk, so
-> catalog entries and URL ownership bindings vanish when the service restarts. Your resource is re-cataloged after its next settled payment, and
-> `ownerVerified` self-heals after the next settlement, subject to a 15-minute
+> **Note:** The hosted catalog is durable — it has `CATALOG_DB_URL` configured
+> (libSQL/Turso), so your catalog entry and URL ownership binding survive a
+> restart. `ownerVerified` is the exception: it resets on every restart by
+> design and self-heals after your next settlement, subject to a 15-minute
 > cooldown.
 
 ## When it fails

@@ -541,16 +541,21 @@ Things a developer building against the hosted instance should know up front:
   saw failure rates as high as 1-in-3. Keep "sign fresh, retry once" as the
   correct client-side handling regardless — it costs nothing when nothing
   fails.
-- **The catalog is ephemeral.** The hosted instance has no persistent disk, so
-  catalog entries and URL ownership bindings vanish whenever the service
-  restarts. A resource is re-cataloged after its next settled payment, and
-  settlement itself is unaffected: a payment still settles on-chain when the
-  catalog is empty.
+- **Catalog entries are durable; `ownerVerified` is not.** The hosted instance
+  has `CATALOG_DB_URL` configured (libSQL/Turso), so catalog entries and URL
+  ownership bindings survive a restart — check `statsSource` on a resource's
+  `trust` block: `"persisted"` means those stats were restored rather than
+  observed live by the current process. `ownerVerified` is the one field that
+  still resets on every restart and self-heals from the next settled payment
+  (subject to a 15-minute cooldown); it is computed fresh rather than stored,
+  by design. Settlement itself is unaffected either way: a payment still
+  settles on-chain even against an empty or freshly-reset catalog.
 - **URL ownership is trust-on-first-use.** The first settled payment binds a
   resource URL to its `payTo` (then verified against the URL's own 402
   challenge). A different `payTo` settling the same URL is refused from the
-  catalog — and on the hosted instance that first-settler race reopens after
-  each restart.
+  catalog. With `CATALOG_DB_URL` configured, that binding now survives a
+  restart on the hosted instance — the first-settler race no longer reopens
+  the way it used to on an in-memory catalog.
 - **Rate and size limits.** 60 requests/min per IP; `/verify` and `/settle`
   bodies are capped at 32 KiB; `/health` is exempt from the rate limit.
 - **Settlement can be refused.** `/settle` returns

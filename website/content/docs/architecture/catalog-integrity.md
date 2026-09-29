@@ -109,18 +109,20 @@ limits how far this goes, since the attacker's address will not appear in the
 402 challenge your resource actually serves, but the binding itself is theirs
 until the entry is cleared.
 
-On the hosted instance there is no persistent disk, so entries and ownership
-bindings vanish whenever the service restarts. That has a double-edged
-consequence: a stale or hostile binding does not last forever, but the
-first-settler race reopens after each restart rather than being won once. A
-resource re-catalogs after its next settled payment, and `ownerVerified`
+The hosted instance has `CATALOG_DB_URL` configured (libSQL/Turso), so entries
+and ownership bindings now survive a restart there rather than resetting. That
+changes the earlier trade-off: a hostile binding no longer clears itself on
+the next redeploy, so being first to settle matters more, not less, on the
+hosted instance today. `ownerVerified` is still computed fresh rather than
+stored, so it resets on every restart independent of the binding itself, and
 self-heals after the next settlement with a 15-minute cooldown.
 
 > ⚠️ **Be first to settle for your own URL.** The binding goes to the first
 > settlement observed, not to the party who registered, deployed, or owns the
-> domain. On the hosted instance that race reruns after each restart, so a
-> seller who wants a durable binding should run their own facilitator instance
-> with a persistent disk.
+> domain. With the hosted instance's catalog now durable, a hostile or stale
+> binding will not clear itself on the next restart the way it once did — a
+> seller who wants full control over when a binding resets should still run
+> their own facilitator instance.
 
 ## Metadata protections
 
@@ -168,7 +170,7 @@ this text have a separate concern, prompt injection, covered in
 | `ownerVerified` stays `false` permanently | The advertised URL is `localhost` or `http`, which fails requirement 1 before a socket opens | Advertise a public `https` URL that serves the 402 challenge |
 | A `serviceName` is missing from the entry | Non-ASCII characters, so the field was silently dropped rather than transliterated | Use printable ASCII, 64 characters or fewer |
 | `schema_validation_failed` in the `extension-responses` header | An invalid or unsafe `routeTemplate` was dropped | Fix the template shape. The settlement itself was unaffected |
-| The catalog is empty after a restart | The hosted instance has no persistent disk, so entries and bindings reset when the service restarts | Re-catalog with a settled payment, or run your own instance with persistence |
+| `ownerVerified` reads `false` right after a restart | It resets by design on every restart, independent of the (now durable) catalog entry itself | Wait for the next settled payment; it self-heals after a 15-minute cooldown |
 
 ## Next steps
 

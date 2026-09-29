@@ -35,11 +35,22 @@ Both mean the same thing: the transaction was never submitted, nothing was spent
 
 The facilitator already retries internally (two attempts, 6 seconds apart) before returning the error, so what you receive is the verdict after those retries.
 
-### 2. The catalog is ephemeral
+### 2. Catalog entries are durable on the hosted instance; `ownerVerified` is not
 
-The hosted instance has no persistent disk, so the catalog resets whenever the service restarts (a redeploy, for example).
+By default (`CATALOG_DB_URL` unset) the catalog is in-memory and resets on
+every restart — that's the behavior you get running your own instance out of
+the box. The hosted instance has `CATALOG_DB_URL` configured (libSQL/Turso),
+so catalog entries and URL ownership bindings survive a restart there. Check a
+resource's `trust.statsSource`: `"persisted"` means those stats were restored
+from storage rather than observed live by the current process — that's the
+normal, expected state for a long-lived entry on the hosted instance, not a
+sign of data loss.
 
-A resource re-catalogs after its next settled payment, and `ownerVerified` resets and self-heals the same way. Settlement is independent of cataloguing: a payment still settles on-chain when the catalog is empty.
+`ownerVerified` is the one field that still resets on every restart, by
+design: it's computed fresh rather than stored, and self-heals from your next
+settled payment (subject to a 15-minute cooldown). Settlement is independent
+of cataloguing either way: a payment still settles on-chain regardless of
+catalog or `ownerVerified` state.
 
 ### 3. Your first settlement writes permanently
 
