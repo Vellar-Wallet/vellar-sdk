@@ -127,7 +127,7 @@ export const DOC_PAGES: DocPage[] = [
   { slug: "reference/explorer", title: "The Explorer", nav: "Explorer", section: "Reference", tab: "reference",
     description: "How the independent Stellar indexer classifies x402 payments and what the attribution numbers mean." },
   { slug: "reference/license", title: "License and Versioning", nav: "License", section: "Reference", tab: "reference",
-    description: "SDK MIT, facilitator open-source, versioning policy, and changelog location." },
+    description: "SDK Apache-2.0, facilitator open-source, versioning policy, and changelog location." },
   // The passkey wallet: kept under Reference rather than featured. Existing
   // pages link to both of these, so the slugs must not move.
   { slug: "wallet-methods", title: "Wallet Methods", nav: "Wallet methods", section: "Reference", tab: "reference",

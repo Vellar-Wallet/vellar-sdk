@@ -14,7 +14,7 @@ covers the piece they are actually taking.
 
 | Component | License | Source |
 | --- | --- | --- |
-| `vellar-sdk` (published on npm) | MIT | [github.com/Vellar-Wallet/vellar-sdk](https://github.com/Vellar-Wallet/vellar-sdk) |
+| `vellar-sdk` (published on npm) | Apache-2.0 | [github.com/Vellar-Wallet/vellar-sdk](https://github.com/Vellar-Wallet/vellar-sdk) |
 | The Vellar facilitator | Apache-2.0 | [github.com/Vellar-Wallet/vellar-facilitator](https://github.com/Vellar-Wallet/vellar-facilitator) |
 | The Vellar explorer | Apache-2.0 | [github.com/Vellar-Wallet/vellar-explorer](https://github.com/Vellar-Wallet/vellar-explorer) |
 
