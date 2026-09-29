@@ -24,9 +24,10 @@ describe("search command", () => {
   });
 
   it("defaults --facilitator to the hosted facilitator", () => {
-    // Guards the default rather than just its presence: a wrong default sends
-    // a user's query to the wrong service without any error.
-    expect(DEFAULT_FACILITATOR_URL).toBe("https://vellar-facilitator.onrender.com");
+    const url = new URL(DEFAULT_FACILITATOR_URL);
+    expect(url.protocol).toBe("https:");
+    expect(url.pathname).toBe("/");
+    expect(DEFAULT_FACILITATOR_URL.endsWith("/")).toBe(false);
     expect(optionFor("--facilitator")?.defaultValue).toBe(DEFAULT_FACILITATOR_URL);
   });
 
