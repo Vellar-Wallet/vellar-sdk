@@ -12,8 +12,9 @@ retrying is safe, and which errors mean money has already moved on-chain.
   then settle)
 - A wallet with `x402` configured, or a client talking directly to
   `https://vellar-facilitator-testnet-production.up.railway.app`
-- The facilitator advertises `stellar:testnet` only, so every code below is
-  observed on testnet
+- The codes below are observed against the testnet facilitator. The mainnet
+  deployment returns the same codes, with the differences noted under
+  [Testnet-specific behavior](#testnet-specific-behavior)
 
 ## How to read an error
 
@@ -151,8 +152,7 @@ characters, and tags follow the same ASCII rule.
 
 ## Testnet-specific behavior
 
-The facilitator advertises `stellar:testnet` only, and some refusals behave
-differently there.
+Some refusals behave differently on the testnet deployment than on mainnet.
 
 Four spend-control refusals, `rate_limited_payto`, `rate_limited_url`,
 `spend_ceiling`, and `unbound_pool_exhausted`, are logged as would-reject on
@@ -168,8 +168,9 @@ the one `settlement_refused` reason you can actually observe on testnet.
 > `503 {"error":"settlement_refused","reason":"spend_ceiling"}` body rather than
 > assuming a live testnet run proved the path works.
 
-There is no mainnet deployment. No mainnet settled hash exists and none is
-claimed.
+A mainnet facilitator is deployed alongside the testnet one, and each carries
+its own kill switch. A paused facilitator answers an otherwise-valid `/settle`
+with `503 service_paused` — see [the kill switch](../facilitator.md#the-kill-switch).
 
 ## When it fails
 
@@ -177,6 +178,7 @@ claimed.
 | --- | --- | --- |
 | A paid route returns `200` to `curl -I` | `HEAD` carries no payment challenge, so a correctly wired route looks broken | Debug with `GET`, not `HEAD` |
 | Repeated settles come back with an empty `transaction` field | Transient Soroban RPC `TRY_AGAIN_LATER` | Sign a fresh payload and retry once. Nothing was spent, and a cached payload will not work because signatures expire in ledgers. |
+| `503 service_paused` on settle | The operator paused that facilitator with the kill switch. Nothing was spent — the refusal happens before any balance or spend logic runs | Retry later. `/health` still reports `status: ok` on a paused service, so it cannot be used to detect this |
 
 ## Next steps
 

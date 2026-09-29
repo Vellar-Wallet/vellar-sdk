@@ -141,7 +141,7 @@ curl -s "https://horizon-testnet.stellar.org/transactions/be72877332bbd7f8d38511
 # → { "successful": true, "ledger": 4252896 }
 ```
 
-Both are testnet. There is no mainnet deployment: the facilitator advertises `stellar:testnet` only, no mainnet settled hash exists, and none is claimed.
+Both are testnet. A mainnet facilitator is deployed and advertises `stellar:pubnet`, but no mainnet `upto` settled hash exists and none is claimed here.
 
 You can also watch settlements classified off the ledger at [explorer.vellar.xyz](https://explorer.vellar.xyz).
 

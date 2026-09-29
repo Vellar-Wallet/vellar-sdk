@@ -250,13 +250,12 @@ Two issues are filed, one of which has attracted a community fix.
 
 ## What is not yet done
 
-- **No mainnet deployment exists.** There is no pubnet facilitator.
-- The facilitator advertises `stellar:testnet` only, which you can confirm from
-  the `/supported` call above.
 - **No mainnet settled hash exists, and none is claimed.** Every hash on this
-  page is Stellar testnet.
-- The e2e suite is unrun on pubnet, for the same reason: there is nothing there
-  to run it against.
+  page is Stellar testnet. A mainnet facilitator is now deployed and advertises
+  `stellar:pubnet`, but nothing on this page was settled through it.
+- The e2e suite is unrun on pubnet, so the conformance result above is a
+  testnet measurement only.
+- The spending-limit policy contract has not had a mainnet security audit.
 
 ## When it fails
 

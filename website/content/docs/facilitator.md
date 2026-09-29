@@ -504,6 +504,15 @@ this — it does not restart the service or change environment variables.
 The two deployments have two separate switches. Pausing mainnet has no effect on
 testnet.
 
+> **Note:** A paused facilitator is not detectable from `/health`, which still
+> reports `status: ok` because the process is healthy by design. It is also not
+> detectable by posting a malformed `/settle` body: payload validation runs
+> first, so a bad request returns `400 invalid_payload` on a paused service just
+> as it does on a running one. `503 service_paused` appears only for a request
+> that would otherwise have settled. Treat the admin console as the source of
+> truth for switch state, and handle `503 service_paused` as a retryable
+> condition in client code rather than probing for it.
+
 ## Limits and operational caveats
 
 Things a developer building against the hosted instance should know up front:

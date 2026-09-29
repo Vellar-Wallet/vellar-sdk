@@ -296,8 +296,8 @@ These claims exist in the codebase but cannot be verified from outside it:
 - The security audit findings and their resolution
 - The search evaluation, which is small and unmeasured (see
   [Honesty](./honesty.md))
-- Pubnet: no mainnet settlement exists, and no mainnet hash is claimed anywhere
-  on this site
+- Pubnet: a mainnet facilitator is deployed, but no mainnet settlement is
+  claimed anywhere on this site. Every hash here is Stellar testnet
 
 ## When it fails
 
