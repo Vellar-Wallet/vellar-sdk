@@ -72,14 +72,10 @@ export const DOC_PAGES: DocPage[] = [
     nav: "Upto metered payments", section: "Sellers", tab: "guides",
     description: "Accept usage-based payments: the buyer authorizes a ceiling and only the actual usage settles." },
 
-  // Agent tooling — the keys, policies, servers and editor tooling an agent
-  // developer wires up.
-  { slug: "agent-tooling/agent-keys", title: "Agent Keys", nav: "Agent keys",
-    section: "Agent Tooling", tab: "guides",
-    description: "Mint scoped agent session keys bounded by on-chain policies, and revoke them remotely." },
-  { slug: "agent-tooling/policies", title: "Policies", nav: "Policies",
-    section: "Agent Tooling", tab: "guides",
-    description: "Deploy and attach spending-limit and verified-only policies enforced inside the wallet's __check_auth." },
+  // Agent tooling — the servers and editor tooling an agent developer wires
+  // up. Agent Keys and Policies are wallet-admin surfaces rather than x402
+  // tooling, so they sit under Reference — same demotion as the passkey
+  // wallet pages below, not featured here even though they're agent-facing.
   { slug: "agent-tooling/mcp-payer", title: "MCP Payer", nav: "MCP payer",
     section: "Agent Tooling", tab: "guides",
     description: "An MCP server that lets an AI agent pay for x402 resources, with process-level and on-chain budget layers." },
@@ -132,6 +128,10 @@ export const DOC_PAGES: DocPage[] = [
   // pages link to both of these, so the slugs must not move.
   { slug: "wallet-methods", title: "Wallet Methods", nav: "Wallet methods", section: "Reference", tab: "reference",
     description: "Every method on the wallet handle: create, connect, pay, balances, transaction status, and sessions." },
+  { slug: "agent-tooling/agent-keys", title: "Agent Keys", nav: "Agent keys", section: "Reference", tab: "reference",
+    description: "Mint scoped agent session keys bounded by on-chain policies, and revoke them remotely." },
+  { slug: "agent-tooling/policies", title: "Policies", nav: "Policies", section: "Reference", tab: "reference",
+    description: "Deploy and attach spending-limit and verified-only policies enforced inside the wallet's __check_auth." },
   { slug: "security", title: "Security", nav: "Security", section: "Reference", tab: "reference",
     description: "The wallet and SDK security model: no key custody, no silent signing, and the on-chain policy guarantees." },
 
