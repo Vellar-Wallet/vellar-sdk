@@ -1,23 +1,87 @@
 # Quickstart
 
-> Go from zero to a working passkey wallet with a settled x402 payment in five
-> minutes, using the hosted testnet backend.
+> Go from zero to a settled x402 payment in under two minutes, from a
+> terminal, with no wallet setup and no browser.
 
-By the end of this page you will have created a passkey wallet, reconnected to
-it, sent a payment, and paid for an x402 resource — all against stellar:testnet
-with no backend setup.
+By the end of this page you will have searched the Bazaar, paid for a
+resource from the command line, and know where to go next to list your own
+endpoint or build a passkey wallet.
 
 ## Prerequisites
 
 - Node.js 18 or later
-- A modern browser with passkey support (Chrome, Safari, Firefox, Edge)
-- npm or pnpm
+- A funded Stellar testnet secret key (`S...`) — see
+  [Sign and Pay](../buyers/sign-and-pay.md) if you need one
 
 > **Note:** Everything here runs on stellar:testnet. No real money, no mainnet.
-> The hosted backend at `https://vellar-backend-production.up.railway.app` handles fee
-> sponsorship so your wallet needs no XLM.
 
 ## 1. Install
+
+```sh
+npm install -g vellar-cli
+```
+
+## 2. Search the Bazaar
+
+```sh
+vellar search "quote generation"
+```
+
+Each result is a real payable resource — its `payTo`, its price, and how many
+agents have already paid it — with no hardcoded URL required.
+
+## 3. Pay for a resource
+
+```sh
+vellar pay <url> \
+  --secret-file ./key.txt \
+  --network testnet \
+  --max 1000000
+```
+
+`--max` is a hard ceiling in the asset's base units: the payment is refused,
+unsigned, if the price exceeds it. On success you get the unlocked content and
+a settlement transaction hash you can verify on Horizon. See the
+[CLI guide](../agent-tooling/cli.md) for `quote` (check price without paying)
+and `inspect` (look up a settlement afterwards).
+
+## 4. List your own endpoint
+
+The same facilitator that just verified and settled your payment can do the
+same for an API you run. Once your endpoint declares the Bazaar discovery
+extension, the first settled payment against it catalogs it automatically —
+no registration step. See
+[Charge for an endpoint](../sellers/charge-for-an-endpoint.md) to add a
+payment gate to a route you already have.
+
+## When it fails
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `Refused: price N exceeds --max M` | The ceiling is checked before signing | Raise `--max`, or pick a cheaper resource |
+| `Error: provide --secret-file ...` | No secret was supplied by flag, file, or `VELLAR_SECRET` | Supply one — see [Sign and Pay](../buyers/sign-and-pay.md) |
+| `Could not build the payment` | Usually no trustline to the asset, or an empty balance | Add the trustline and fund the account |
+
+See the [CLI guide](../agent-tooling/cli.md#when-it-fails) for the full list.
+
+## Next steps
+
+- [Discover services](../buyers/discover-services.md) — more on searching and
+  filtering the Bazaar
+- [Policies](../agent-tooling/policies.md) — cap what an agent can spend,
+  enforced on-chain
+- [Charge for an endpoint](../sellers/charge-for-an-endpoint.md) — get your
+  own API discovered and paid
+- [Vellar CLI](../agent-tooling/cli.md) — the full command reference
+
+## Building a passkey wallet
+
+Everything above pays from a plain funded keypair. If you're building a
+consumer-facing app and want passkey-based smart accounts instead — no seed
+phrase, fee-sponsored submission — this section walks through creating one and
+sending a payment from code, using the hosted testnet backend.
+
+### 1. Install
 
 Install [`vellar-sdk`](https://www.npmjs.com/package/vellar-sdk) with its
 Stellar peer and the passkey engine you pass in as `kit`:
@@ -26,7 +90,7 @@ Stellar peer and the passkey engine you pass in as `kit`:
 npm install vellar-sdk @stellar/stellar-sdk passkey-kit
 ```
 
-## 2. Create the client
+### 2. Create the client
 
 ```ts
 import { PasskeyKit, SACClient } from "passkey-kit";
@@ -61,7 +125,7 @@ wallet wasm hash, and native-token contract id, so there are no magic values to
 look up. `createHttpWalletBackend` is the ready-made client for the hosted
 gateway.
 
-## 3. Create a wallet
+### 3. Create a wallet
 
 Prompts the passkey once, registers the credential, and deploys the smart
 account.
@@ -74,7 +138,7 @@ console.log(session.accountId); // "C..." — the smart-account address
 The `C...` address is a Soroban smart-contract account — not a classic keypair
 account — which is what lets it carry on-chain policies.
 
-## 4. Reconnect a returning user
+### 4. Reconnect a returning user
 
 ```ts
 const session = await vellar.connect();
@@ -83,7 +147,7 @@ const session = await vellar.connect();
 If you persisted the session's `keyId` from a previous create or connect,
 reconnect can resume without the WebAuthn discovery prompt.
 
-## 5. Send a payment
+### 5. Send a payment
 
 Builds and **simulates** first, so errors such as insufficient balance surface
 *before* the passkey prompt. Then the passkey signs and the transaction is
@@ -106,10 +170,9 @@ console.log("submitted:", hash);
 Amounts are in the token's base units as a `bigint` — for XLM that means
 stroops, where 1 XLM is 10,000,000 stroops (7 decimals).
 
-## 6. Pay for an x402 resource
+### 6. Pay for an x402 resource from the wallet
 
-The same wallet can pay for HTTP-402 protected APIs. This is the agent payment
-flow.
+The same wallet can pay for HTTP-402 protected APIs directly from code.
 
 ```ts
 const { response, paid, settlement } = await vellar.x402.fetch(
@@ -133,7 +196,7 @@ throw `X402NotConfiguredError`.
 > produces a valid signature but no deployed facilitator currently accepts it.
 > Build on createSessionKeySigner for x402 payments.
 
-## When it fails
+### When the wallet quickstart fails
 
 | Symptom | Cause | Fix |
 |---|---|---|
@@ -142,12 +205,5 @@ throw `X402NotConfiguredError`.
 | `NoUsablePaymentOptionError` | Facilitator does not advertise areFeesSponsored | Use the Vellar facilitator URL, which sponsors fees |
 | Settlement fails with empty transaction | Soroban RPC transient error | Sign a fresh payload and retry once |
 
-## Next steps
-
-- [Pay for a resource](../buyers/pay-for-a-resource.md) — the full x402 buyer
-  flow with spend controls
-- [Agent keys](../agent-tooling/agent-keys.md) — give an agent a scoped session
-  key with an on-chain budget
-- [Charge for an endpoint](../facilitator.md) — add a payment
-  gate to your API
-- [How it works](./how-it-works.md) — what happened under the hood
+See [Wallet API Reference](../api-reference.md) for the full config, and
+[How it works](./how-it-works.md) for what happens under the hood.

@@ -1,16 +1,17 @@
 # How It Works
 
-> Vellar combines passkey-based smart accounts with a hosted x402 payment
-> facilitator. This page explains what happens under the hood when a user
-> creates a wallet and makes a payment.
+> Vellar runs a hosted x402 payment facilitator with Bazaar discovery on
+> Stellar. This page explains the payment loop step by step, how agent
+> spending controls fit in, and — for apps that want one — how the optional
+> passkey smart wallet works.
 
-By the end of this page you will understand the passkey-to-smart-account flow,
-why submission goes through your backend, and how the payment loop works from a
-signed auth entry to an on-chain settlement.
+By the end of this page you will understand how the payment loop works from a
+402 challenge to an on-chain settlement and an auto-cataloged listing, and how
+on-chain spending controls bound what an agent can do.
 
 ## The four participants
 
-Every Vellar transaction involves four parties. Keep these straight — confusion
+Every Vellar payment involves four parties. Keep these straight — confusion
 here causes most auth entry mistakes.
 
 | Participant | What they are | What they hold |
@@ -20,7 +21,65 @@ here causes most auth entry mistakes.
 | Facilitator | Vellar's hosted service | XLM for fees. Never holds buyer funds. |
 | Token contract | The SEP-41 asset's Stellar Asset Contract | The on-chain asset |
 
-## Passkeys to smart accounts
+## The payment loop
+
+When a buyer pays an x402 resource, this is what happens step by step:
+
+1. **Request the resource.** The client makes an ordinary HTTP request to a
+   paid endpoint.
+2. **Receive the 402 challenge.** The resource server answers with `402 Payment
+   Required` plus payment requirements — amount, asset, recipient, network.
+3. **Build the transfer.** The client builds the SEP-41
+   `transfer(from = payer, to = payTo, amount)`.
+4. **Sign the auth entry.** The Soroban authorization entry is signed with the
+   payer's key, producing V1 (`sorobanCredentialsAddress`) credentials in the
+   format the exact scheme expects.
+5. **Retry with the payment header.** The client repeats the request carrying
+   the `PAYMENT-SIGNATURE` header.
+6. **Verify and settle.** The facilitator verifies by re-simulation — which for
+   a policy-governed smart account also runs `__check_auth`, and therefore the
+   budget policy — then settles on-chain and sponsors the fee.
+7. **Auto-catalog.** A settled payment whose resource declared the Bazaar
+   discovery extension is cataloged automatically — no separate registration
+   step. The next agent that searches finds it.
+
+Because verification re-simulates, an over-budget or wrong-token payment is
+rejected *before* it settles. The [CLI](../agent-tooling/cli.md) and the
+[MCP payer](../agent-tooling/mcp-payer.md) both run this loop from a plain
+funded keypair — no smart account or passkey required.
+
+## Agent spending controls
+
+An agent's spending can be bounded two ways, and they compose:
+
+- **Process-level ceilings** — a per-call `max_amount` and a per-session budget
+  enforced by the CLI or MCP payer itself, checked *before* anything is signed.
+- **On-chain policies** — for a policy-governed smart account, a
+  spending-limit policy caps *how much* can move per fixed window and a
+  verified-only policy restricts payments to contracts whose source has been
+  reproducibly verified — provenance, not an audit. Both are enforced by
+  Stellar consensus rather than by your code, so they bind even a fully
+  compromised agent that bypasses your application entirely.
+
+See [Policies](../agent-tooling/policies.md) for the full authoring and deploy
+flow.
+
+## When it fails
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `X402NotConfiguredError` at construction | `rpcUrl` missing or invalid URL | Pass `x402.rpcUrl` in config |
+| `invalid_exact_stellar_payload_unsupported_credential_type` | `simulationSourceAccount` is the same as the payer | Use a different funded G account for simulation |
+| Payment settles but nothing is cataloged | `required.extensions` not echoed in payload | Echo extensions in your buyer — see Facilitator guide |
+
+## Optional: passkey smart accounts
+
+Everything above works from a plain funded keypair. If you're building a
+consumer-facing app and want passkey-based smart accounts instead — no seed
+phrase, fee-sponsored submission, on-chain policies attached per-wallet — this
+section covers what happens under the hood.
+
+### Passkeys to smart accounts
 
 When a user creates a wallet:
 
@@ -33,10 +92,11 @@ When a user creates a wallet:
 3. **Deploy through your backend.** The deployment transaction is submitted via
    your backend, which holds the sponsorship credentials.
 
-Because the account is a smart contract, it can enforce programmable policies —
-spending limits, multisig, allowlists — on-chain.
+Because the account is a smart contract, it can enforce the same programmable
+policies described above — spending limits, multisig, allowlists — attached
+directly to the wallet's own `__check_auth`.
 
-## Why submission goes through your backend
+### Why submission goes through your backend
 
 > ⚠️ **Never submit directly from the browser.** Fee sponsorship requires
 > secrets (OpenZeppelin Relayer API key, funded sponsor account). These must
@@ -57,54 +117,22 @@ and your server performs the fee-sponsored submit and returns the hash.
  └──────────┘  ◄── tx hash ──── └──────────┘  ◄─────────── └────────┘
 ```
 
-## The payment loop
-
-When a buyer pays an x402 resource, this is what happens step by step:
-
-1. **Request the resource.** The client makes an ordinary HTTP request to a
-   paid endpoint.
-2. **Receive the 402 challenge.** The resource server answers with `402 Payment
-   Required` plus payment requirements — amount, asset, recipient, network.
-3. **Build the transfer.** The client builds the SEP-41
-   `transfer(from = smart account, to = payTo, amount)`.
-4. **Sign the auth entry.** The wallet's Soroban authorization entry is signed
-   with the session key, producing V1 (`sorobanCredentialsAddress`) credentials
-   in the format the account's `__check_auth` expects.
-5. **Retry with the payment header.** The client repeats the request carrying
-   the `PAYMENT-SIGNATURE` header.
-6. **Verify and settle.** The facilitator verifies by re-simulation — which runs
-   the account's `__check_auth`, and therefore the budget policy — then settles
-   on-chain and sponsors the fee.
-
-Because verification re-simulates, an over-budget or wrong-token payment is
-rejected *before* it settles.
-
-## Sessions and reconnect
+### Sessions and reconnect
 
 A session carries the smart-account address, the network, and optionally the
 passkey's credential id (`keyId`). Persisting the `keyId` lets a returning user
 reconnect without the WebAuthn discovery ceremony — the passkey prompt then only
 appears at signing time.
 
-## Programmable policies
-
-Because accounts are smart contracts, Vellar wallets can carry on-chain policies
-— for example a cumulative fixed-window spending limit that bounds how much can
-move per window, enforced by the network rather than by client-side checks a
-malicious frontend could skip. The SDK exposes the full authoring and deploy
-flow as [`wallet.policies`](../agent-tooling/policies.md).
-
-## When it fails
-
-| Symptom | Cause | Fix |
-|---|---|---|
-| `X402NotConfiguredError` at construction | `rpcUrl` missing or invalid URL | Pass `x402.rpcUrl` in config |
-| `invalid_exact_stellar_payload_unsupported_credential_type` | `simulationSourceAccount` is the same as the payer | Use a different funded G account for simulation |
-| Payment settles but nothing is cataloged | `required.extensions` not echoed in payload | Echo extensions in your buyer — see Facilitator guide |
+See [Wallet API Reference](../api-reference.md) for the full `createVellarWallet`
+config.
 
 ## Next steps
 
-- [Quickstart](./quickstart.md) — create a wallet in five minutes
-- [x402 payments](../buyers/pay-for-a-resource.md) — pay for a resource from code
-- [Agent keys](../agent-tooling/agent-keys.md) — give an agent a scoped session key
+- [Pay for a resource](../buyers/pay-for-a-resource.md) — the full x402 buyer
+  flow with spend controls
+- [Policies](../agent-tooling/policies.md) — cap what an agent can spend,
+  enforced on-chain
+- [Vellar CLI](../agent-tooling/cli.md) — discover, quote, and pay from a
+  terminal, no wallet setup
 - [Security](../security.md) — the guarantees the SDK enforces
