@@ -16,6 +16,7 @@
 // is something the model can be talked into changing. `max_amount` is the
 // model's to supply; everything that bounds it is the server's.
 
+import { createRequire } from "node:module";
 import { Writable } from "node:stream";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -33,8 +34,12 @@ import { payAndCall } from "./pay-and-call.js";
 import type { PayResult, Payer, QuoteResult } from "./payer.js";
 import type { X402ResourceInfo } from "./protocol.js";
 
-const PACKAGE_NAME = "vellar-x402-payer";
-const PACKAGE_VERSION = "0.1.0";
+// Read name/version from package.json rather than hardcoding them, so the
+// MCP initialize handshake cannot drift from what's actually published.
+const require = createRequire(import.meta.url);
+const pkg = require("../package.json") as { name: string; version: string };
+const PACKAGE_NAME = pkg.name;
+const PACKAGE_VERSION = pkg.version;
 
 /** A tool result carrying text, flagged as an error when the call failed. */
 function textResult(text: string, isError = false) {
