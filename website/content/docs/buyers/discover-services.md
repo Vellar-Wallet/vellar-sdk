@@ -10,7 +10,7 @@ server to give an AI agent the same capability.
 ## Prerequisites
 
 - The x402 extensions package: `npm install @x402/extensions`
-- The Vellar facilitator URL: `https://vellar-facilitator.onrender.com`
+- The Vellar facilitator URL: `https://vellar-facilitator-testnet-production.up.railway.app`
 
 ## 1. Search the catalog
 
@@ -22,7 +22,7 @@ import { HTTPFacilitatorClient } from "@x402/core/http";
 import { withBazaar } from "@x402/extensions/bazaar";
 
 const bazaar = withBazaar(
-  new HTTPFacilitatorClient({ url: "https://vellar-facilitator.onrender.com" }),
+  new HTTPFacilitatorClient({ url: "https://vellar-facilitator-testnet-production.up.railway.app" }),
 ).extensions.bazaar;
 
 const { items } = await bazaar.listResources({ network: "stellar:testnet" });
@@ -61,7 +61,7 @@ seen:
 > "no_verdict_source_configured" }`. Use `ownerVerified` instead, which the
 > facilitator computes itself with no external dependency.
 
-> **Note:** `ownerVerified` is lost on every restart of the free-tier instance
+> **Note:** `ownerVerified` is lost on every restart of the hosted instance
 > (no persistent disk). It self-heals — the next settlement re-runs the check
 > after a 15-minute cooldown, with no operator involved. Do not treat a false
 > value as permanent.
@@ -101,7 +101,7 @@ without hardcoded URLs.
       "args": ["tsx", "src/mcp.ts"],
       "cwd": "/path/to/vellar-facilitator",
       "env": {
-        "FACILITATOR_URL": "https://vellar-facilitator.onrender.com"
+        "FACILITATOR_URL": "https://vellar-facilitator-testnet-production.up.railway.app"
       }
     }
   }
@@ -118,10 +118,6 @@ the same filters, and `cursor` for pagination.
 > ⚠️ **The MCP server only discovers. It does not pay.** Paying requires a
 > separate server that holds a key — see the [MCP payer](../agent-tooling/mcp-payer.md).
 
-> ⚠️ **First tool call after idle takes roughly 45 seconds.** The facilitator
-> runs on a free tier. Send a warming `GET /health` request (it is
-> rate-limit-exempt) before your agent's first call.
-
 ## When it fails
 
 | Error | Cause | Fix |
@@ -129,8 +125,7 @@ the same filters, and `cursor` for pagination.
 | 400 `verified_only_unavailable` | Using verified_only=true filter | Remove the filter and use ownerVerified field instead |
 | 400 on search with empty query | query parameter is required | Pass a non-empty query string |
 | Search returns items not resources | Parsing browse response as search | Browse returns items, search returns resources |
-| ownerVerified false on known resource | Free-tier restart cleared ownership data | It self-heals after next settlement — wait or trigger a payment |
-| MCP first call times out | Facilitator cold start | Send GET /health first with 120s timeout, then retry |
+| ownerVerified false on known resource | A service restart cleared ownership data | It self-heals after next settlement — wait or trigger a payment |
 
 ## Next steps
 

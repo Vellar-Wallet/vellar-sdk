@@ -97,8 +97,8 @@ Retrieval](../architecture/search-and-retrieval.md).
 
 ## The catalog is ephemeral on the hosted instance
 
-The free-tier hosted instance has no persistent disk. The catalog resets on
-every restart, and `ownerVerified` data resets with it. A resource re-catalogs
+The hosted instance has no persistent disk. The catalog resets on every
+restart, and `ownerVerified` data resets with it. A resource re-catalogs
 after its next settled payment, and `ownerVerified` self-heals the same way.
 
 A payment still settles on-chain when the catalog is empty. Cataloging and
@@ -106,17 +106,21 @@ settlement are independent.
 
 ## Mainnet readiness
 
-Vellar runs on stellar:testnet only, and the facilitator advertises
-stellar:testnet in `/supported`.
+A mainnet facilitator is deployed and advertises `stellar:pubnet` in
+`/supported`, alongside a separate testnet deployment. The docs, the CLI and the
+MCP payer all default to testnet.
 
-Mainnet is gated on three items:
+One pre-mainnet gate is still open: **the spending-limit policy contract has not
+had a mainnet security audit.** The facilitator review is complete; the policy
+contract is separate work and is not covered by it.
 
-1. A persistent-disk deployment.
-2. A funded pubnet sponsor account.
-3. A mainnet security audit of the spending-limit policy contract. The
-   facilitator review is complete; the policy contract is a separate item.
+So the honest position is that mainnet settlement is possible today, while the
+on-chain component that bounds an agent's spending has not been audited for
+mainnet use. Treat a policy-governed mainnet payment as unaudited, and size any
+real-money exposure accordingly.
 
-Production traffic should not be pointed here until all three are done.
+The hosted instances also still have no persistent disk, so the catalog resets
+on restart on both networks.
 
 ## What the security review covered
 
@@ -143,7 +147,7 @@ for the upstream standardization effort.
 | A passkey-signed x402 payment never settles | No deployed facilitator accepts them | Use `createSessionKeySigner` |
 | An `upto`-only seller cannot be paid by an SDK buyer | `wallet.x402` is exact-only | Advertise both schemes |
 | `400 verified_only_unavailable` | `verification` is always "unknown", so the filter is refused | Filter on `ownerVerified` instead |
-| The catalog is empty after a restart | The hosted free tier has no persistent disk | Re-catalog with a settled payment, or run your own instance |
+| The catalog is empty after a restart | The hosted instance has no persistent disk | Re-catalog with a settled payment, or run your own instance |
 | `txBadSeq` on concurrent `upto` settlements | Not wired into the channel-account pool | Serialize `upto` settlements |
 
 ## Next steps

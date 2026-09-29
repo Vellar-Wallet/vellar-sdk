@@ -84,13 +84,10 @@ facilitator's sponsor account, not the buyer, which is what
 
 ## Verify the live endpoints yourself
 
-No wallet, key, or funded account is needed for any of this. The facilitator
-runs on a free tier and sleeps after 15 minutes idle, so the first call takes
-roughly 45 seconds (measured). Allow up to 120 seconds in your timeout rather
-than assuming it is down.
+No wallet, key, or funded account is needed for any of this.
 
 ```sh
-BASE=https://vellar-facilitator.onrender.com
+BASE=https://vellar-facilitator-testnet-production.up.railway.app
 
 # 1. Liveness (rate-limit exempt, use it to warm the instance)
 curl -s --max-time 120 "$BASE/health" | python3 -m json.tool
@@ -236,9 +233,8 @@ curl -s "https://horizon-testnet.stellar.org/transactions/a909e4748c83f55972d6ce
 > listing, so do not expect a settlement failure as the signal here.
 
 Ownership binding is trust-on-first-use: the first settled payment binds a
-resource URL to its `payTo`. On the hosted free-tier instance the catalog has no
-persistent disk, so bindings vanish on every restart or idle sleep and that
-first-settler race reopens. See [Security](../security.md).
+resource URL to its `payTo`. The hosted instance has no persistent disk, so
+bindings vanish when the service restarts and that first-settler race reopens. See [Security](../security.md).
 
 ## Upstream contributions
 
@@ -269,7 +265,6 @@ Two issues are filed, one of which has attracted a community fix.
 | Scenario fails with "Server failed to start" | Upstream build problem in the suite, not a Vellar defect; it reproduces against the upstream reference facilitator too | Nothing to fix on the Vellar side; the scenario never reaches the payment path |
 | Hash not found on Horizon (404) | Querying the wrong network, e.g. pubnet Horizon | Use `horizon-testnet.stellar.org`; every hash here is testnet |
 | `fee_account` is the buyer, not the sponsor | Fee sponsorship not in effect for that payment | Check `areFeesSponsored: true` on the kind in `GET /supported` |
-| First curl to the facilitator hangs or times out | Free-tier cold start after 15 minutes idle | Retry with a 120s timeout; first call takes roughly 45s (measured) |
 
 ## Next steps
 

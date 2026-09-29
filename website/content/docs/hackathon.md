@@ -62,7 +62,7 @@ us.
 See [Quickstart](./getting-started/quickstart.md).
 
 **Config you need:** point `backend` at the hosted testnet gateway,
-`createHttpWalletBackend("https://vellar-backend.onrender.com")` — the
+`createHttpWalletBackend("https://vellar-backend-production.up.railway.app")` — the
 [Quickstart](./getting-started/quickstart.md#1-create-the-client) shows the full client setup.
 
 ### Track 2, Policy Builder
@@ -80,7 +80,7 @@ surprise us.
 **Key SDK surface:** `wallet.policies` (templates, generate, simulate, deploy).
 See [Policies](./agent-tooling/policies.md).
 
-**Config you need:** `apiUrl: "https://vellar-backend.onrender.com"` in
+**Config you need:** `apiUrl: "https://vellar-backend-production.up.railway.app"` in
 `createVellarWallet` (the same host as the wallet backend) — see
 [Enabling policies](./agent-tooling/policies.md#enabling-policies), which includes a
 zero-context smoke test you can paste before writing any wallet code.
@@ -324,7 +324,7 @@ git clone [your repo]
 cd [your project]
 npm install
 # .env
-#   VELLAR_API_URL=https://vellar-backend.onrender.com
+#   VELLAR_API_URL=https://vellar-backend-production.up.railway.app
 npm run dev
 \`\`\`
 
@@ -355,12 +355,6 @@ npm run dev
 
 The canonical answers for the pinned channel FAQ — if these ever disagree
 with a pinned message, this page wins.
-
-**The first request is hanging / everything seems down.** The hosted backend
-and facilitator sleep when idle (free instances). The first request after a
-quiet spell takes roughly 45 seconds (measured) while they wake. Allow up to
-120 seconds in your timeout and retry — after that everything is fast. Not a
-bug in your code.
 
 **How do I get a funded testnet account?** Friendbot, free:
 `curl "https://friendbot.stellar.org?addr=G...YOURKEY"`. You only need it
@@ -397,7 +391,7 @@ that entry only, not the demo seller.
 
 1. Read [Introduction](./getting-started/introduction.md) and [Quickstart](./getting-started/quickstart.md).
 2. `npm install vellar-sdk @stellar/stellar-sdk`, see [Installation](./getting-started/installation.md).
-3. Point your backend at the hosted gateway: `VELLAR_API_URL=https://vellar-backend.onrender.com`, see [How It Works](./getting-started/how-it-works.md) for why a backend is needed.
+3. Point your backend at the hosted gateway: `VELLAR_API_URL=https://vellar-backend-production.up.railway.app`, see [How It Works](./getting-started/how-it-works.md) for why a backend is needed.
 4. Pick a track above and scope the **smallest strong version** of your idea.
 5. Build. Ask questions in [Telegram](https://t.me/+JvRMWLJMWS0xYTBk).
 6. Test your core flow on testnet, end to end, before recording your demo.

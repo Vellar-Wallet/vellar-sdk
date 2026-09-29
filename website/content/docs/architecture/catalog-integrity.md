@@ -109,11 +109,11 @@ limits how far this goes, since the attacker's address will not appear in the
 402 challenge your resource actually serves, but the binding itself is theirs
 until the entry is cleared.
 
-On the free-tier hosted instance there is no persistent disk, so entries and
-ownership bindings vanish on every restart or idle sleep. That has a
-double-edged consequence: a stale or hostile binding does not last forever, but
-the first-settler race reopens after every cold start rather than being won
-once. A resource re-catalogs after its next settled payment, and `ownerVerified`
+On the hosted instance there is no persistent disk, so entries and ownership
+bindings vanish whenever the service restarts. That has a double-edged
+consequence: a stale or hostile binding does not last forever, but the
+first-settler race reopens after each restart rather than being won once. A
+resource re-catalogs after its next settled payment, and `ownerVerified`
 self-heals after the next settlement with a 15-minute cooldown.
 
 > ⚠️ **Be first to settle for your own URL.** The binding goes to the first
@@ -168,7 +168,7 @@ this text have a separate concern, prompt injection, covered in
 | `ownerVerified` stays `false` permanently | The advertised URL is `localhost` or `http`, which fails requirement 1 before a socket opens | Advertise a public `https` URL that serves the 402 challenge |
 | A `serviceName` is missing from the entry | Non-ASCII characters, so the field was silently dropped rather than transliterated | Use printable ASCII, 64 characters or fewer |
 | `schema_validation_failed` in the `extension-responses` header | An invalid or unsafe `routeTemplate` was dropped | Fix the template shape. The settlement itself was unaffected |
-| The catalog is empty after a restart | The hosted free tier has no persistent disk, so entries and bindings reset on restart or idle sleep | Re-catalog with a settled payment, or run your own instance with persistence |
+| The catalog is empty after a restart | The hosted instance has no persistent disk, so entries and bindings reset when the service restarts | Re-catalog with a settled payment, or run your own instance with persistence |
 
 ## Next steps
 

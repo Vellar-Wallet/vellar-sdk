@@ -10,7 +10,7 @@ if you are evaluating whether to depend on Vellar; read the linked pages when
 you need the detail behind a claim.
 
 Vellar runs on `stellar:testnet` only. The hosted facilitator is
-`https://vellar-facilitator.onrender.com`.
+`https://vellar-facilitator-testnet-production.up.railway.app`.
 
 ## System Overview
 

@@ -32,7 +32,7 @@ Check the price of a resource without paying. One HTTP request: nothing is
 signed and no key is read.
 
 ```sh
-vellar quote https://vellar-seller-demo.onrender.com/quote
+vellar quote https://vellar-seller-demo-testnet-production.up.railway.app/quote
 ```
 
 Every payment option in the challenge is printed, including whether fees are
@@ -43,7 +43,7 @@ sponsored. Without sponsorship the payer needs XLM of its own.
 Pay for a resource and print the content.
 
 ```sh
-vellar pay https://vellar-seller-demo.onrender.com/quote \
+vellar pay https://vellar-seller-demo-testnet-production.up.railway.app/quote \
   --secret-file ~/.vellar/key \
   --max 1000000
 ```
@@ -87,8 +87,9 @@ asserted.
 
 ## Notes
 
-Vellar runs on `stellar:testnet` only. The hosted facilitator sleeps after 15
-minutes idle, so the first call after a sleep takes roughly 45 seconds.
+The default facilitator is the hosted `stellar:testnet` instance, which runs
+continuously. A mainnet facilitator also exists; see the docs before pointing
+anything at it, because settlements there move real funds.
 
 Debug a paid route with `GET`, never `HEAD`: a `HEAD` request carries no payment
 challenge, so a correctly wired paid route looks free.

@@ -11,9 +11,8 @@ all `localhost` URLs permanently.
 
 - Familiarity with the x402 challenge and settle flow (see
   [The payment loop](./payment-loop.md))
-- Access to a facilitator. The hosted instance is
-  `https://vellar-facilitator.onrender.com` (`stellar:testnet` only, free tier,
-  sleeps after 15 minutes idle, so the first call takes roughly 45s (measured))
+- Access to a facilitator. The hosted testnet instance is
+  `https://vellar-facilitator-testnet-production.up.railway.app` (`stellar:testnet` only)
 - `curl` and `python3` for the inspection commands near the end
 
 ## How a resource enters the catalog
@@ -68,9 +67,9 @@ here means the catalog protected the legitimate seller, not that the payment
 failed. The full four-transaction record, including the merchant A settlements
 either side, is in [Conformance](../reference/conformance.md).
 
-> **Note:** On the hosted free-tier instance the first-settler race reopens
-> after each restart, because the ownership bindings are not persisted. See
-> the note under `ownerVerified` below.
+> **Note:** On the hosted instance the first-settler race reopens after each
+> restart, because the ownership bindings are not persisted. See the note under
+> `ownerVerified` below.
 
 ## ownerVerified
 
@@ -97,8 +96,8 @@ Two mistakes catch most people:
 - **A trailing-slash mismatch.** The canonical key strips the trailing slash,
   so a server that only answers `/quote/` fails when it is checked at `/quote`.
 
-> **Note:** On the free-tier hosted instance `ownerVerified` is lost on every
-> restart, because there is no persistent disk. It self-heals: the next settled
+> **Note:** On the hosted instance `ownerVerified` is lost on every restart,
+> because there is no persistent disk. It self-heals: the next settled
 > payment re-runs the check, subject to a 15-minute cooldown. A `false` value
 > there is usually a restart signal, not a squat signal.
 
@@ -182,7 +181,7 @@ Read this header to confirm.
 List cataloged resources and print each one with its `ownerVerified` value:
 
 ```bash
-curl -s "https://vellar-facilitator.onrender.com/discovery/resources?limit=20" \
+curl -s "https://vellar-facilitator-testnet-production.up.railway.app/discovery/resources?limit=20" \
   | python3 -c '
 import json, sys
 data = json.load(sys.stdin)
@@ -198,7 +197,7 @@ Then check the catalog's own health:
 # unverifiableEntries is ABSENT when zero, not 0, so absence means healthy.
 # reverifyPending > 0 means ownership checks are still in flight after a
 # restart, so check back shortly rather than treating what you read as final.
-curl -s "https://vellar-facilitator.onrender.com/health" | python3 -m json.tool
+curl -s "https://vellar-facilitator-testnet-production.up.railway.app/health" | python3 -m json.tool
 ```
 
 `/health` also reports `catalogFrozen`, which tells you whether the catalog has
@@ -214,7 +213,7 @@ before a real request.
 | `ownerVerified: false` on a working public seller | Trailing-slash mismatch: the canonical key strips the trailing slash, so a server answering only `/quote/` is checked at `/quote`. A `301` is not followed | Serve the challenge at the exact canonical URL with no redirect |
 | `cataloged: false` with `binding_refused` | The resource URL is already bound to a different `payTo` under trust-on-first-use | If you are the legitimate owner, settle once from the bound `payTo`, or settle again after a restart cleared the binding on the hosted instance |
 | `cataloged: false` with `schema_validation_failed` | Listing metadata or a route template failed validation. `serviceName` must be printable ASCII, max 64 chars; descriptions are clamped to 256 chars; tags follow the same ASCII rule | Make the name and tags printable ASCII, shorten the description, then settle once more |
-| `ownerVerified` was `true`, now reads `false` | The free-tier hosted instance has no persistent disk, so the catalog and its ownership bindings vanish on restart or idle sleep | Nothing to fix. It self-heals after the next settled payment, subject to a 15-minute cooldown |
+| `ownerVerified` was `true`, now reads `false` | The hosted instance has no persistent disk, so the catalog and its ownership bindings vanish when the service restarts | Nothing to fix. It self-heals after the next settled payment, subject to a 15-minute cooldown |
 
 ## Next steps
 

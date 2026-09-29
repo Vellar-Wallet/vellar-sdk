@@ -84,13 +84,13 @@ settled payment.
 
 ## Status
 
-> ⚠️ **Testnet only.** Vellar runs on stellar:testnet only. Mainnet is gated on
-> three items:
+> ⚠️ **Testnet by default; mainnet exists.** Every tool here defaults to the
+> testnet facilitator, and every example in these docs spends test USDC. A
+> separate mainnet deployment is live and moves real funds.
 >
-> 1. A persistent-disk deployment.
-> 2. A funded pubnet sponsor account.
-> 3. A mainnet security audit of the spending-limit policy contract. The
->    facilitator review is complete; the policy contract is a separate item.
+> One pre-mainnet gate is still open: the spending-limit policy contract has not
+> had a mainnet security audit. The facilitator review is complete; the policy
+> contract is separate work.
 >
 > APIs may change before 1.0.
 

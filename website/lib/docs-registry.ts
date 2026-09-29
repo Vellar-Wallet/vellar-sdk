@@ -19,9 +19,11 @@ export interface DocPage {
 }
 
 // Ordered table of contents — drives the sidebar and next/prev.
-// Grouped by domain so the docs read as an x402 payment platform, not a
-// passkey-wallet SDK: Getting Started → x402 Payments (the core) →
-// Agents & Provenance → Wallet & Passkeys → Reference.
+// Grouped so the docs read as an x402 payment platform: the facilitator and
+// Bazaar, the CLI and the MCP payer are the product surface, in that order.
+// The passkey wallet is an implementation detail of the buyer side rather than
+// a headline feature, so its two pages sit under Reference — still reachable
+// and still linked to, just not fronting the sidebar.
 export const DOC_PAGES: DocPage[] = [
   // Getting Started — restructured pages under content/docs/getting-started.
   { slug: "getting-started/introduction", title: "Introduction", nav: "Introduction",
@@ -69,12 +71,6 @@ export const DOC_PAGES: DocPage[] = [
   { slug: "sellers/upto-metered-payments", title: "Upto Metered Payments",
     nav: "Upto metered payments", section: "Sellers", tab: "guides",
     description: "Accept usage-based payments: the buyer authorizes a ceiling and only the actual usage settles." },
-
-  // Wallet & Passkeys — one pillar, not the whole story
-  { slug: "wallet-methods", title: "Wallet Methods", nav: "Wallet methods", section: "Wallet & Passkeys", tab: "reference",
-    description: "Every method on the wallet handle: create, connect, pay, balances, transaction status, and sessions." },
-  { slug: "security", title: "Security", nav: "Security", section: "Wallet & Passkeys", tab: "reference",
-    description: "The wallet and SDK security model: no key custody, no silent signing, and the on-chain policy guarantees." },
 
   // Agent tooling — the keys, policies, servers and editor tooling an agent
   // developer wires up.
@@ -132,6 +128,12 @@ export const DOC_PAGES: DocPage[] = [
     description: "How the independent Stellar indexer classifies x402 payments and what the attribution numbers mean." },
   { slug: "reference/license", title: "License and Versioning", nav: "License", section: "Reference", tab: "reference",
     description: "SDK MIT, facilitator open-source, versioning policy, and changelog location." },
+  // The passkey wallet: kept under Reference rather than featured. Existing
+  // pages link to both of these, so the slugs must not move.
+  { slug: "wallet-methods", title: "Wallet Methods", nav: "Wallet methods", section: "Reference", tab: "reference",
+    description: "Every method on the wallet handle: create, connect, pay, balances, transaction status, and sessions." },
+  { slug: "security", title: "Security", nav: "Security", section: "Reference", tab: "reference",
+    description: "The wallet and SDK security model: no key custody, no silent signing, and the on-chain policy guarantees." },
 
   // Operators — running your own facilitator rather than the hosted instance.
   { slug: "operators/run", title: "Run the Facilitator", nav: "Run", section: "Operators", tab: "guides",

@@ -12,14 +12,10 @@ entry are worth reading.
 - A publicly deployed seller endpoint over **https**. A `localhost` URL cannot
   pass ownership verification, ever.
 - At least one real payment settled through the Vellar facilitator
-  (`https://vellar-facilitator.onrender.com`, `stellar:testnet` only).
+  (`https://vellar-facilitator-testnet-production.up.railway.app`, `stellar:testnet` only).
   `ownerVerified` is computed after settlement, not at registration, and there
   is no registration step to begin with.
 - `curl` and `python3` for the inspection commands below.
-
-> **Note:** The hosted facilitator runs on a free tier and sleeps after 15
-> minutes idle. The first request after a sleep takes roughly 45 seconds
-> (measured). That is a cold start, not a failure.
 
 ## 1. The five requirements for ownerVerified
 
@@ -48,7 +44,7 @@ caps the header, not the response.
 > `curl -s -i` so you see the 402 and its header.
 
 ```bash
-curl -s -i "https://vellar-seller-demo.onrender.com/quote" | head -20
+curl -s -i "https://vellar-seller-demo-testnet-production.up.railway.app/quote" | head -20
 ```
 
 ## 2. Two mistakes that catch everyone
@@ -71,7 +67,7 @@ the exact canonical URL with no redirect in front of it.
 List the catalog and print each resource with its `ownerVerified` value:
 
 ```bash
-curl -s "https://vellar-facilitator.onrender.com/discovery/resources?limit=100" \
+curl -s "https://vellar-facilitator-testnet-production.up.railway.app/discovery/resources?limit=100" \
   | python3 -c '
 import json, sys
 data = json.load(sys.stdin)
@@ -92,7 +88,7 @@ Then read the catalog's own health:
 # if the key is missing, nothing is currently unverifiable, which is healthy.
 # reverifyPending > 0 means ownership checks are still in flight after a
 # restart, so check back shortly rather than treating what you read as final.
-curl -s "https://vellar-facilitator.onrender.com/health" | python3 -m json.tool
+curl -s "https://vellar-facilitator-testnet-production.up.railway.app/health" | python3 -m json.tool
 ```
 
 `/health` also reports `catalogFrozen`, which tells you whether the catalog has
@@ -120,7 +116,7 @@ returned on a successful `/settle`:
 > and no support queue, so make the first settlement for a URL yourself, from
 > the `payTo` you intend to keep, before you publish the endpoint anywhere.
 
-> **Note:** On the hosted free-tier instance the first-settler race reopens
+> **Note:** On the hosted instance the first-settler race reopens
 > after each restart, because ownership bindings are not persisted. That cuts
 > both ways: a squatted binding clears on its own, and so does yours.
 
@@ -135,7 +131,7 @@ with, and a trust block the facilitator assembled from what it observed.
 
 ```json
 {
-  "resource": "https://vellar-seller-demo.onrender.com/quote",
+  "resource": "https://vellar-seller-demo-testnet-production.up.railway.app/quote",
   "accepts": [
     {
       "scheme": "exact",
@@ -181,9 +177,9 @@ own.
 
 ## 6. Keeping the badge
 
-> **Note:** On the free-tier hosted instance `ownerVerified` is lost on every
-> restart, because there is no persistent disk: catalog entries and ownership
-> bindings both vanish on a restart or an idle sleep. It self-heals with no
+> **Note:** On the hosted instance `ownerVerified` is lost on every restart,
+> because there is no persistent disk: catalog entries and ownership bindings
+> both vanish when the service restarts. It self-heals with no
 > operator involvement, because the next settled payment for that resource
 > re-runs the ownership check, subject to a 15-minute cooldown. A `false` value
 > there is usually a restart signal, not a squat signal.
@@ -233,7 +229,7 @@ Cataloging never affects settlement either way.
 | `ownerVerified` stuck `false` | The advertised `resource.url` is `localhost`, another loopback or private address, or plain http. Requirement 1 rejects it before a socket opens | Advertise your public https origin in the 402 challenge, redeploy, then settle once |
 | `ownerVerified` stuck `false` on a working public seller | Trailing-slash mismatch: the canonical key strips the trailing slash, so a server answering only `/quote/` is checked at `/quote`, and the `301` is not followed | Serve the challenge at the exact canonical URL with no redirect in front of it |
 | `ownerVerified` stuck `false`, URL looks right | An unauthenticated `GET` returns 200 or 401 instead of 402, so requirement 2 fails. Check with `curl -s -i`, never `curl -I` | Make the unpaid route return 402 with a `PAYMENT-REQUIRED` header of 64 KiB or less |
-| `ownerVerified` was `true`, now reads `false`, repeatedly | The free-tier hosted instance has no persistent disk, so the catalog and its bindings vanish on restart or idle sleep | Nothing to fix. It self-heals after the next settled payment, subject to a 15-minute cooldown |
+| `ownerVerified` was `true`, now reads `false`, repeatedly | The hosted instance has no persistent disk, so the catalog and its bindings vanish when the service restarts | Nothing to fix. It self-heals after the next settled payment, subject to a 15-minute cooldown |
 | `cataloged: false` with `binding_refused` | The URL is already bound to a different `payTo` under trust-on-first-use | Settle from the bound `payTo`, or settle again after a restart clears the binding on the hosted instance. Your payments were unaffected throughout |
 | `cataloged: false` with `schema_validation_failed` | Listing metadata or a route template failed validation: a non-ASCII `serviceName`, a name over 64 chars, or an over-long description | Make the name and tags printable ASCII, shorten the description to 256 chars, then settle once more |
 

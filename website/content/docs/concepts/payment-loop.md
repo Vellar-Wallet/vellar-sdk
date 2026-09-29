@@ -20,7 +20,7 @@ you can name the step that broke instead of guessing.
 |---|---|---|---|
 | Buyer | The account that pays (a Vellar smart account `C...` or a classic `G...` keypair) | The payment asset, such as testnet USDC | XLM for fees, when fees are sponsored |
 | Seller (`payTo`) | The account that receives the payment | A trustline to the payment asset | Buyer funds before settlement |
-| Facilitator | Vellar's hosted service at `https://vellar-facilitator.onrender.com` | XLM for fees only, in its sponsor account `GBUCR6H22CZC5OYHBJIEUS2JFZBOB63AHEGTCV6UEPMD2TMLKG2ZMIW4` | Buyer funds, never |
+| Facilitator | Vellar's hosted service at `https://vellar-facilitator-testnet-production.up.railway.app` | XLM for fees only, in its sponsor account `GBUCR6H22CZC5OYHBJIEUS2JFZBOB63AHEGTCV6UEPMD2TMLKG2ZMIW4` | Buyer funds, never |
 | Token contract | The SEP-41 asset's Stellar Asset Contract, e.g. USDC testnet `CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA` | The on-chain asset balances | Nothing else |
 
 > ⚠️ **The facilitator is never a party to the transfer.** Buyer funds move
@@ -95,10 +95,6 @@ sequenceDiagram
     F-->>S: settlement hash
     S-->>B: 200 + resource body
 ```
-
-> **Note:** The hosted facilitator runs on a free tier and sleeps after 15
-> minutes idle. The first call after a sleep takes roughly 45 seconds
-> (measured) before step 5 answers. Allow up to 120 seconds in your timeout.
 
 ## Auth entries, not transactions
 

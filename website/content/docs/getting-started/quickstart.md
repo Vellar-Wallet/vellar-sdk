@@ -14,7 +14,7 @@ with no backend setup.
 - npm or pnpm
 
 > **Note:** Everything here runs on stellar:testnet. No real money, no mainnet.
-> The hosted backend at `https://vellar-backend.onrender.com` handles fee
+> The hosted backend at `https://vellar-backend-production.up.railway.app` handles fee
 > sponsorship so your wallet needs no XLM.
 
 ## 1. Install
@@ -50,7 +50,7 @@ const vellar = createVellarWallet({
     networkPassphrase: TESTNET.networkPassphrase,
   }),
   // The hosted testnet backend — it holds the relayer/sponsor secrets.
-  backend: createHttpWalletBackend("https://vellar-backend.onrender.com"),
+  backend: createHttpWalletBackend("https://vellar-backend-production.up.railway.app"),
   isValidAddress: (a) =>
     StrKey.isValidEd25519PublicKey(a) || StrKey.isValidContract(a),
 });
@@ -60,10 +60,6 @@ const vellar = createVellarWallet({
 wallet wasm hash, and native-token contract id, so there are no magic values to
 look up. `createHttpWalletBackend` is the ready-made client for the hosted
 gateway.
-
-> ⚠️ **Cold start warning.** The hosted backend sleeps after 15 minutes idle.
-> The first request takes roughly 45 seconds (measured). This is a free-tier characteristic,
-> not a bug. For production, run your own backend.
 
 ## 3. Create a wallet
 
@@ -141,7 +137,6 @@ throw `X402NotConfiguredError`.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Wallet creation hangs for roughly 45 seconds, up to 2 minutes | Backend cold start | Wait — it will respond. Allow up to 120 seconds in your timeout before retrying. |
 | Passkey prompt never appears | Not in a secure context | Serve over HTTPS or localhost |
 | `X402NotConfiguredError` | x402 config missing from createVellarWallet | Add the x402 block — see x402 payments page |
 | `NoUsablePaymentOptionError` | Facilitator does not advertise areFeesSponsored | Use the Vellar facilitator URL, which sponsors fees |

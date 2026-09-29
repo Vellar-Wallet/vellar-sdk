@@ -3,7 +3,7 @@
 Vellar runs a hosted **x402 facilitator for Stellar** with Bazaar discovery:
 
 ```
-https://vellar-facilitator.onrender.com
+https://vellar-facilitator-testnet-production.up.railway.app
 ```
 
 A facilitator is the verify/settle service between a buyer and a seller in an
@@ -11,14 +11,15 @@ x402 payment. The seller's server never touches Soroban directly, and the
 buyer never needs XLM: the facilitator re-simulates the signed payment to
 verify it, submits it on-chain, and sponsors the network fee.
 
-> **Status: testnet, pre-production.** Open for anyone to build against. It
-> runs on a free tier for now, so the first request after idle can take up to
-> a minute (cold start) — and the catalog does not survive that sleep (see
-> [Limits](#limits-and-operational-caveats)). Vellar runs on stellar:testnet
-> only. Mainnet is gated on three items: a persistent-disk deployment, a funded
-> pubnet sponsor account, and a mainnet security audit of the spending-limit
-> policy contract. The facilitator review is complete; the policy contract is a
-> separate item. Source:
+> **Status: pre-production.** Open for anyone to build against, hosted on
+> Railway and running continuously. Two independent deployments exist — testnet
+> and mainnet — and everything in these docs defaults to **testnet**. See
+> [Deployments](#deployments) for both base URLs and the kill switch.
+>
+> The catalog does not survive a service restart (see
+> [Limits](#limits-and-operational-caveats)), and the spending-limit policy
+> contract has not had a mainnet security audit. The facilitator review is
+> complete; the policy contract is separate work. Source:
 > [Vellar-Wallet/vellar-facilitator](https://github.com/Vellar-Wallet/vellar-facilitator).
 
 ## Bring your own payment asset
@@ -55,7 +56,7 @@ by anyone; see the next section.
 ## Paying the deployed demo seller
 
 Want to test against a live seller without running your own?
-`https://vellar-seller-demo.onrender.com/quote` charges **0.1 real testnet
+`https://vellar-seller-demo-testnet-production.up.railway.app/quote` charges **0.1 real testnet
 USDC** (`USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5`,
 Circle's official testnet issuer) with sponsored fees. Testnet USDC is
 freely obtainable with no faucet form: Friendbot an account, then buy USDC
@@ -101,14 +102,12 @@ console.log("payer:", payer.publicKey(), "secret:", payer.secret());
 Then pay the seller with that keypair (classic flow, from `examples/`):
 
 ```sh
-RESOURCE_URL="https://vellar-seller-demo.onrender.com/quote?topic=perseverance" \
+RESOURCE_URL="https://vellar-seller-demo-testnet-production.up.railway.app/quote?topic=perseverance" \
 PAYER_SECRET=S...   # the secret the script printed
 node buyer-classic.mjs
 ```
 
-Both steps are verified working end to end. Note the demo seller is a free
-Render instance — from deep sleep the first request can take a minute or
-more to answer. For the **smart-account/agent** flow you still provision
+Both steps are verified working end to end. For the **smart-account/agent** flow you still provision
 your own seller (below): a fresh smart account holds no USDC, and the
 budget-policy story needs an asset your policies are scoped to.
 
@@ -222,7 +221,7 @@ import { x402ResourceServer } from "@x402/core/server";
 import { ExactStellarScheme } from "@x402/stellar/exact/server";
 
 const server = new x402ResourceServer(
-  new HTTPFacilitatorClient({ url: "https://vellar-facilitator.onrender.com" }),
+  new HTTPFacilitatorClient({ url: "https://vellar-facilitator-testnet-production.up.railway.app" }),
 ).register("stellar:testnet", new ExactStellarScheme());
 ```
 
@@ -336,7 +335,7 @@ import { HTTPFacilitatorClient } from "@x402/core/http";
 import { withBazaar } from "@x402/extensions/bazaar";
 
 const bazaar = withBazaar(
-  new HTTPFacilitatorClient({ url: "https://vellar-facilitator.onrender.com" }),
+  new HTTPFacilitatorClient({ url: "https://vellar-facilitator-testnet-production.up.railway.app" }),
 ).extensions.bazaar;
 
 const { items } = await bazaar.listResources({ network: "stellar:testnet" });
@@ -357,7 +356,7 @@ without hardcoded URLs.
       "args": ["tsx", "src/mcp.ts"],
       "cwd": "/path/to/vellar-facilitator",
       "env": {
-        "FACILITATOR_URL": "https://vellar-facilitator.onrender.com"
+        "FACILITATOR_URL": "https://vellar-facilitator-testnet-production.up.railway.app"
       }
     }
   }
@@ -370,9 +369,6 @@ without hardcoded URLs.
 
 **`x402_search_resources`** — keyword search. Parameters: `query` (required),
 the same filters, and `cursor` for pagination.
-
-The facilitator runs on a free tier — the first tool call after idle may take up
-to a minute.
 
 Paying for what you find is a separate server that holds a key — see the
 [MCP payer](./agent-tooling/mcp-payer.md).
@@ -452,7 +448,7 @@ a resource before paying:
   facilitator itself with no external dependency. `true` only when the
   facilitator fetched your resource's own URL and found your `payTo` in its
   402 challenge — the signal that a listing isn't a squat. On the hosted
-  free-tier instance it's lost on every restart (no persistent disk — see
+  instance it's lost on every restart (no persistent disk — see
   [Limits](#limits-and-operational-caveats)), but it self-heals: your next
   settlement re-runs the check after a 15-minute cooldown, with no operator
   involved.
@@ -472,6 +468,41 @@ Two things that catch people: advertise your **public** URL, not
 `localhost` — a loopback address can never verify — and the canonical key
 strips a trailing slash, so a server that only answers `…/quote/` and 404s
 on `…/quote` fails verification against the URL it's actually checked at.
+
+## Deployments
+
+Two independent facilitator deployments, each pinned to one network with its own
+sponsor account, channel accounts and asset configuration. They never share
+Stellar credentials.
+
+| Network | Facilitator | Seller demo |
+| --- | --- | --- |
+| `stellar:testnet` | `https://vellar-facilitator-testnet-production.up.railway.app` | `https://vellar-seller-demo-testnet-production.up.railway.app` |
+| `stellar:pubnet` (mainnet) | `https://vellar-facilitator-production.up.railway.app` | `https://vellar-seller-demo-production.up.railway.app` |
+
+Every tool in these docs defaults to the **testnet** facilitator, and every
+example uses the testnet seller demo. A testnet call moves Friendbot-funded
+test USDC and costs nothing real.
+
+> ⚠️ **The mainnet pair moves real funds.** The mainnet seller demo charges
+> **1 real USDC** per call against the live USDC contract
+> `CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75`. Point anything at
+> the mainnet facilitator deliberately, never by copying a testnet command.
+
+Each seller demo is wired at deploy time to exactly one facilitator on exactly
+one network — `FACILITATOR_URL`, `ASSET`, `NETWORK` and `HORIZON_URL` all have to
+agree. There is no runtime toggle, so the testnet demo has no path to real money.
+
+### The kill switch
+
+The facilitator ships a kill switch (`/admin/kill-switch`, gated by that
+service's own `ADMIN_SECRET`). When engaged, `/settle` returns
+`503 service_paused` before any balance or spend logic runs; the process stays up
+and healthy and simply refuses new settlements. The admin console's toggle calls
+this — it does not restart the service or change environment variables.
+
+The two deployments have two separate switches. Pausing mainnet has no effect on
+testnet.
 
 ## Limits and operational caveats
 
@@ -501,10 +532,11 @@ Things a developer building against the hosted instance should know up front:
   saw failure rates as high as 1-in-3. Keep "sign fresh, retry once" as the
   correct client-side handling regardless — it costs nothing when nothing
   fails.
-- **The catalog is ephemeral.** The free tier has no persistent disk, so
-  catalog entries and URL ownership bindings vanish on every restart or idle
-  sleep — cold start doesn't just mean latency, it means data loss. A
-  resource is re-cataloged after its next settled payment.
+- **The catalog is ephemeral.** The hosted instance has no persistent disk, so
+  catalog entries and URL ownership bindings vanish whenever the service
+  restarts. A resource is re-cataloged after its next settled payment, and
+  settlement itself is unaffected: a payment still settles on-chain when the
+  catalog is empty.
 - **URL ownership is trust-on-first-use.** The first settled payment binds a
   resource URL to its `payTo` (then verified against the URL's own 402
   challenge). A different `payTo` settling the same URL is refused from the
@@ -532,15 +564,10 @@ Things a developer building against the hosted instance should know up front:
   restart, not stored). `0` means the catalog's trust state is settled;
   anything higher means check back shortly rather than treat what you just
   read as final.
-- **No guaranteed warm window, but the odds are better on weekdays.** A
-  best-effort keep-warm job pings the facilitator and demo seller every 10
-  minutes, **07:00–21:00 UTC on weekdays** — that narrows how often you'll
-  hit a cold instance during that window, but GitHub Actions scheduling is
-  best-effort and can slip past the 15-minute idle timeout, so it is not a
-  promise. Outside that window, or if a ping slips, assume cold. Send a
-  warming `GET /health` (rate-limit-exempt) with a ~120s timeout ahead of a
-  real request rather than let a user's first call eat the cold start. It
-  then stays warm for 15 minutes past your last call.
+- **The service runs continuously.** It is hosted on Railway with no idle
+  sleep, so there is no cold start to plan around and no warming request to
+  send. `/health` remains rate-limit-exempt if you want a cheap liveness
+  check.
 
 ## Proven end to end
 

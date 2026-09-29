@@ -118,7 +118,7 @@ once. Losing a handful of accounts costs concurrency, not correctness.
 currently usable for settlement.
 
 ```bash
-curl -s https://vellar-facilitator.onrender.com/health \
+curl -s https://vellar-facilitator-testnet-production.up.railway.app/health \
   | python3 -c \
   "import json,sys; \
   d=json.load(sys.stdin); \
@@ -137,9 +137,7 @@ or disabled by the monitor for being below the floor. Disabled accounts are
 excluded from settlement until they are re-funded.
 
 > **Note:** `/health` is exempt from the facilitator's rate limits, so you can
-> poll it. On the hosted instance the service sleeps after 15 minutes idle and
-> the first request takes roughly 45 seconds, so allow 120 seconds in your
-> timeout before concluding the pool is unhealthy.
+> poll it freely.
 
 A number that stays below 50 while traffic is idle points at funding, not load.
 A number that dips under load and recovers is the pool working as designed.

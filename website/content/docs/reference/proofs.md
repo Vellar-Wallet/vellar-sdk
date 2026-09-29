@@ -27,7 +27,7 @@ discrepancy worth reporting.
 Before verifying individual hashes, confirm the facilitator is live.
 
 ```bash
-BASE=https://vellar-facilitator.onrender.com
+BASE=https://vellar-facilitator-testnet-production.up.railway.app
 
 # Liveness and current state
 curl -sS --max-time 120 "$BASE/health" | python3 -m json.tool
@@ -44,10 +44,8 @@ curl -sS -X POST "$BASE/settle" \
 Expect `status: ok`, `stellar:testnet` with `areFeesSponsored: true` on both the
 `exact` and `upto` kinds, and a non-null `errorReason` on the empty settle.
 
-> **Note:** The instance sleeps after 15 minutes idle, so the first call takes
-> roughly 45 seconds (measured). Allow up to 120 seconds in your timeout.
-> `/health` is exempt from the rate limit, so warm with that rather than
-> hammering `/supported`.
+> **Note:** `/health` is exempt from the rate limit, so prefer it for liveness
+> checks rather than hammering `/supported`.
 
 ## Exact scheme settlements
 
@@ -306,7 +304,6 @@ These claims exist in the codebase but cannot be verified from outside it:
 | Symptom | Cause | Fix |
 | --- | --- | --- |
 | A hash returns 404 on Horizon | Querying pubnet Horizon rather than testnet | Every hash here is Stellar **testnet**; use `horizon-testnet.stellar.org` |
-| The first facilitator call hangs | Free-tier cold start after 15 minutes idle | Allow up to 120 seconds; warm with `GET /health` first |
 | `fee_account` shows an address you do not recognise | Older settlements used earlier sponsors, and the F11 test used its own | Check it against the sponsor named in that section. The test is that it is never the buyer |
 | `stellar contract fetch` is not found | The Stellar CLI is not installed | Install it, or skip the contract check: every other command needs only curl and python3 |
 

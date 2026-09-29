@@ -57,7 +57,7 @@ import { bazaarResourceServerExtension } from "@x402/extensions/bazaar";
 
 const server = new x402ResourceServer(
   new HTTPFacilitatorClient({
-    url: "https://vellar-facilitator.onrender.com",
+    url: "https://vellar-facilitator-testnet-production.up.railway.app",
   }),
 )
   .register("stellar:testnet", new ExactStellarScheme())
@@ -70,10 +70,7 @@ facilitator re-simulates the signed payment to verify it, submits it on-chain,
 and sponsors the network fee from
 `GBUCR6H22CZC5OYHBJIEUS2JFZBOB63AHEGTCV6UEPMD2TMLKG2ZMIW4`.
 
-> **Note:** The hosted facilitator is `stellar:testnet` only and runs on a free
-> tier. It sleeps after 15 minutes idle, so the first request after a quiet spell
-> takes roughly 45 seconds (measured). Send a warming
-> `GET /health` before a request you care about.
+> **Note:** The hosted testnet facilitator is `stellar:testnet` only.
 
 ## 3. Declare the payment requirements
 
@@ -151,7 +148,7 @@ PAYTO=G... \
 ASSET=C... \
 PRICE_ATOMIC=1000000 \
 SELLER_PORT=4031 \
-FACILITATOR_URL=https://vellar-facilitator.onrender.com \
+FACILITATOR_URL=https://vellar-facilitator-testnet-production.up.railway.app \
 node seller.mjs
 ```
 
@@ -170,8 +167,8 @@ order, with any one failure giving `unverifiable`:
 > ⚠️ **Your first settlement against the hosted facilitator writes a public
 > catalog entry.** A `localhost` URL produces an entry that can never pass
 > ownership verification, and there is no self-service removal, so every agent
-> reading the catalog pays the cost of it until the next restart or idle sleep
-> clears the catalog. For local development, run your own facilitator and set
+> reading the catalog pays the cost of it until the next restart clears the
+> catalog. For local development, run your own facilitator and set
 > `FACILITATOR_URL`. With a localhost URL and the shared facilitator, `seller.mjs`
 > refuses to start; `ALLOW_UNVERIFIABLE_ON_SHARED=1` bypasses that, and you
 > should use it only if you understand what it leaves behind.
@@ -181,7 +178,7 @@ order, with any one failure giving `unverifiable`:
 Take one real payment, then read the catalog:
 
 ```sh
-curl -s "https://vellar-facilitator.onrender.com/discovery/resources?network=stellar:testnet&payTo=$PAYTO" \
+curl -s "https://vellar-facilitator-testnet-production.up.railway.app/discovery/resources?network=stellar:testnet&payTo=$PAYTO" \
   | python3 -m json.tool
 ```
 
@@ -202,9 +199,8 @@ signal only. If `cataloged` is `false`, read the `reason` field:
 `invalid_tool_name`, or `cataloging_error`. Each one is explained in
 [Bazaar and discovery](../concepts/bazaar-and-discovery.md).
 
-> **Note:** The hosted catalog is ephemeral. The free tier has no persistent
-> disk, so catalog entries and URL ownership bindings vanish on every restart or
-> idle sleep. Your resource is re-cataloged after its next settled payment, and
+> **Note:** The hosted catalog is ephemeral. There is no persistent disk, so
+> catalog entries and URL ownership bindings vanish when the service restarts. Your resource is re-cataloged after its next settled payment, and
 > `ownerVerified` self-heals after the next settlement, subject to a 15-minute
 > cooldown.
 

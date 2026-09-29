@@ -142,7 +142,7 @@ const PAYMENT_CONFIG = {
   payToAddress: "GA...", // your address, inlined at generation time
 };
 const x402FacilitatorClient = new HTTPFacilitatorClient({
-  url: "https://vellar-facilitator.onrender.com",
+  url: "https://vellar-facilitator-testnet-production.up.railway.app",
 });
 const x402Server = new x402ResourceServer(x402FacilitatorClient)
   .register("stellar:testnet", new ExactStellarScheme())

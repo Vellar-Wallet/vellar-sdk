@@ -19,7 +19,7 @@ import { log } from "./output.js";
 import type { FetchLike, PayResult, Payer } from "./payer.js";
 
 /** Hosted facilitator, used when VELLAR_X402_FACILITATOR_URL is unset. */
-export const DEFAULT_FACILITATOR_URL = "https://vellar-facilitator.onrender.com";
+export const DEFAULT_FACILITATOR_URL = "https://vellar-facilitator-testnet-production.up.railway.app";
 
 /** How many catalog entries to consider. More than this is noise for one call. */
 const SEARCH_LIMIT = 10;

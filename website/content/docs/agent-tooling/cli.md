@@ -34,19 +34,19 @@ vellar search "quote" --limit 3
 ```
 
 ```
-https://vellar-seller-demo.onrender.com/quote
+https://vellar-seller-demo-testnet-production.up.railway.app/quote
   Motivational Quote
   exact on stellar:testnet: 1000000 base units of CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA
   Motivational quote of the day (paid)
   trust: 286 settlements, 268 unique payers
 
-https://vellar-seller-demo.onrender.com/lorem
+https://vellar-seller-demo-testnet-production.up.railway.app/lorem
   Lorem Ipsum Generator
   exact on stellar:testnet: 100000 base units of CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA
   Generate placeholder lorem ipsum text. Specify how many paragraphs or words you need.
   trust: 1 settlements, 1 unique payers
 
-https://vellar-seller-demo.onrender.com/units
+https://vellar-seller-demo-testnet-production.up.railway.app/units
   Unit Converter
   exact on stellar:testnet: 100000 base units of CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA
   Convert between units of measurement. Supports length, mass, temperature, and volume.
@@ -72,11 +72,11 @@ Checks the price of a resource without paying. One HTTP request: nothing is
 signed and no key is read.
 
 ```sh
-vellar quote https://vellar-seller-demo.onrender.com/quote
+vellar quote https://vellar-seller-demo-testnet-production.up.railway.app/quote
 ```
 
 ```
-URL:    https://vellar-seller-demo.onrender.com/quote
+URL:    https://vellar-seller-demo-testnet-production.up.railway.app/quote
 Scheme: exact
 Network:stellar:testnet
 Amount: 1000000 (base units)
@@ -103,7 +103,7 @@ difference between a resource a zero-XLM account can pay and one it cannot.
 Pays for a resource and prints the content.
 
 ```sh
-vellar pay https://vellar-seller-demo.onrender.com/quote \
+vellar pay https://vellar-seller-demo-testnet-production.up.railway.app/quote \
   --secret-file ~/.vellar/key \
   --max 1000000
 ```
@@ -212,7 +212,7 @@ mkdir -p ~/.vellar
 echo "S..." > ~/.vellar/key
 chmod 600 ~/.vellar/key
 
-vellar pay https://vellar-seller-demo.onrender.com/quote \
+vellar pay https://vellar-seller-demo-testnet-production.up.railway.app/quote \
   --secret-file ~/.vellar/key
 ```
 
@@ -220,7 +220,7 @@ vellar pay https://vellar-seller-demo.onrender.com/quote \
 
 ```sh
 export VELLAR_SECRET="S..."
-vellar pay https://vellar-seller-demo.onrender.com/quote
+vellar pay https://vellar-seller-demo-testnet-production.up.railway.app/quote
 ```
 
 On macOS you can source it from the keychain rather than a file:
@@ -243,7 +243,6 @@ the command runs.
 | `Error: provide --secret-file ...` | No secret was supplied by flag, file, or `VELLAR_SECRET` | No | Supply one. Prefer `--secret-file` |
 | `Could not build the payment` | Usually no trustline to the asset, or an empty balance | No | Add the trustline and fund the account |
 | `Transaction not found on testnet` | The hash is on the other network, or does not exist | n/a | A testnet hash returns 404 on mainnet Horizon and vice versa |
-| The first call hangs | Free-tier cold start; the hosted instance sleeps after 15 minutes idle | No | Allow up to 120 seconds. This is not a failure |
 
 ## Next steps
 

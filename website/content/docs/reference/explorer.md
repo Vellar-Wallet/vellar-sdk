@@ -109,10 +109,10 @@ August, across 302 unique buyers.
 
 ## Querying the explorer
 
-The API base URL is `https://vellar-explorer.onrender.com`.
+The API base URL is `https://vellar-explorer-production.up.railway.app`.
 
 ```bash
-BASE=https://vellar-explorer.onrender.com
+BASE=https://vellar-explorer-production.up.railway.app
 
 # Recent classified payments
 curl -sS "$BASE/payments?limit=5" | python3 -m json.tool

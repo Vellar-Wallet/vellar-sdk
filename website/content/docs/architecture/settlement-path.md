@@ -18,7 +18,7 @@ either a classic Stellar keypair or a Soroban smart contract account whose
 [The payment loop](../concepts/payment-loop.md) first.
 
 Vellar runs on `stellar:testnet` only. The hosted facilitator is
-`https://vellar-facilitator.onrender.com`.
+`https://vellar-facilitator-testnet-production.up.railway.app`.
 
 ## What happens at `/verify`
 
