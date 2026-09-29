@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { InvalidAmountError, parseTokenAmount } from "./payments";
+import { InvalidAmountError, parseTokenAmount, tryParseTokenAmount } from "./payments";
 import {
   createPaymentClient,
   InvalidRecipientError,
@@ -40,6 +40,31 @@ describe("parseTokenAmount", () => {
   });
 });
 
+describe("tryParseTokenAmount", () => {
+  it.each([
+    ["", "empty"],
+    ["   ", "empty"],
+    ["abc", "not-a-number"],
+    ["1.2.3", "not-a-number"],
+    ["-5", "negative"],
+    ["1.00000001", "too-many-decimals"],
+    ["0", "zero"],
+  ] as const)("returns the %s reason for %s", (input, reason) => {
+    const result = tryParseTokenAmount(input, 7);
+    expect(result).toMatchObject({ ok: false, reason });
+  });
+
+  it("returns raw units at the token precision boundary", () => {
+    expect(tryParseTokenAmount("1.0000001", 7)).toEqual({
+      ok: true,
+      value: 10000001n,
+    });
+  });
+
+  it("preserves the throwing parser for invalid input", () => {
+    expect(() => parseTokenAmount("-1", 7)).toThrow(InvalidAmountError);
+  });
+});
 const xlm = { symbol: "XLM", contractId: "CNATIVE", decimals: 7 };
 const FROM = "CSMARTWALLET";
 const TO = "GRECIPIENT";

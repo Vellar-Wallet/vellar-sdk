@@ -11,6 +11,7 @@ export const STABLE_V1_EXPORTS = [
   "createBalanceService",
   "fetchBalancesBatch",
   "formatTokenAmount",
+  "tryParseTokenAmount",
   "BatchBalanceSizeError",
   "MAX_BATCH_BALANCE_SIZE",
   "createPasskeyKitConnector",
