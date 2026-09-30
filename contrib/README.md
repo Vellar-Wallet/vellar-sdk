@@ -168,3 +168,28 @@ We add [contrib/http-backend-tests.test.ts](http-backend-tests.test.ts), testing
 No source changes are proposed — this is additive test coverage for existing behavior in
 `src/http-backend.ts`. A maintainer may choose to move this file to `src/http-backend.test.ts`
 verbatim.
+
+---
+
+## 8. License Decision: AGPL-3.0 Transitive Dependency
+
+We record the finding in [contrib/license-decision.md](license-decision.md): the production
+tree carries exactly one copyleft package, `@openzeppelin/relayer-sdk@1.10.0`
+(AGPL-3.0-or-later), reached only via `passkey-kit@0.16.5 -> @openzeppelin/relayer-plugin-channels@0.20.0`.
+
+### Verified
+- The chain and its license, directly against `package-lock.json`.
+- `passkey-kit` is a `devDependency` and an *optional* `peerDependency` — the AGPL branch
+  carries `"dev": true` in the lockfile, so it is absent from a production install unless a
+  consumer opts into `passkey-kit` themselves.
+- No `package.json` in this repo lists it, and nothing under `src/`, `packages/cli/src`, or
+  `packages/mcp-x402-payer/src` imports from `passkey-kit`.
+
+### Decision
+No action required on vellar-sdk's own licensing: the AGPL package is unreachable from
+anything vellar-sdk ships and is never bundled into `dist/`. Full reasoning and the conditions
+that would require revisiting this are in the doc.
+
+### Integration into Core
+Move [contrib/license-decision.md](license-decision.md) to `reference/license.md` (the
+directory does not exist on `dev` yet).
