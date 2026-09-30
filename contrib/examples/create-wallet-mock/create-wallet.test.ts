@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import "../test-browser-context";
 import { createVellarWallet } from "../../../src/index";
 import { createMockBackend, createMockPasskeyKit } from "./create-wallet";
 

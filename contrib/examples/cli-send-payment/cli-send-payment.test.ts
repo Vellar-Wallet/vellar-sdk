@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import "../test-browser-context";
 import { createMockWallet, parseArgs, runSendPayment } from "./cli-send-payment";
 
 describe("parseArgs", () => {
