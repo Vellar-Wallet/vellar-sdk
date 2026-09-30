@@ -1,4 +1,4 @@
-import { rpc, StrKey, Transaction } from "@stellar/stellar-sdk";
+import { rpc, StrKey, TransactionBuilder } from "@stellar/stellar-sdk";
 import type { TxStatus, TxStatusReader } from "./tx-status";
 
 // RPC-backed pieces of the payment flow (subpath export — see rpc.ts).
@@ -43,6 +43,8 @@ export interface RpcRateLimitOptions {
 
 export interface RpcTxSubmitterOptions {
   rpcUrl: string;
+  /** Passphrase for the network the submitted transaction was built for. */
+  networkPassphrase: string;
   /** When set, submission calls are guarded by a per-client token bucket. */
   rateLimit?: RpcRateLimitOptions;
   /** Injected RPC server (for tests). Defaults to a new rpc.Server(rpcUrl). */
@@ -99,7 +101,7 @@ export function createRpcTxSubmitter(options: RpcTxSubmitterOptions): RpcTxSubmi
       if (limiter && !limiter.tryConsume()) {
         throw new RateLimitError();
       }
-      const tx = Transaction.fromXDR(signedXdr, "base64");
+      const tx = TransactionBuilder.fromXDR(signedXdr, options.networkPassphrase);
       const res = await server.sendTransaction(tx);
       if (res.status === "ERROR") {
         throw new Error(

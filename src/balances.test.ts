@@ -82,7 +82,9 @@ describe("fetchBalancesBatch", () => {
 
   it("rejects batches larger than the configured max size", async () => {
     const tokens = Array.from({ length: MAX_BATCH_BALANCE_SIZE + 1 }, (_, i) => ({
+      symbol: `T${i}`,
       contractId: `C${i}`,
+      decimals: 7,
     }));
     const reader: BalanceReader = { getTokenBalance: vi.fn() };
 
@@ -100,7 +102,7 @@ describe("createBalanceService.getBalancesBatch", () => {
     };
     const service = createBalanceService(reader, []);
     await expect(
-      service.getBalancesBatch("CHOLDER", [{ contractId: "CXLM" }]),
+      service.getBalancesBatch("CHOLDER", [{ contractId: "CXLM", symbol: "XLM", decimals: 7 }]),
     ).resolves.toEqual([{ contractId: "CXLM", success: true, amount: 1n }]);
   });
 });
