@@ -17,6 +17,7 @@ export default defineConfig({
     // facilitator so one format has one implementation.
     "x402-untrusted": "src/x402-untrusted.ts",
     "x402-untrusted-vectors": "src/x402-untrusted-vectors.ts",
+    "x402-guards-vectors": "src/x402-guards-vectors.ts",
     // Signed-request auth between the SDK and a vellar-facilitator deployment.
     // Dependency-free, like the guards/untrusted modules, so a payer that
     // doesn't share the wallet plumbing can sign facilitator requests alone.

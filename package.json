@@ -89,6 +89,17 @@
         "default": "./dist/x402-untrusted-vectors.cjs"
       }
     },
+    "./x402-guards-vectors": {
+      "source": "./src/x402-guards-vectors.ts",
+      "import": {
+        "types": "./dist/x402-guards-vectors.d.ts",
+        "default": "./dist/x402-guards-vectors.js"
+      },
+      "require": {
+        "types": "./dist/x402-guards-vectors.d.cts",
+        "default": "./dist/x402-guards-vectors.cjs"
+      }
+    },
     "./x402-request-auth": {
       "source": "./src/x402-request-auth.ts",
       "import": {
