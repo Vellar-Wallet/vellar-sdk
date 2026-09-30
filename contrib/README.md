@@ -193,3 +193,48 @@ that would require revisiting this are in the doc.
 ### Integration into Core
 Move [contrib/license-decision.md](license-decision.md) to `reference/license.md` (the
 directory does not exist on `dev` yet).
+
+---
+
+## 9. Warn Loudly Before Any Mainnet Payment
+
+We implement `confirmMainnetPayment` and `formatMainnetWarning` inside
+[contrib/mainnet-payment-warning.ts](mainnet-payment-warning.ts), with tests in
+[contrib/mainnet-payment-warning.test.ts](mainnet-payment-warning.test.ts).
+
+### Behavior
+- **No-op off mainnet.** Any network other than `"mainnet"` returns immediately — no banner,
+  no prompt.
+- **`formatMainnetWarning`**: an unmistakable notice showing network, asset, and amount,
+  printed before anything is signed.
+- **`confirmMainnetPayment`**: on mainnet, always prints the warning first (even with
+  `assumeYes: true`, so a scripted run's logs still show what was spent), then either skips
+  the prompt (`assumeYes`), refuses outright when input is non-interactive and `assumeYes` is
+  not set (fails closed instead of hanging on an unanswerable prompt), or prompts and requires
+  the literal answer `"YES"`. A refusal throws `RealFundsConfirmationDeclinedError` — nothing
+  is signed.
+- **`withNetwork`**: a pure helper to merge `network` onto any MCP payer result, so it appears
+  at the top level even on responses without a `settlement` (e.g. "no payment required").
+
+### Integration into Core
+1. **CLI** (`packages/cli/src/commands/pay.ts`): add a `--yes` boolean option to `makePayCommand`
+   (default `false`). Between step 2 (ceiling/sponsorship checks, ~line 202) and step 3
+   (build-and-sign, ~line 204), call:
+   ```ts
+   await confirmMainnetPayment({
+     network: opts.network,
+     asset: chosen.asset ?? "?",
+     amount: price.toString(),
+     assumeYes: opts.yes,
+   });
+   ```
+   wrapped in the existing top-level `try`, so `RealFundsConfirmationDeclinedError` is reported
+   through the same `catch (err)` → `console.error` → `process.exit(1)` path already there.
+2. **MCP payer startup** (`packages/mcp-x402-payer/src/bin.ts`): already logs `network:
+   config.network` in the `"vellar x402 payer ready"` log line (lines 30-38) — no change
+   needed there.
+3. **MCP payer results** (`packages/mcp-x402-payer/src/payer.ts`): wrap each `QuoteResult` and
+   `PayResult` return value in `withNetwork(result, config.network)` — currently `network` only
+   appears inside `settlement`, which is absent on the "no payment required" / unpayable
+   branches (e.g. the early return at `payer.ts:229`, the refusal branch around `payer.ts:263-268`,
+   and the no-challenge return around `payer.ts:284-289`).
