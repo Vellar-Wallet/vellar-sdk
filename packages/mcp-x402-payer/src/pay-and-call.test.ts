@@ -134,7 +134,7 @@ describe("x402_pay_and_call", () => {
     expect(payer.pay).not.toHaveBeenCalled();
   });
 
-  it("T-4: reports the cold-start hint when the Bazaar is unreachable", async () => {
+  it("T-4: reports an unreachable Bazaar when the Bazaar is unreachable", async () => {
     const payer = stubPayer();
     const call = payAndCall(
       {
@@ -151,7 +151,6 @@ describe("x402_pay_and_call", () => {
     );
 
     await expect(call).rejects.toThrow(/could not reach the Bazaar/);
-    await expect(call).rejects.toThrow(/45 seconds/);
     expect(payer.pay).not.toHaveBeenCalled();
   });
 

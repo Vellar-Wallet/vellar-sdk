@@ -19,7 +19,7 @@ import { log } from "./output.js";
 import type { FetchLike, PayResult, Payer } from "./payer.js";
 
 /** Hosted facilitator, used when VELLAR_X402_FACILITATOR_URL is unset. */
-export const DEFAULT_FACILITATOR_URL = "https://vellar-facilitator.onrender.com";
+export const DEFAULT_FACILITATOR_URL = "https://vellar-facilitator-production.up.railway.app";
 
 /** How many catalog entries to consider. More than this is noise for one call. */
 const SEARCH_LIMIT = 10;
@@ -186,13 +186,8 @@ export async function payAndCall(
     }
     data = (await res.json()) as SearchResponse;
   } catch (err) {
-    // The hosted facilitator sleeps after 15 minutes idle and the first request
-    // then takes roughly 45 seconds. Saying so turns a retry into an informed
-    // decision rather than a guess.
     throw new Error(
-      `could not reach the Bazaar at ${base}: ${err instanceof Error ? err.message : String(err)}. ` +
-        "If this is the hosted instance it may be cold-starting, which takes roughly 45 seconds; " +
-        "retry once before concluding it is down.",
+      `could not reach the Bazaar at ${base}: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
 
