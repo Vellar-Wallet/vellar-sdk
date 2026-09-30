@@ -145,3 +145,26 @@ testing `src/payments-client.ts` directly rather than only indirectly through
 No source changes are proposed — this is additive test coverage for existing behavior in
 `src/payments-client.ts`. A maintainer may choose to move this file to
 `src/payments-client.test.ts` verbatim.
+
+---
+
+## 7. Direct Unit Tests for the HTTP Wallet Backend
+
+We add [contrib/http-backend-tests.test.ts](http-backend-tests.test.ts), testing
+`src/http-backend.ts` directly. It was previously covered only indirectly via
+`client-backend-harness.test.ts`.
+
+### Coverage
+- **Every `toApiError` branch**: a JSON error body with `message`, a JSON body with only
+  `error`, a non-JSON body (the `catch` fallthrough), and the fallback `Wallet API request
+  failed (<status>)` message when the body has neither field.
+- **`WalletApiError.status` and `.code`**: asserted directly off the thrown instance, including
+  the case where `.code` is `undefined` because the body carried no `error` field.
+- **All three documented endpoints** (`/wallet/create`, `/wallet/connect`, `/wallet/submit`)
+  post the exact request shape, and `/wallet/connect`'s 404-as-`undefined` special case is
+  covered separately from its generic error path.
+
+### Integration into Core
+No source changes are proposed — this is additive test coverage for existing behavior in
+`src/http-backend.ts`. A maintainer may choose to move this file to `src/http-backend.test.ts`
+verbatim.
