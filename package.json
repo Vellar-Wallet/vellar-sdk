@@ -56,6 +56,17 @@
         "default": "./dist/rpc.cjs"
       }
     },
+    "./x402-facilitator": {
+      "source": "./src/x402-facilitator.ts",
+      "import": {
+        "types": "./dist/x402-facilitator.d.ts",
+        "default": "./dist/x402-facilitator.js"
+      },
+      "require": {
+        "types": "./dist/x402-facilitator.d.cts",
+        "default": "./dist/x402-facilitator.cjs"
+      }
+    },
     "./x402-guards": {
       "source": "./src/x402-guards.ts",
       "import": {

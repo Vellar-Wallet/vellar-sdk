@@ -1,6 +1,7 @@
 import { Command } from "commander";
+import { DEFAULT_FACILITATOR_URL, buildDiscoverySearchUrl } from "vellar-sdk/x402-facilitator";
 
-export const DEFAULT_FACILITATOR_URL = "https://vellar-facilitator.onrender.com";
+export { DEFAULT_FACILITATOR_URL };
 
 /** One entry of `accepts[]` on a catalog resource. */
 interface Accept {
@@ -65,11 +66,7 @@ export function makeSearchCommand(): Command {
     .option("--json", "Output raw JSON")
     .action(async (query: string, opts: { facilitator: string; limit: string; json?: boolean }) => {
       try {
-        const url = new URL("/discovery/search", opts.facilitator);
-        // The endpoint takes `query`, not `q`. A wrong key is not an error:
-        // it returns an unfiltered listing, which looks like a working search.
-        url.searchParams.set("query", query);
-        url.searchParams.set("limit", opts.limit);
+        const url = buildDiscoverySearchUrl(opts.facilitator, query, opts.limit);
 
         const res = await fetch(url.toString());
         if (!res.ok) {

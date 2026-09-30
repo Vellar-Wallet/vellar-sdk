@@ -13,13 +13,15 @@
 // session ledger is checked BEFORE the search, so a call that could not pay
 // anything never reaches the network.
 
+import { DEFAULT_FACILITATOR_URL, buildDiscoverySearchUrl } from "vellar-sdk/x402-facilitator";
 import type { PayerConfig } from "./config.js";
 import type { SpendLedger } from "./ledger.js";
 import { log } from "./output.js";
 import type { FetchLike, PayResult, Payer } from "./payer.js";
 
-/** Hosted facilitator, used when VELLAR_X402_FACILITATOR_URL is unset. */
-export const DEFAULT_FACILITATOR_URL = "https://vellar-facilitator.onrender.com";
+// Hosted facilitator default, used when VELLAR_X402_FACILITATOR_URL is unset,
+// lives in vellar-sdk so it has one definition shared with the CLI.
+export { DEFAULT_FACILITATOR_URL };
 
 /** How many catalog entries to consider. More than this is noise for one call. */
 const SEARCH_LIMIT = 10;
@@ -174,9 +176,7 @@ export async function payAndCall(
     );
   }
 
-  const url = new URL("/discovery/search", base);
-  url.searchParams.set("query", query);
-  url.searchParams.set("limit", String(SEARCH_LIMIT));
+  const url = buildDiscoverySearchUrl(base, query, SEARCH_LIMIT);
 
   let data: SearchResponse;
   try {
