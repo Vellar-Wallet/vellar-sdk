@@ -1,54 +1,49 @@
-// The cumulative per-session spend ledger — layer 1's second half.
-//
-// WHAT THIS IS: a guard against mistakes and runaway loops. The model supplies
-// `max_amount` per call; the SERVER owns this ceiling and the model cannot
-// raise it, because it is read from the environment at startup and never
-// appears in any tool schema.
-//
-// WHAT THIS IS NOT: a security boundary. It lives in the same process the agent
-// is talking to, it resets when that process restarts, and it binds only this
-// server. The guarantee against a compromised or manipulated agent is the
-// chain-enforced budget in a Vellar smart account, which no amount of emitted
-// text can exceed. See the README — do not let this be mistaken for that.
-//
-// Accounting rule: spend is recorded ONLY on a confirmed settlement. Roughly one
-// testnet settlement in three returns an empty transaction with nothing spent,
-// so debiting per attempt would drift the ledger away from reality.
-
 import { SessionCeilingExceededError } from "./errors.js";
 
 export interface SpendSnapshot {
   asset: string;
   spent: string;
+  reserved: string;
   ceiling: string;
   remaining: string;
 }
 
 export interface SpendLedger {
-  /** Throw unless `amount` fits under this asset's remaining ceiling. */
-  assertWithinCeiling(asset: string, amount: bigint): void;
-  /** Record a CONFIRMED settlement. Call exactly once per settled payment. */
-  record(asset: string, amount: bigint): void;
+  /** 
+   * Phase 1: Attempt to reserve budget for an in-flight payment. 
+   * Throws if `amount` exceeds the remaining ceiling (including other active reservations).
+   */
+  reserve(asset: string, amount: bigint): void;
+  
+  /** 
+   * Phase 2 (Success): Record a CONFIRMED settlement. 
+   * Drops the initial reservation and permanently deducts the actual settled amount.
+   */
+  settle(asset: string, requestedAmount: bigint, settledAmount: bigint): void;
+
+  /** 
+   * Phase 2 (Failure): Release a reservation if the payment failed or was cancelled.
+   */
+  release(asset: string, requestedAmount: bigint): void;
+
   remainingFor(asset: string): bigint;
   snapshot(): SpendSnapshot[];
 }
 
 /**
- * A ledger over per-asset ceilings.
+ * A ledger over per-asset ceilings with in-flight reservation support.
  *
  * Fails CLOSED: an asset with no configured ceiling is refused outright rather
- * than treated as unlimited. Base units are only comparable within one asset, so
- * there is deliberately no cross-asset total — summing them would fail OPEN on a
- * cheaply-denominated asset.
+ * than treated as unlimited.
  */
-export function createSpendLedger(ceilings: ReadonlyMap<string, bigint>): SpendLedger {
-  const spent = new Map<string, bigint>();
+export function createSpendLedger(ceilings: ReadonlyMap): SpendLedger {
+  const spent = new Map();
+  const reserved = new Map();
 
   function ceilingFor(asset: string): bigint {
     const ceiling = ceilings.get(asset);
     if (ceiling === undefined) {
-      // Not a configured asset ⇒ not payable. Reported as a ceiling of 0 spent
-      // of 0 so the message stays uniform and still explains the refusal.
+      // Not a configured asset ⇒ not payable.
       throw new SessionCeilingExceededError(asset, 0n, 0n, 0n);
     }
     return ceiling;
@@ -58,34 +53,57 @@ export function createSpendLedger(ceilings: ReadonlyMap<string, bigint>): SpendL
     return spent.get(asset) ?? 0n;
   }
 
+  function reservedFor(asset: string): bigint {
+    return reserved.get(asset) ?? 0n;
+  }
+
   return {
-    assertWithinCeiling(asset, amount) {
+    reserve(asset, amount) {
       const ceiling = ceilingFor(asset);
-      const already = spentFor(asset);
-      if (already + amount > ceiling) {
-        throw new SessionCeilingExceededError(asset, amount, already, ceiling);
+      const alreadySpent = spentFor(asset);
+      const alreadyReserved = reservedFor(asset);
+      
+      if (alreadySpent + alreadyReserved + amount > ceiling) {
+        throw new SessionCeilingExceededError(asset, amount, alreadySpent + alreadyReserved, ceiling);
       }
+      
+      reserved.set(asset, alreadyReserved + amount);
     },
 
-    record(asset, amount) {
-      // Re-resolve the ceiling so a stray record() for an unconfigured asset
-      // throws rather than silently creating a new bucket.
+    settle(asset, requestedAmount, settledAmount) {
       ceilingFor(asset);
-      spent.set(asset, spentFor(asset) + amount);
+      
+      const currentReserved = reservedFor(asset);
+      // Floor at 0 to defend against underflow if a caller bypassed reserve()
+      reserved.set(asset, currentReserved >= requestedAmount ? currentReserved - requestedAmount : 0n);
+      
+      spent.set(asset, spentFor(asset) + settledAmount);
+    },
+
+    release(asset, requestedAmount) {
+      ceilingFor(asset);
+      
+      const currentReserved = reservedFor(asset);
+      reserved.set(asset, currentReserved >= requestedAmount ? currentReserved - requestedAmount : 0n);
     },
 
     remainingFor(asset) {
-      const remaining = ceilingFor(asset) - spentFor(asset);
+      const remaining = ceilingFor(asset) - (spentFor(asset) + reservedFor(asset));
       return remaining > 0n ? remaining : 0n;
     },
 
     snapshot() {
-      return [...ceilings.entries()].map(([asset, ceiling]) => ({
-        asset,
-        spent: spentFor(asset).toString(),
-        ceiling: ceiling.toString(),
-        remaining: (ceiling - spentFor(asset) > 0n ? ceiling - spentFor(asset) : 0n).toString(),
-      }));
+      return [...ceilings.entries()].map(([asset, ceiling]) => {
+        const s = spentFor(asset);
+        const r = reservedFor(asset);
+        return {
+          asset,
+          spent: s.toString(),
+          reserved: r.toString(),
+          ceiling: ceiling.toString(),
+          remaining: (ceiling - (s + r) > 0n ? ceiling - (s + r) : 0n).toString(),
+        };
+      });
     },
   };
 }
@@ -93,17 +111,13 @@ export function createSpendLedger(ceilings: ReadonlyMap<string, bigint>): SpendL
 /**
  * Serialise an async critical section.
  *
- * Two concurrent tool calls would otherwise both pass `assertWithinCeiling`
- * before either recorded, and together exceed the ceiling — a check-then-act
- * race on the very limit this module exists to enforce. It also keeps the
- * single shared x402 client's per-payment selection tripwire unambiguous.
- *
+ * Keeps the single shared x402 client's per-payment selection tripwire unambiguous.
  * One key, one budget, one payment at a time.
  */
-export function createMutex(): <T>(fn: () => Promise<T>) => Promise<T> {
-  let tail: Promise<unknown> = Promise.resolve();
+export function createMutex(): (fn: () => Promise) => Promise {
+  let tail: Promise = Promise.resolve();
 
-  return function run<T>(fn: () => Promise<T>): Promise<T> {
+  return function run(fn: () => Promise): Promise {
     const result = tail.then(fn, fn);
     // Keep the chain alive regardless of this call's outcome.
     tail = result.then(
