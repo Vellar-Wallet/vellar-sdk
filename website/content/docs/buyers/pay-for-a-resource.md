@@ -16,7 +16,7 @@ hash, and understood why `maxAmount` is a guard and not the budget.
   the paying account
 - Testnet USDC in the paying smart account
 
-> **Note:** The demo seller at `https://vellar-seller-demo.onrender.com/quote`
+> **Note:** The demo seller at `https://vellar-seller-demo-production.up.railway.app/quote`
 > charges 0.1 testnet USDC (Circle's official issuer
 > `GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5`) with sponsored
 > fees. Use it to test without running your own seller.
@@ -151,7 +151,7 @@ Pay the deployed demo seller with the classic keypair from step 2 (from
 `examples/` in the facilitator repo):
 
 ```sh
-RESOURCE_URL="https://vellar-seller-demo.onrender.com/quote?topic=perseverance" \
+RESOURCE_URL="https://vellar-seller-demo-production.up.railway.app/quote?topic=perseverance" \
 PAYER_SECRET=S...   # the secret the script printed
 node buyer-classic.mjs
 ```

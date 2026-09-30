@@ -66,7 +66,7 @@ These forward to your server, which holds the OpenZeppelin Relayer and sponsor
 credentials and submits to the network.
 
 > **Note:** You do not have to build this backend to get started. The hosted
-> testnet gateway at `https://vellar-backend.onrender.com` handles wallet
+> testnet gateway at `https://vellar-backend-production.up.railway.app` handles wallet
 > creation, lookup, and transaction submission. Use it for development and
 > hackathon projects. Run your own backend before shipping to production — it is
 > three routes that hold your relayer and sponsor credentials.

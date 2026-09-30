@@ -89,7 +89,7 @@ ceilings. The value above allows one asset and caps cumulative spend on it at
 
 ## Your first paid call
 
-The demo seller at `https://vellar-seller-demo.onrender.com/quote` charges 0.1
+The demo seller at `https://vellar-seller-demo-production.up.railway.app/quote` charges 0.1
 testnet USDC with sponsored fees, so it is a cheap first target.
 
 ### Step 1: Quote it
@@ -98,7 +98,7 @@ Ask the price without paying. This is one HTTP request that never touches the
 signer or the chain.
 
 ```
-x402_quote("https://vellar-seller-demo.onrender.com/quote")
+x402_quote("https://vellar-seller-demo-production.up.railway.app/quote")
 ```
 
 The server reports the price, the asset, and whether it would pay:
@@ -118,7 +118,7 @@ the price is above what it can spend, before anything is signed.
 ### Step 2: Pay it
 
 ```
-x402_pay("https://vellar-seller-demo.onrender.com/quote", "1000000")
+x402_pay("https://vellar-seller-demo-production.up.railway.app/quote", "1000000")
 ```
 
 `max_amount` is in the asset's base units as a decimal string. Stellar Asset
@@ -181,7 +181,7 @@ x402_pay_and_call(query="quote", max_amount="1000000")
 
 ```
 Query: quote
-Selected: https://vellar-seller-demo.onrender.com/quote (cheapest of 1 payable result(s), from 1 found)
+Selected: https://vellar-seller-demo-production.up.railway.app/quote (cheapest of 1 payable result(s), from 1 found)
 Paid 1000000 base units of asset CBIELTK6…QDAMA on testnet.
 Settlement transaction: f78d4b90c57dd59ee73f6353d8aec4b880f567db8013f0a40d41826306c4bbb0
 Session ceiling remaining for that asset: 4000000 base units.

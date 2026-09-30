@@ -13,7 +13,7 @@ By the end of this page you will know the five things that will bite you on the 
 ## The hosted instance
 
 ```
-https://vellar-facilitator.onrender.com
+https://vellar-facilitator-production.up.railway.app
 ```
 
 Network: `stellar:testnet` only. Tier: free.
@@ -71,7 +71,7 @@ On testnet these are logged as would-reject and the settlement proceeds, so you 
 ## Reading /health
 
 ```bash
-curl -s https://vellar-facilitator.onrender.com/health | python3 -m json.tool
+curl -s https://vellar-facilitator-production.up.railway.app/health | python3 -m json.tool
 ```
 
 | Field | What it means |

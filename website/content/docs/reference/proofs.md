@@ -27,7 +27,7 @@ discrepancy worth reporting.
 Before verifying individual hashes, confirm the facilitator is live.
 
 ```bash
-BASE=https://vellar-facilitator.onrender.com
+BASE=https://vellar-facilitator-production.up.railway.app
 
 # Liveness and current state
 curl -sS --max-time 120 "$BASE/health" | python3 -m json.tool

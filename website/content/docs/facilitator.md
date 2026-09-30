@@ -3,7 +3,7 @@
 Vellar runs a hosted **x402 facilitator for Stellar** with Bazaar discovery:
 
 ```
-https://vellar-facilitator.onrender.com
+https://vellar-facilitator-production.up.railway.app
 ```
 
 A facilitator is the verify/settle service between a buyer and a seller in an
@@ -55,7 +55,7 @@ by anyone; see the next section.
 ## Paying the deployed demo seller
 
 Want to test against a live seller without running your own?
-`https://vellar-seller-demo.onrender.com/quote` charges **0.1 real testnet
+`https://vellar-seller-demo-production.up.railway.app/quote` charges **0.1 real testnet
 USDC** (`USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5`,
 Circle's official testnet issuer) with sponsored fees. Testnet USDC is
 freely obtainable with no faucet form: Friendbot an account, then buy USDC
@@ -101,7 +101,7 @@ console.log("payer:", payer.publicKey(), "secret:", payer.secret());
 Then pay the seller with that keypair (classic flow, from `examples/`):
 
 ```sh
-RESOURCE_URL="https://vellar-seller-demo.onrender.com/quote?topic=perseverance" \
+RESOURCE_URL="https://vellar-seller-demo-production.up.railway.app/quote?topic=perseverance" \
 PAYER_SECRET=S...   # the secret the script printed
 node buyer-classic.mjs
 ```
@@ -222,7 +222,7 @@ import { x402ResourceServer } from "@x402/core/server";
 import { ExactStellarScheme } from "@x402/stellar/exact/server";
 
 const server = new x402ResourceServer(
-  new HTTPFacilitatorClient({ url: "https://vellar-facilitator.onrender.com" }),
+  new HTTPFacilitatorClient({ url: "https://vellar-facilitator-production.up.railway.app" }),
 ).register("stellar:testnet", new ExactStellarScheme());
 ```
 
@@ -336,7 +336,7 @@ import { HTTPFacilitatorClient } from "@x402/core/http";
 import { withBazaar } from "@x402/extensions/bazaar";
 
 const bazaar = withBazaar(
-  new HTTPFacilitatorClient({ url: "https://vellar-facilitator.onrender.com" }),
+  new HTTPFacilitatorClient({ url: "https://vellar-facilitator-production.up.railway.app" }),
 ).extensions.bazaar;
 
 const { items } = await bazaar.listResources({ network: "stellar:testnet" });
@@ -357,7 +357,7 @@ without hardcoded URLs.
       "args": ["tsx", "src/mcp.ts"],
       "cwd": "/path/to/vellar-facilitator",
       "env": {
-        "FACILITATOR_URL": "https://vellar-facilitator.onrender.com"
+        "FACILITATOR_URL": "https://vellar-facilitator-production.up.railway.app"
       }
     }
   }

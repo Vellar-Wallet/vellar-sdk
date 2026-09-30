@@ -12,8 +12,8 @@
 # It is shipped commented out on purpose, so merging this PR alone starts
 # nothing. `workflow_dispatch` stays available for a manual warm-up anytime.
 #
-# Render free instances sleep after ~15 idle minutes; a 10-minute cadence
-# keeps them continuously warm (~4.3k requests/month per service — free).
+# A 10-minute cadence keeps the hosted services continuously warm
+# (~4.3k requests/month per service).
 
 name: Hackathon keepalive
 
@@ -32,9 +32,9 @@ jobs:
         # records each service's status and response time instead.
         run: |
           for url in \
-            "https://vellar-backend.onrender.com/health" \
-            "https://vellar-facilitator.onrender.com/health" \
-            "https://vellar-seller-demo.onrender.com/quote"; do
+            "https://vellar-backend-production.up.railway.app/health" \
+            "https://vellar-facilitator-production.up.railway.app/health" \
+            "https://vellar-seller-demo-production.up.railway.app/quote"; do
             code=$(curl -s -o /dev/null -m 120 -w "%{http_code} in %{time_total}s" "$url" || echo "unreachable")
             echo "$url -> $code"
           done

@@ -12,7 +12,7 @@ entry are worth reading.
 - A publicly deployed seller endpoint over **https**. A `localhost` URL cannot
   pass ownership verification, ever.
 - At least one real payment settled through the Vellar facilitator
-  (`https://vellar-facilitator.onrender.com`, `stellar:testnet` only).
+  (`https://vellar-facilitator-production.up.railway.app`, `stellar:testnet` only).
   `ownerVerified` is computed after settlement, not at registration, and there
   is no registration step to begin with.
 - `curl` and `python3` for the inspection commands below.
@@ -44,7 +44,7 @@ caps the header, not the response.
 > `curl -s -i` so you see the 402 and its header.
 
 ```bash
-curl -s -i "https://vellar-seller-demo.onrender.com/quote" | head -20
+curl -s -i "https://vellar-seller-demo-production.up.railway.app/quote" | head -20
 ```
 
 ## 2. Two mistakes that catch everyone
@@ -67,7 +67,7 @@ the exact canonical URL with no redirect in front of it.
 List the catalog and print each resource with its `ownerVerified` value:
 
 ```bash
-curl -s "https://vellar-facilitator.onrender.com/discovery/resources?limit=100" \
+curl -s "https://vellar-facilitator-production.up.railway.app/discovery/resources?limit=100" \
   | python3 -c '
 import json, sys
 data = json.load(sys.stdin)
@@ -88,7 +88,7 @@ Then read the catalog's own health:
 # if the key is missing, nothing is currently unverifiable, which is healthy.
 # reverifyPending > 0 means ownership checks are still in flight after a
 # restart, so check back shortly rather than treating what you read as final.
-curl -s "https://vellar-facilitator.onrender.com/health" | python3 -m json.tool
+curl -s "https://vellar-facilitator-production.up.railway.app/health" | python3 -m json.tool
 ```
 
 `/health` also reports `catalogFrozen`, which tells you whether the catalog has
@@ -131,7 +131,7 @@ with, and a trust block the facilitator assembled from what it observed.
 
 ```json
 {
-  "resource": "https://vellar-seller-demo.onrender.com/quote",
+  "resource": "https://vellar-seller-demo-production.up.railway.app/quote",
   "accepts": [
     {
       "scheme": "exact",

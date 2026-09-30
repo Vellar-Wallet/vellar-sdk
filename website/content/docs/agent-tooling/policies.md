@@ -37,7 +37,7 @@ const vellar = createVellarWallet({
   isValidAddress,
   // The hosted testnet policy gateway (same host as the wallet backend).
   // Production: your own gateway.
-  apiUrl: "https://vellar-backend.onrender.com",
+  apiUrl: "https://vellar-backend-production.up.railway.app",
   policyAttach: {
     // build kit.addPolicy(contractId), passkey-sign, submit via your backend
     async attachPolicy(policyContractId) {
@@ -63,7 +63,7 @@ Nothing in this step needs a wallet or a passkey. Paste it anywhere (a browser c
 import { createPolicyClient } from "vellar-sdk";
 
 const policyClient = createPolicyClient({
-  apiUrl: "https://vellar-backend.onrender.com",
+  apiUrl: "https://vellar-backend-production.up.railway.app",
   network: "testnet",
 });
 

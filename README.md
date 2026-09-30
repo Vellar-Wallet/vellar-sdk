@@ -64,8 +64,7 @@ const vellar = createVellarWallet({
   }),
   // Your backend (see "Your backend" below) — it holds the relayer/sponsor
   // secrets, the SDK never sees them. For testnet prototyping you can point at
-  // the hosted gateway: https://vellar-backend.onrender.com (free instance,
-  // first request after idle takes 30-90s, occasionally ~2min, to wake).
+  // the hosted gateway: https://vellar-backend-production.up.railway.app
   backend: createHttpWalletBackend("https://api.myapp.com"),
   isValidAddress: (a) =>
     StrKey.isValidEd25519PublicKey(a) || StrKey.isValidContract(a),

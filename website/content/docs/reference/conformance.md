@@ -87,7 +87,7 @@ facilitator's sponsor account, not the buyer, which is what
 No wallet, key, or funded account is needed for any of this.
 
 ```sh
-BASE=https://vellar-facilitator.onrender.com
+BASE=https://vellar-facilitator-production.up.railway.app
 
 # 1. Liveness (rate-limit exempt, use it to warm the instance)
 curl -s --max-time 120 "$BASE/health" | python3 -m json.tool

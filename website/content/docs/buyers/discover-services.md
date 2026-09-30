@@ -10,7 +10,7 @@ server to give an AI agent the same capability.
 ## Prerequisites
 
 - The x402 extensions package: `npm install @x402/extensions`
-- The Vellar facilitator URL: `https://vellar-facilitator.onrender.com`
+- The Vellar facilitator URL: `https://vellar-facilitator-production.up.railway.app`
 
 ## 1. Search the catalog
 
@@ -22,7 +22,7 @@ import { HTTPFacilitatorClient } from "@x402/core/http";
 import { withBazaar } from "@x402/extensions/bazaar";
 
 const bazaar = withBazaar(
-  new HTTPFacilitatorClient({ url: "https://vellar-facilitator.onrender.com" }),
+  new HTTPFacilitatorClient({ url: "https://vellar-facilitator-production.up.railway.app" }),
 ).extensions.bazaar;
 
 const { items } = await bazaar.listResources({ network: "stellar:testnet" });
@@ -101,7 +101,7 @@ without hardcoded URLs.
       "args": ["tsx", "src/mcp.ts"],
       "cwd": "/path/to/vellar-facilitator",
       "env": {
-        "FACILITATOR_URL": "https://vellar-facilitator.onrender.com"
+        "FACILITATOR_URL": "https://vellar-facilitator-production.up.railway.app"
       }
     }
   }
