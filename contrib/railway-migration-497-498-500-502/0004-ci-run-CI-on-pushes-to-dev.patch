@@ -1,0 +1,22 @@
+From 5182a5607d57221eba5282d7e65bc5668c5824df Mon Sep 17 00:00:00 2001
+From: natho080 <nluka3889@gmail.com>
+Date: Wed, 30 Sep 2026 10:43:16 +0100
+Subject: [PATCH 4/4] ci: run CI on pushes to dev
+
+---
+ .github/workflows/ci.yml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 819e653..572bf8f 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -2,7 +2,7 @@ name: CI
+ 
+ on:
+   push:
+-    branches: [main, drips]
++    branches: [main, dev, drips]
+   pull_request:
+   workflow_dispatch:
+ 

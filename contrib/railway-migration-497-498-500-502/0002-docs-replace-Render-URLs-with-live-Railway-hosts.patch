@@ -1,0 +1,737 @@
+From 02418b55bd8a8b899d4f57e8b44a4ad1750f32b2 Mon Sep 17 00:00:00 2001
+From: natho080 <nluka3889@gmail.com>
+Date: Wed, 30 Sep 2026 10:41:33 +0100
+Subject: [PATCH 2/4] docs: replace Render URLs with live Railway hosts
+
+---
+ .github/workflows/hackathon-keepalive.yml        | 10 +++++-----
+ README.md                                        |  3 +--
+ packages/cli/README.md                           |  4 ++--
+ website/content/docs/agent-tooling/cli.md        | 16 ++++++++--------
+ website/content/docs/agent-tooling/mcp-payer.md  |  8 ++++----
+ website/content/docs/agent-tooling/policies.md   |  4 ++--
+ website/content/docs/agent-tooling/vscode.md     |  2 +-
+ .../content/docs/architecture/channel-pool.md    |  2 +-
+ website/content/docs/architecture/overview.md    |  2 +-
+ .../content/docs/architecture/settlement-path.md |  2 +-
+ website/content/docs/buyers/discover-services.md |  6 +++---
+ .../content/docs/buyers/pay-for-a-resource.md    |  4 ++--
+ .../docs/concepts/bazaar-and-discovery.md        |  6 +++---
+ website/content/docs/concepts/payment-loop.md    |  2 +-
+ website/content/docs/concepts/upto-scheme.md     |  2 +-
+ website/content/docs/facilitator.md              | 12 ++++++------
+ .../content/docs/getting-started/installation.md |  2 +-
+ .../content/docs/getting-started/quickstart.md   |  4 ++--
+ website/content/docs/hackathon.md                |  8 ++++----
+ website/content/docs/operators/limits.md         |  4 ++--
+ website/content/docs/operators/run.md            |  2 +-
+ website/content/docs/reference/conformance.md    |  2 +-
+ website/content/docs/reference/error-codes.md    |  2 +-
+ website/content/docs/reference/explorer.md       |  4 ++--
+ website/content/docs/reference/proofs.md         |  2 +-
+ .../docs/sellers/charge-for-an-endpoint.md       |  6 +++---
+ website/content/docs/sellers/get-discovered.md   | 10 +++++-----
+ .../docs/sellers/upto-metered-payments.md        |  2 +-
+ website/content/docs/x402.md                     |  2 +-
+ website/public/pitchdeck.html                    |  2 +-
+ 30 files changed, 68 insertions(+), 69 deletions(-)
+
+diff --git a/.github/workflows/hackathon-keepalive.yml b/.github/workflows/hackathon-keepalive.yml
+index c1b7079..f40ca38 100644
+--- a/.github/workflows/hackathon-keepalive.yml
++++ b/.github/workflows/hackathon-keepalive.yml
+@@ -12,8 +12,8 @@
+ # It is shipped commented out on purpose, so merging this PR alone starts
+ # nothing. `workflow_dispatch` stays available for a manual warm-up anytime.
+ #
+-# Render free instances sleep after ~15 idle minutes; a 10-minute cadence
+-# keeps them continuously warm (~4.3k requests/month per service — free).
++# A 10-minute cadence keeps the hosted services continuously warm
++# (~4.3k requests/month per service).
+ 
+ name: Hackathon keepalive
+ 
+@@ -32,9 +32,9 @@ jobs:
+         # records each service's status and response time instead.
+         run: |
+           for url in \
+-            "https://vellar-backend.onrender.com/health" \
+-            "https://vellar-facilitator.onrender.com/health" \
+-            "https://vellar-seller-demo.onrender.com/quote"; do
++            "https://vellar-backend-production.up.railway.app/health" \
++            "https://vellar-facilitator-production.up.railway.app/health" \
++            "https://vellar-seller-demo-production.up.railway.app/quote"; do
+             code=$(curl -s -o /dev/null -m 120 -w "%{http_code} in %{time_total}s" "$url" || echo "unreachable")
+             echo "$url -> $code"
+           done
+diff --git a/README.md b/README.md
+index 803d680..b9328fc 100644
+--- a/README.md
++++ b/README.md
+@@ -64,8 +64,7 @@ const vellar = createVellarWallet({
+   }),
+   // Your backend (see "Your backend" below) — it holds the relayer/sponsor
+   // secrets, the SDK never sees them. For testnet prototyping you can point at
+-  // the hosted gateway: https://vellar-backend.onrender.com (free instance,
+-  // first request after idle takes 30-90s, occasionally ~2min, to wake).
++  // the hosted gateway: https://vellar-backend-production.up.railway.app
+   backend: createHttpWalletBackend("https://api.myapp.com"),
+   isValidAddress: (a) =>
+     StrKey.isValidEd25519PublicKey(a) || StrKey.isValidContract(a),
+diff --git a/packages/cli/README.md b/packages/cli/README.md
+index 7698242..cc9769a 100644
+--- a/packages/cli/README.md
++++ b/packages/cli/README.md
+@@ -32,7 +32,7 @@ Check the price of a resource without paying. One HTTP request: nothing is
+ signed and no key is read.
+ 
+ ```sh
+-vellar quote https://vellar-seller-demo.onrender.com/quote
++vellar quote https://vellar-seller-demo-production.up.railway.app/quote
+ ```
+ 
+ Every payment option in the challenge is printed, including whether fees are
+@@ -43,7 +43,7 @@ sponsored. Without sponsorship the payer needs XLM of its own.
+ Pay for a resource and print the content.
+ 
+ ```sh
+-vellar pay https://vellar-seller-demo.onrender.com/quote \
++vellar pay https://vellar-seller-demo-production.up.railway.app/quote \
+   --secret-file ~/.vellar/key \
+   --max 1000000
+ ```
+diff --git a/website/content/docs/agent-tooling/cli.md b/website/content/docs/agent-tooling/cli.md
+index 5438735..29ffb48 100644
+--- a/website/content/docs/agent-tooling/cli.md
++++ b/website/content/docs/agent-tooling/cli.md
+@@ -34,19 +34,19 @@ vellar search "quote" --limit 3
+ ```
+ 
+ ```
+-https://vellar-seller-demo.onrender.com/quote
++https://vellar-seller-demo-production.up.railway.app/quote
+   Motivational Quote
+   exact on stellar:testnet: 1000000 base units of CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA
+   Motivational quote of the day (paid)
+   trust: 286 settlements, 268 unique payers
+ 
+-https://vellar-seller-demo.onrender.com/lorem
++https://vellar-seller-demo-production.up.railway.app/lorem
+   Lorem Ipsum Generator
+   exact on stellar:testnet: 100000 base units of CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA
+   Generate placeholder lorem ipsum text. Specify how many paragraphs or words you need.
+   trust: 1 settlements, 1 unique payers
+ 
+-https://vellar-seller-demo.onrender.com/units
++https://vellar-seller-demo-production.up.railway.app/units
+   Unit Converter
+   exact on stellar:testnet: 100000 base units of CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA
+   Convert between units of measurement. Supports length, mass, temperature, and volume.
+@@ -72,11 +72,11 @@ Checks the price of a resource without paying. One HTTP request: nothing is
+ signed and no key is read.
+ 
+ ```sh
+-vellar quote https://vellar-seller-demo.onrender.com/quote
++vellar quote https://vellar-seller-demo-production.up.railway.app/quote
+ ```
+ 
+ ```
+-URL:    https://vellar-seller-demo.onrender.com/quote
++URL:    https://vellar-seller-demo-production.up.railway.app/quote
+ Scheme: exact
+ Network:stellar:testnet
+ Amount: 1000000 (base units)
+@@ -103,7 +103,7 @@ difference between a resource a zero-XLM account can pay and one it cannot.
+ Pays for a resource and prints the content.
+ 
+ ```sh
+-vellar pay https://vellar-seller-demo.onrender.com/quote \
++vellar pay https://vellar-seller-demo-production.up.railway.app/quote \
+   --secret-file ~/.vellar/key \
+   --max 1000000
+ ```
+@@ -212,7 +212,7 @@ mkdir -p ~/.vellar
+ echo "S..." > ~/.vellar/key
+ chmod 600 ~/.vellar/key
+ 
+-vellar pay https://vellar-seller-demo.onrender.com/quote \
++vellar pay https://vellar-seller-demo-production.up.railway.app/quote \
+   --secret-file ~/.vellar/key
+ ```
+ 
+@@ -220,7 +220,7 @@ vellar pay https://vellar-seller-demo.onrender.com/quote \
+ 
+ ```sh
+ export VELLAR_SECRET="S..."
+-vellar pay https://vellar-seller-demo.onrender.com/quote
++vellar pay https://vellar-seller-demo-production.up.railway.app/quote
+ ```
+ 
+ On macOS you can source it from the keychain rather than a file:
+diff --git a/website/content/docs/agent-tooling/mcp-payer.md b/website/content/docs/agent-tooling/mcp-payer.md
+index 0133982..9346b8e 100644
+--- a/website/content/docs/agent-tooling/mcp-payer.md
++++ b/website/content/docs/agent-tooling/mcp-payer.md
+@@ -89,7 +89,7 @@ ceilings. The value above allows one asset and caps cumulative spend on it at
+ 
+ ## Your first paid call
+ 
+-The demo seller at `https://vellar-seller-demo.onrender.com/quote` charges 0.1
++The demo seller at `https://vellar-seller-demo-production.up.railway.app/quote` charges 0.1
+ testnet USDC with sponsored fees, so it is a cheap first target.
+ 
+ ### Step 1: Quote it
+@@ -98,7 +98,7 @@ Ask the price without paying. This is one HTTP request that never touches the
+ signer or the chain.
+ 
+ ```
+-x402_quote("https://vellar-seller-demo.onrender.com/quote")
++x402_quote("https://vellar-seller-demo-production.up.railway.app/quote")
+ ```
+ 
+ The server reports the price, the asset, and whether it would pay:
+@@ -118,7 +118,7 @@ the price is above what it can spend, before anything is signed.
+ ### Step 2: Pay it
+ 
+ ```
+-x402_pay("https://vellar-seller-demo.onrender.com/quote", "1000000")
++x402_pay("https://vellar-seller-demo-production.up.railway.app/quote", "1000000")
+ ```
+ 
+ `max_amount` is in the asset's base units as a decimal string. Stellar Asset
+@@ -181,7 +181,7 @@ x402_pay_and_call(query="quote", max_amount="1000000")
+ 
+ ```
+ Query: quote
+-Selected: https://vellar-seller-demo.onrender.com/quote (cheapest of 1 payable result(s), from 1 found)
++Selected: https://vellar-seller-demo-production.up.railway.app/quote (cheapest of 1 payable result(s), from 1 found)
+ Paid 1000000 base units of asset CBIELTK6…QDAMA on testnet.
+ Settlement transaction: f78d4b90c57dd59ee73f6353d8aec4b880f567db8013f0a40d41826306c4bbb0
+ Session ceiling remaining for that asset: 4000000 base units.
+diff --git a/website/content/docs/agent-tooling/policies.md b/website/content/docs/agent-tooling/policies.md
+index 96b60d6..36833de 100644
+--- a/website/content/docs/agent-tooling/policies.md
++++ b/website/content/docs/agent-tooling/policies.md
+@@ -37,7 +37,7 @@ const vellar = createVellarWallet({
+   isValidAddress,
+   // The hosted testnet policy gateway (same host as the wallet backend).
+   // Production: your own gateway.
+-  apiUrl: "https://vellar-backend.onrender.com",
++  apiUrl: "https://vellar-backend-production.up.railway.app",
+   policyAttach: {
+     // build kit.addPolicy(contractId), passkey-sign, submit via your backend
+     async attachPolicy(policyContractId) {
+@@ -63,7 +63,7 @@ Nothing in this step needs a wallet or a passkey. Paste it anywhere (a browser c
+ import { createPolicyClient } from "vellar-sdk";
+ 
+ const policyClient = createPolicyClient({
+-  apiUrl: "https://vellar-backend.onrender.com",
++  apiUrl: "https://vellar-backend-production.up.railway.app",
+   network: "testnet",
+ });
+ 
+diff --git a/website/content/docs/agent-tooling/vscode.md b/website/content/docs/agent-tooling/vscode.md
+index 8b21019..2c9e100 100644
+--- a/website/content/docs/agent-tooling/vscode.md
++++ b/website/content/docs/agent-tooling/vscode.md
+@@ -142,7 +142,7 @@ const PAYMENT_CONFIG = {
+   payToAddress: "GA...", // your address, inlined at generation time
+ };
+ const x402FacilitatorClient = new HTTPFacilitatorClient({
+-  url: "https://vellar-facilitator.onrender.com",
++  url: "https://vellar-facilitator-production.up.railway.app",
+ });
+ const x402Server = new x402ResourceServer(x402FacilitatorClient)
+   .register("stellar:testnet", new ExactStellarScheme())
+diff --git a/website/content/docs/architecture/channel-pool.md b/website/content/docs/architecture/channel-pool.md
+index ce750d2..82daabd 100644
+--- a/website/content/docs/architecture/channel-pool.md
++++ b/website/content/docs/architecture/channel-pool.md
+@@ -118,7 +118,7 @@ once. Losing a handful of accounts costs concurrency, not correctness.
+ currently usable for settlement.
+ 
+ ```bash
+-curl -s https://vellar-facilitator.onrender.com/health \
++curl -s https://vellar-facilitator-production.up.railway.app/health \
+   | python3 -c \
+   "import json,sys; \
+   d=json.load(sys.stdin); \
+diff --git a/website/content/docs/architecture/overview.md b/website/content/docs/architecture/overview.md
+index c0f616b..06d36b5 100644
+--- a/website/content/docs/architecture/overview.md
++++ b/website/content/docs/architecture/overview.md
+@@ -10,7 +10,7 @@ if you are evaluating whether to depend on Vellar; read the linked pages when
+ you need the detail behind a claim.
+ 
+ Vellar runs on `stellar:testnet` only. The hosted facilitator is
+-`https://vellar-facilitator.onrender.com`.
++`https://vellar-facilitator-production.up.railway.app`.
+ 
+ ## System Overview
+ 
+diff --git a/website/content/docs/architecture/settlement-path.md b/website/content/docs/architecture/settlement-path.md
+index fe2ac08..032ecb6 100644
+--- a/website/content/docs/architecture/settlement-path.md
++++ b/website/content/docs/architecture/settlement-path.md
+@@ -18,7 +18,7 @@ either a classic Stellar keypair or a Soroban smart contract account whose
+ [The payment loop](../concepts/payment-loop.md) first.
+ 
+ Vellar runs on `stellar:testnet` only. The hosted facilitator is
+-`https://vellar-facilitator.onrender.com`.
++`https://vellar-facilitator-production.up.railway.app`.
+ 
+ ## What happens at `/verify`
+ 
+diff --git a/website/content/docs/buyers/discover-services.md b/website/content/docs/buyers/discover-services.md
+index 4117e3d..679c8c6 100644
+--- a/website/content/docs/buyers/discover-services.md
++++ b/website/content/docs/buyers/discover-services.md
+@@ -10,7 +10,7 @@ server to give an AI agent the same capability.
+ ## Prerequisites
+ 
+ - The x402 extensions package: `npm install @x402/extensions`
+-- The Vellar facilitator URL: `https://vellar-facilitator.onrender.com`
++- The Vellar facilitator URL: `https://vellar-facilitator-production.up.railway.app`
+ 
+ ## 1. Search the catalog
+ 
+@@ -22,7 +22,7 @@ import { HTTPFacilitatorClient } from "@x402/core/http";
+ import { withBazaar } from "@x402/extensions/bazaar";
+ 
+ const bazaar = withBazaar(
+-  new HTTPFacilitatorClient({ url: "https://vellar-facilitator.onrender.com" }),
++  new HTTPFacilitatorClient({ url: "https://vellar-facilitator-production.up.railway.app" }),
+ ).extensions.bazaar;
+ 
+ const { items } = await bazaar.listResources({ network: "stellar:testnet" });
+@@ -101,7 +101,7 @@ without hardcoded URLs.
+       "args": ["tsx", "src/mcp.ts"],
+       "cwd": "/path/to/vellar-facilitator",
+       "env": {
+-        "FACILITATOR_URL": "https://vellar-facilitator.onrender.com"
++        "FACILITATOR_URL": "https://vellar-facilitator-production.up.railway.app"
+       }
+     }
+   }
+diff --git a/website/content/docs/buyers/pay-for-a-resource.md b/website/content/docs/buyers/pay-for-a-resource.md
+index 1d574f8..7bf33f9 100644
+--- a/website/content/docs/buyers/pay-for-a-resource.md
++++ b/website/content/docs/buyers/pay-for-a-resource.md
+@@ -16,7 +16,7 @@ hash, and understood why `maxAmount` is a guard and not the budget.
+   the paying account
+ - Testnet USDC in the paying smart account
+ 
+-> **Note:** The demo seller at `https://vellar-seller-demo.onrender.com/quote`
++> **Note:** The demo seller at `https://vellar-seller-demo-production.up.railway.app/quote`
+ > charges 0.1 testnet USDC (Circle's official issuer
+ > `GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5`) with sponsored
+ > fees. Use it to test without running your own seller.
+@@ -151,7 +151,7 @@ Pay the deployed demo seller with the classic keypair from step 2 (from
+ `examples/` in the facilitator repo):
+ 
+ ```sh
+-RESOURCE_URL="https://vellar-seller-demo.onrender.com/quote?topic=perseverance" \
++RESOURCE_URL="https://vellar-seller-demo-production.up.railway.app/quote?topic=perseverance" \
+ PAYER_SECRET=S...   # the secret the script printed
+ node buyer-classic.mjs
+ ```
+diff --git a/website/content/docs/concepts/bazaar-and-discovery.md b/website/content/docs/concepts/bazaar-and-discovery.md
+index 082ce77..bdcc0ec 100644
+--- a/website/content/docs/concepts/bazaar-and-discovery.md
++++ b/website/content/docs/concepts/bazaar-and-discovery.md
+@@ -12,7 +12,7 @@ all `localhost` URLs permanently.
+ - Familiarity with the x402 challenge and settle flow (see
+   [The payment loop](./payment-loop.md))
+ - Access to a facilitator. The hosted instance is
+-  `https://vellar-facilitator.onrender.com` (`stellar:testnet` only)
++  `https://vellar-facilitator-production.up.railway.app` (`stellar:testnet` only)
+ - `curl` and `python3` for the inspection commands near the end
+ 
+ ## How a resource enters the catalog
+@@ -181,7 +181,7 @@ Read this header to confirm.
+ List cataloged resources and print each one with its `ownerVerified` value:
+ 
+ ```bash
+-curl -s "https://vellar-facilitator.onrender.com/discovery/resources?limit=20" \
++curl -s "https://vellar-facilitator-production.up.railway.app/discovery/resources?limit=20" \
+   | python3 -c '
+ import json, sys
+ data = json.load(sys.stdin)
+@@ -197,7 +197,7 @@ Then check the catalog's own health:
+ # unverifiableEntries is ABSENT when zero, not 0, so absence means healthy.
+ # reverifyPending > 0 means ownership checks are still in flight after a
+ # restart, so check back shortly rather than treating what you read as final.
+-curl -s "https://vellar-facilitator.onrender.com/health" | python3 -m json.tool
++curl -s "https://vellar-facilitator-production.up.railway.app/health" | python3 -m json.tool
+ ```
+ 
+ `/health` also reports `catalogFrozen`, which tells you whether the catalog has
+diff --git a/website/content/docs/concepts/payment-loop.md b/website/content/docs/concepts/payment-loop.md
+index 1e0532b..5a70592 100644
+--- a/website/content/docs/concepts/payment-loop.md
++++ b/website/content/docs/concepts/payment-loop.md
+@@ -20,7 +20,7 @@ you can name the step that broke instead of guessing.
+ |---|---|---|---|
+ | Buyer | The account that pays (a Vellar smart account `C...` or a classic `G...` keypair) | The payment asset, such as testnet USDC | XLM for fees, when fees are sponsored |
+ | Seller (`payTo`) | The account that receives the payment | A trustline to the payment asset | Buyer funds before settlement |
+-| Facilitator | Vellar's hosted service at `https://vellar-facilitator.onrender.com` | XLM for fees only, in its sponsor account `GBUCR6H22CZC5OYHBJIEUS2JFZBOB63AHEGTCV6UEPMD2TMLKG2ZMIW4` | Buyer funds, never |
++| Facilitator | Vellar's hosted service at `https://vellar-facilitator-production.up.railway.app` | XLM for fees only, in its sponsor account `GBUCR6H22CZC5OYHBJIEUS2JFZBOB63AHEGTCV6UEPMD2TMLKG2ZMIW4` | Buyer funds, never |
+ | Token contract | The SEP-41 asset's Stellar Asset Contract, e.g. USDC testnet `CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA` | The on-chain asset balances | Nothing else |
+ 
+ > ⚠️ **The facilitator is never a party to the transfer.** Buyer funds move
+diff --git a/website/content/docs/concepts/upto-scheme.md b/website/content/docs/concepts/upto-scheme.md
+index 4e5cd38..24f680e 100644
+--- a/website/content/docs/concepts/upto-scheme.md
++++ b/website/content/docs/concepts/upto-scheme.md
+@@ -53,7 +53,7 @@ The facilitator advertises the contract it is configured with in `GET /supported
+ 
+ Read that field before you sign. It tells you exactly which contract you are about to authorize, so you are not trusting the facilitator's word about which code will hold your ceiling.
+ 
+-> **Note:** If you are running your own facilitator, set `UPTO_CONTRACT_ID` to the contract address in your environment. Without it the `upto` scheme is not registered and not served, and only the `exact` scheme runs. The hosted instance at `vellar-facilitator.onrender.com` has this set already. See [Configuration](../operators/configuration.md).
++> **Note:** If you are running your own facilitator, set `UPTO_CONTRACT_ID` to the contract address in your environment. Without it the `upto` scheme is not registered and not served, and only the `exact` scheme runs. The hosted instance at `vellar-facilitator-production.up.railway.app` has this set already. See [Configuration](../operators/configuration.md).
+ 
+ ## Verify the contract reproducibly
+ 
+diff --git a/website/content/docs/facilitator.md b/website/content/docs/facilitator.md
+index 7c8f909..175514b 100644
+--- a/website/content/docs/facilitator.md
++++ b/website/content/docs/facilitator.md
+@@ -3,7 +3,7 @@
+ Vellar runs a hosted **x402 facilitator for Stellar** with Bazaar discovery:
+ 
+ ```
+-https://vellar-facilitator.onrender.com
++https://vellar-facilitator-production.up.railway.app
+ ```
+ 
+ A facilitator is the verify/settle service between a buyer and a seller in an
+@@ -55,7 +55,7 @@ by anyone; see the next section.
+ ## Paying the deployed demo seller
+ 
+ Want to test against a live seller without running your own?
+-`https://vellar-seller-demo.onrender.com/quote` charges **0.1 real testnet
++`https://vellar-seller-demo-production.up.railway.app/quote` charges **0.1 real testnet
+ USDC** (`USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5`,
+ Circle's official testnet issuer) with sponsored fees. Testnet USDC is
+ freely obtainable with no faucet form: Friendbot an account, then buy USDC
+@@ -101,7 +101,7 @@ console.log("payer:", payer.publicKey(), "secret:", payer.secret());
+ Then pay the seller with that keypair (classic flow, from `examples/`):
+ 
+ ```sh
+-RESOURCE_URL="https://vellar-seller-demo.onrender.com/quote?topic=perseverance" \
++RESOURCE_URL="https://vellar-seller-demo-production.up.railway.app/quote?topic=perseverance" \
+ PAYER_SECRET=S...   # the secret the script printed
+ node buyer-classic.mjs
+ ```
+@@ -222,7 +222,7 @@ import { x402ResourceServer } from "@x402/core/server";
+ import { ExactStellarScheme } from "@x402/stellar/exact/server";
+ 
+ const server = new x402ResourceServer(
+-  new HTTPFacilitatorClient({ url: "https://vellar-facilitator.onrender.com" }),
++  new HTTPFacilitatorClient({ url: "https://vellar-facilitator-production.up.railway.app" }),
+ ).register("stellar:testnet", new ExactStellarScheme());
+ ```
+ 
+@@ -336,7 +336,7 @@ import { HTTPFacilitatorClient } from "@x402/core/http";
+ import { withBazaar } from "@x402/extensions/bazaar";
+ 
+ const bazaar = withBazaar(
+-  new HTTPFacilitatorClient({ url: "https://vellar-facilitator.onrender.com" }),
++  new HTTPFacilitatorClient({ url: "https://vellar-facilitator-production.up.railway.app" }),
+ ).extensions.bazaar;
+ 
+ const { items } = await bazaar.listResources({ network: "stellar:testnet" });
+@@ -357,7 +357,7 @@ without hardcoded URLs.
+       "args": ["tsx", "src/mcp.ts"],
+       "cwd": "/path/to/vellar-facilitator",
+       "env": {
+-        "FACILITATOR_URL": "https://vellar-facilitator.onrender.com"
++        "FACILITATOR_URL": "https://vellar-facilitator-production.up.railway.app"
+       }
+     }
+   }
+diff --git a/website/content/docs/getting-started/installation.md b/website/content/docs/getting-started/installation.md
+index 33e8fb1..0e75ae7 100644
+--- a/website/content/docs/getting-started/installation.md
++++ b/website/content/docs/getting-started/installation.md
+@@ -66,7 +66,7 @@ These forward to your server, which holds the OpenZeppelin Relayer and sponsor
+ credentials and submits to the network.
+ 
+ > **Note:** You do not have to build this backend to get started. The hosted
+-> testnet gateway at `https://vellar-backend.onrender.com` handles wallet
++> testnet gateway at `https://vellar-backend-production.up.railway.app` handles wallet
+ > creation, lookup, and transaction submission. Use it for development and
+ > hackathon projects. Run your own backend before shipping to production — it is
+ > three routes that hold your relayer and sponsor credentials.
+diff --git a/website/content/docs/getting-started/quickstart.md b/website/content/docs/getting-started/quickstart.md
+index eb178fc..729c9d3 100644
+--- a/website/content/docs/getting-started/quickstart.md
++++ b/website/content/docs/getting-started/quickstart.md
+@@ -14,7 +14,7 @@ with no backend setup.
+ - npm or pnpm
+ 
+ > **Note:** Everything here runs on stellar:testnet. No real money, no mainnet.
+-> The hosted backend at `https://vellar-backend.onrender.com` handles fee
++> The hosted backend at `https://vellar-backend-production.up.railway.app` handles fee
+ > sponsorship so your wallet needs no XLM.
+ 
+ ## 1. Install
+@@ -50,7 +50,7 @@ const vellar = createVellarWallet({
+     networkPassphrase: TESTNET.networkPassphrase,
+   }),
+   // The hosted testnet backend — it holds the relayer/sponsor secrets.
+-  backend: createHttpWalletBackend("https://vellar-backend.onrender.com"),
++  backend: createHttpWalletBackend("https://vellar-backend-production.up.railway.app"),
+   isValidAddress: (a) =>
+     StrKey.isValidEd25519PublicKey(a) || StrKey.isValidContract(a),
+ });
+diff --git a/website/content/docs/hackathon.md b/website/content/docs/hackathon.md
+index 6549ef8..0e4b6a5 100644
+--- a/website/content/docs/hackathon.md
++++ b/website/content/docs/hackathon.md
+@@ -62,7 +62,7 @@ us.
+ See [Quickstart](./getting-started/quickstart.md).
+ 
+ **Config you need:** point `backend` at the hosted testnet gateway,
+-`createHttpWalletBackend("https://vellar-backend.onrender.com")` — the
++`createHttpWalletBackend("https://vellar-backend-production.up.railway.app")` — the
+ [Quickstart](./getting-started/quickstart.md#1-create-the-client) shows the full client setup.
+ 
+ ### Track 2, Policy Builder
+@@ -80,7 +80,7 @@ surprise us.
+ **Key SDK surface:** `wallet.policies` (templates, generate, simulate, deploy).
+ See [Policies](./agent-tooling/policies.md).
+ 
+-**Config you need:** `apiUrl: "https://vellar-backend.onrender.com"` in
++**Config you need:** `apiUrl: "https://vellar-backend-production.up.railway.app"` in
+ `createVellarWallet` (the same host as the wallet backend) — see
+ [Enabling policies](./agent-tooling/policies.md#enabling-policies), which includes a
+ zero-context smoke test you can paste before writing any wallet code.
+@@ -324,7 +324,7 @@ git clone [your repo]
+ cd [your project]
+ npm install
+ # .env
+-#   VELLAR_API_URL=https://vellar-backend.onrender.com
++#   VELLAR_API_URL=https://vellar-backend-production.up.railway.app
+ npm run dev
+ \`\`\`
+ 
+@@ -391,7 +391,7 @@ that entry only, not the demo seller.
+ 
+ 1. Read [Introduction](./getting-started/introduction.md) and [Quickstart](./getting-started/quickstart.md).
+ 2. `npm install vellar-sdk @stellar/stellar-sdk`, see [Installation](./getting-started/installation.md).
+-3. Point your backend at the hosted gateway: `VELLAR_API_URL=https://vellar-backend.onrender.com`, see [How It Works](./getting-started/how-it-works.md) for why a backend is needed.
++3. Point your backend at the hosted gateway: `VELLAR_API_URL=https://vellar-backend-production.up.railway.app`, see [How It Works](./getting-started/how-it-works.md) for why a backend is needed.
+ 4. Pick a track above and scope the **smallest strong version** of your idea.
+ 5. Build. Ask questions in [Telegram](https://t.me/+JvRMWLJMWS0xYTBk).
+ 6. Test your core flow on testnet, end to end, before recording your demo.
+diff --git a/website/content/docs/operators/limits.md b/website/content/docs/operators/limits.md
+index 77fff43..9ab2706 100644
+--- a/website/content/docs/operators/limits.md
++++ b/website/content/docs/operators/limits.md
+@@ -13,7 +13,7 @@ By the end of this page you will know the five things that will bite you on the
+ ## The hosted instance
+ 
+ ```
+-https://vellar-facilitator.onrender.com
++https://vellar-facilitator-production.up.railway.app
+ ```
+ 
+ Network: `stellar:testnet` only. Tier: free.
+@@ -71,7 +71,7 @@ On testnet these are logged as would-reject and the settlement proceeds, so you
+ ## Reading /health
+ 
+ ```bash
+-curl -s https://vellar-facilitator.onrender.com/health | python3 -m json.tool
++curl -s https://vellar-facilitator-production.up.railway.app/health | python3 -m json.tool
+ ```
+ 
+ | Field | What it means |
+diff --git a/website/content/docs/operators/run.md b/website/content/docs/operators/run.md
+index 3f0f4b8..9c9af65 100644
+--- a/website/content/docs/operators/run.md
++++ b/website/content/docs/operators/run.md
+@@ -7,7 +7,7 @@ verified with `/health` and `/supported`, and a real test payment settled throug
+ it by a seller and a buyer you also run locally.
+ 
+ Running your own instance is the right move for local development. The hosted
+-instance at `https://vellar-facilitator.onrender.com` shares a global catalog, so
++instance at `https://vellar-facilitator-production.up.railway.app` shares a global catalog, so
+ a `localhost` seller URL pointed at it leaves a permanent, unremovable entry that
+ can never be verified (verification is https only, no loopback). Your own
+ facilitator keeps that mess local, and with `CATALOG_DB_URL` set it keeps the
+diff --git a/website/content/docs/reference/conformance.md b/website/content/docs/reference/conformance.md
+index 63aec68..a5cad53 100644
+--- a/website/content/docs/reference/conformance.md
++++ b/website/content/docs/reference/conformance.md
+@@ -87,7 +87,7 @@ facilitator's sponsor account, not the buyer, which is what
+ No wallet, key, or funded account is needed for any of this.
+ 
+ ```sh
+-BASE=https://vellar-facilitator.onrender.com
++BASE=https://vellar-facilitator-production.up.railway.app
+ 
+ # 1. Liveness (rate-limit exempt, use it to warm the instance)
+ curl -s --max-time 120 "$BASE/health" | python3 -m json.tool
+diff --git a/website/content/docs/reference/error-codes.md b/website/content/docs/reference/error-codes.md
+index bbeac92..18f01a8 100644
+--- a/website/content/docs/reference/error-codes.md
++++ b/website/content/docs/reference/error-codes.md
+@@ -11,7 +11,7 @@ retrying is safe, and which errors mean money has already moved on-chain.
+ - Familiarity with the [payment loop](../concepts/payment-loop.md) (verify,
+   then settle)
+ - A wallet with `x402` configured, or a client talking directly to
+-  `https://vellar-facilitator.onrender.com`
++  `https://vellar-facilitator-production.up.railway.app`
+ - The facilitator advertises `stellar:testnet` only, so every code below is
+   observed on testnet
+ 
+diff --git a/website/content/docs/reference/explorer.md b/website/content/docs/reference/explorer.md
+index 669754e..dcd3392 100644
+--- a/website/content/docs/reference/explorer.md
++++ b/website/content/docs/reference/explorer.md
+@@ -109,10 +109,10 @@ August, across 302 unique buyers.
+ 
+ ## Querying the explorer
+ 
+-The API base URL is `https://vellar-explorer.onrender.com`.
++The API base URL is `https://vellar-explorer-production.up.railway.app`.
+ 
+ ```bash
+-BASE=https://vellar-explorer.onrender.com
++BASE=https://vellar-explorer-production.up.railway.app
+ 
+ # Recent classified payments
+ curl -sS "$BASE/payments?limit=5" | python3 -m json.tool
+diff --git a/website/content/docs/reference/proofs.md b/website/content/docs/reference/proofs.md
+index ff2e92f..87644a0 100644
+--- a/website/content/docs/reference/proofs.md
++++ b/website/content/docs/reference/proofs.md
+@@ -27,7 +27,7 @@ discrepancy worth reporting.
+ Before verifying individual hashes, confirm the facilitator is live.
+ 
+ ```bash
+-BASE=https://vellar-facilitator.onrender.com
++BASE=https://vellar-facilitator-production.up.railway.app
+ 
+ # Liveness and current state
+ curl -sS --max-time 120 "$BASE/health" | python3 -m json.tool
+diff --git a/website/content/docs/sellers/charge-for-an-endpoint.md b/website/content/docs/sellers/charge-for-an-endpoint.md
+index df29616..7ea46b0 100644
+--- a/website/content/docs/sellers/charge-for-an-endpoint.md
++++ b/website/content/docs/sellers/charge-for-an-endpoint.md
+@@ -57,7 +57,7 @@ import { bazaarResourceServerExtension } from "@x402/extensions/bazaar";
+ 
+ const server = new x402ResourceServer(
+   new HTTPFacilitatorClient({
+-    url: "https://vellar-facilitator.onrender.com",
++    url: "https://vellar-facilitator-production.up.railway.app",
+   }),
+ )
+   .register("stellar:testnet", new ExactStellarScheme())
+@@ -148,7 +148,7 @@ PAYTO=G... \
+ ASSET=C... \
+ PRICE_ATOMIC=1000000 \
+ SELLER_PORT=4031 \
+-FACILITATOR_URL=https://vellar-facilitator.onrender.com \
++FACILITATOR_URL=https://vellar-facilitator-production.up.railway.app \
+ node seller.mjs
+ ```
+ 
+@@ -178,7 +178,7 @@ order, with any one failure giving `unverifiable`:
+ Take one real payment, then read the catalog:
+ 
+ ```sh
+-curl -s "https://vellar-facilitator.onrender.com/discovery/resources?network=stellar:testnet&payTo=$PAYTO" \
++curl -s "https://vellar-facilitator-production.up.railway.app/discovery/resources?network=stellar:testnet&payTo=$PAYTO" \
+   | python3 -m json.tool
+ ```
+ 
+diff --git a/website/content/docs/sellers/get-discovered.md b/website/content/docs/sellers/get-discovered.md
+index e1978a1..5efda93 100644
+--- a/website/content/docs/sellers/get-discovered.md
++++ b/website/content/docs/sellers/get-discovered.md
+@@ -12,7 +12,7 @@ entry are worth reading.
+ - A publicly deployed seller endpoint over **https**. A `localhost` URL cannot
+   pass ownership verification, ever.
+ - At least one real payment settled through the Vellar facilitator
+-  (`https://vellar-facilitator.onrender.com`, `stellar:testnet` only).
++  (`https://vellar-facilitator-production.up.railway.app`, `stellar:testnet` only).
+   `ownerVerified` is computed after settlement, not at registration, and there
+   is no registration step to begin with.
+ - `curl` and `python3` for the inspection commands below.
+@@ -44,7 +44,7 @@ caps the header, not the response.
+ > `curl -s -i` so you see the 402 and its header.
+ 
+ ```bash
+-curl -s -i "https://vellar-seller-demo.onrender.com/quote" | head -20
++curl -s -i "https://vellar-seller-demo-production.up.railway.app/quote" | head -20
+ ```
+ 
+ ## 2. Two mistakes that catch everyone
+@@ -67,7 +67,7 @@ the exact canonical URL with no redirect in front of it.
+ List the catalog and print each resource with its `ownerVerified` value:
+ 
+ ```bash
+-curl -s "https://vellar-facilitator.onrender.com/discovery/resources?limit=100" \
++curl -s "https://vellar-facilitator-production.up.railway.app/discovery/resources?limit=100" \
+   | python3 -c '
+ import json, sys
+ data = json.load(sys.stdin)
+@@ -88,7 +88,7 @@ Then read the catalog's own health:
+ # if the key is missing, nothing is currently unverifiable, which is healthy.
+ # reverifyPending > 0 means ownership checks are still in flight after a
+ # restart, so check back shortly rather than treating what you read as final.
+-curl -s "https://vellar-facilitator.onrender.com/health" | python3 -m json.tool
++curl -s "https://vellar-facilitator-production.up.railway.app/health" | python3 -m json.tool
+ ```
+ 
+ `/health` also reports `catalogFrozen`, which tells you whether the catalog has
+@@ -131,7 +131,7 @@ with, and a trust block the facilitator assembled from what it observed.
+ 
+ ```json
+ {
+-  "resource": "https://vellar-seller-demo.onrender.com/quote",
++  "resource": "https://vellar-seller-demo-production.up.railway.app/quote",
+   "accepts": [
+     {
+       "scheme": "exact",
+diff --git a/website/content/docs/sellers/upto-metered-payments.md b/website/content/docs/sellers/upto-metered-payments.md
+index d2e2458..dd2f8cf 100644
+--- a/website/content/docs/sellers/upto-metered-payments.md
++++ b/website/content/docs/sellers/upto-metered-payments.md
+@@ -39,7 +39,7 @@ server.register(
+ > **Note:** If you are running your own facilitator, set `UPTO_CONTRACT_ID` to
+ > the contract address in your environment. Without it the `upto` scheme is not
+ > registered and not served, and only the `exact` scheme runs. The hosted
+-> instance at `vellar-facilitator.onrender.com` has this set already. See
++> instance at `vellar-facilitator-production.up.railway.app` has this set already. See
+ > [Configuration](../operators/configuration.md).
+ 
+ > **Note:** The facilitator advertises the contract id it will actually use in `GET /supported`, under the `upto` kind's `extra.uptoContract`. Fetch it and confirm it matches the value you register, so you are not authorizing code the facilitator did not name.
+diff --git a/website/content/docs/x402.md b/website/content/docs/x402.md
+index 9f12272..cd622f5 100644
+--- a/website/content/docs/x402.md
++++ b/website/content/docs/x402.md
+@@ -199,7 +199,7 @@ policy-governed payment can exceed — such a payment needs a facilitator with a
+ higher ceiling. A plain transfer stays well under the default.
+ 
+ **Vellar runs one.** The [x402 Facilitator](./facilitator.md)
+-(`https://vellar-facilitator.onrender.com`, testnet) ships with a raised
++(`https://vellar-facilitator-production.up.railway.app`, testnet) ships with a raised
+ ceiling specifically so policy-governed agent payments settle instead of
+ being rejected — plus Bazaar discovery so agents can find payable resources.
+ 
+diff --git a/website/public/pitchdeck.html b/website/public/pitchdeck.html
+index ba2aceb..fcbdbb8 100644
+--- a/website/public/pitchdeck.html
++++ b/website/public/pitchdeck.html
+@@ -467,7 +467,7 @@ table.cmp td.us{background:var(--tint-green)}
+     </div>
+   </div>
+   <div class="pcard green" style="margin-top:20px">
+-    <p class="cp"><b>Proven end to end on testnet.</b> Facilitator live at vellar-facilitator.onrender.com; registry CBZVS2ET…LKTSWHGP answers is_verified on-chain; vellar-sdk on npm past 650 downloads. Both a plain payment and a provenance-gated payment settled on-chain, with transaction hashes anyone can open on stellar.expert.</p>
++    <p class="cp"><b>Proven end to end on testnet.</b> Facilitator live at vellar-facilitator-production.up.railway.app; registry CBZVS2ET…LKTSWHGP answers is_verified on-chain; vellar-sdk on npm past 650 downloads. Both a plain payment and a provenance-gated payment settled on-chain, with transaction hashes anyone can open on stellar.expert.</p>
+   </div>
+ </section>
+ 

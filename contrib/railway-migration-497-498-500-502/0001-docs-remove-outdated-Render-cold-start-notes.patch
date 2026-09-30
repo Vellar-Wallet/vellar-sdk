@@ -1,0 +1,499 @@
+From 0109795af65a05f29bc8956e19830cd110aad153 Mon Sep 17 00:00:00 2001
+From: natho080 <nluka3889@gmail.com>
+Date: Wed, 30 Sep 2026 10:39:53 +0100
+Subject: [PATCH 1/4] docs: remove outdated Render cold-start notes
+
+---
+ packages/cli/README.md                        |  3 +-
+ website/content/docs/agent-tooling/cli.md     |  1 -
+ .../content/docs/agent-tooling/mcp-payer.md   |  5 ---
+ .../content/docs/agent-tooling/policies.md    |  6 +--
+ .../content/docs/architecture/channel-pool.md |  4 +-
+ .../content/docs/buyers/discover-services.md  |  5 ---
+ .../docs/concepts/bazaar-and-discovery.md     |  5 +--
+ website/content/docs/concepts/exact-scheme.md |  5 +--
+ website/content/docs/concepts/payment-loop.md |  4 --
+ website/content/docs/facilitator.md           | 16 ++------
+ .../docs/getting-started/how-it-works.md      |  1 -
+ .../docs/getting-started/installation.md      |  5 ---
+ .../docs/getting-started/quickstart.md        |  5 +--
+ website/content/docs/hackathon.md             |  6 ---
+ website/content/docs/operators/limits.md      | 37 ++++++-------------
+ website/content/docs/reference/conformance.md |  6 +--
+ website/content/docs/reference/error-codes.md |  1 -
+ website/content/docs/reference/proofs.md      |  7 +---
+ .../docs/sellers/charge-for-an-endpoint.md    |  5 +--
+ .../content/docs/sellers/get-discovered.md    |  4 --
+ 20 files changed, 27 insertions(+), 104 deletions(-)
+
+diff --git a/packages/cli/README.md b/packages/cli/README.md
+index e70215d..7698242 100644
+--- a/packages/cli/README.md
++++ b/packages/cli/README.md
+@@ -87,8 +87,7 @@ asserted.
+ 
+ ## Notes
+ 
+-Vellar runs on `stellar:testnet` only. The hosted facilitator sleeps after 15
+-minutes idle, so the first call after a sleep takes roughly 45 seconds.
++Vellar runs on `stellar:testnet` only.
+ 
+ Debug a paid route with `GET`, never `HEAD`: a `HEAD` request carries no payment
+ challenge, so a correctly wired paid route looks free.
+diff --git a/website/content/docs/agent-tooling/cli.md b/website/content/docs/agent-tooling/cli.md
+index 45583dc..5438735 100644
+--- a/website/content/docs/agent-tooling/cli.md
++++ b/website/content/docs/agent-tooling/cli.md
+@@ -243,7 +243,6 @@ the command runs.
+ | `Error: provide --secret-file ...` | No secret was supplied by flag, file, or `VELLAR_SECRET` | No | Supply one. Prefer `--secret-file` |
+ | `Could not build the payment` | Usually no trustline to the asset, or an empty balance | No | Add the trustline and fund the account |
+ | `Transaction not found on testnet` | The hash is on the other network, or does not exist | n/a | A testnet hash returns 404 on mainnet Horizon and vice versa |
+-| The first call hangs | Free-tier cold start; the hosted instance sleeps after 15 minutes idle | No | Allow up to 120 seconds. This is not a failure |
+ 
+ ## Next steps
+ 
+diff --git a/website/content/docs/agent-tooling/mcp-payer.md b/website/content/docs/agent-tooling/mcp-payer.md
+index c6c78c3..0133982 100644
+--- a/website/content/docs/agent-tooling/mcp-payer.md
++++ b/website/content/docs/agent-tooling/mcp-payer.md
+@@ -92,10 +92,6 @@ ceilings. The value above allows one asset and caps cumulative spend on it at
+ The demo seller at `https://vellar-seller-demo.onrender.com/quote` charges 0.1
+ testnet USDC with sponsored fees, so it is a cheap first target.
+ 
+-> **Note:** It runs on a free tier and sleeps after 15 minutes idle. The first
+-> call after a sleep takes roughly 45 seconds. That is a cold start, not a
+-> failure.
+-
+ ### Step 1: Quote it
+ 
+ Ask the price without paying. This is one HTTP request that never touches the
+@@ -658,7 +654,6 @@ plain 200.
+ | `Error(Contract, #110)` with a nested failed `policy__` call | Layer 2 refused the payment on-chain | No | The payment is over the policy's cap. Retrying with a larger `max_amount` will not help |
+ | `Error(Contract, #110)` with no policy invocation | The signature map is malformed, often a policy missing from it | No | Set `VELLAR_X402_POLICIES` to every policy in the key's `SignerLimits` |
+ | `invalid version byte. expected 48, got 16` | The official `ExactStellarScheme` cannot sign for a `C...` credential address | No | Use this package's registered smart-account scheme; see [x402-foundation/x402 issue #3158](https://github.com/x402-foundation/x402/issues/3158) (#3159 is a duplicate filed one hour later and closed) |
+-| First call hangs | Free-tier facilitator cold start (sleeps after 15 min idle; first call takes roughly 45s (measured)) | No | Send a warming `GET /health` with a 120s timeout before the first payment |
+ 
+ ## Next steps
+ 
+diff --git a/website/content/docs/agent-tooling/policies.md b/website/content/docs/agent-tooling/policies.md
+index f49088a..96b60d6 100644
+--- a/website/content/docs/agent-tooling/policies.md
++++ b/website/content/docs/agent-tooling/policies.md
+@@ -36,8 +36,7 @@ const vellar = createVellarWallet({
+   backend,
+   isValidAddress,
+   // The hosted testnet policy gateway (same host as the wallet backend).
+-  // Production: your own gateway. Free instance, so the first request after a
+-  // quiet spell can take roughly 45s (measured) while it wakes.
++  // Production: your own gateway.
+   apiUrl: "https://vellar-backend.onrender.com",
+   policyAttach: {
+     // build kit.addPolicy(contractId), passkey-sign, submit via your backend
+@@ -75,8 +74,6 @@ console.log(templates.map((t) => `${t.type} - ${t.title} (${t.enforcement.kind})
+ 
+ If that prints templates, your config is correct. Everything after this is the same client with a wallet session attached, reached as `wallet.policies`.
+ 
+-> **Note:** The first call after a quiet spell is the cold start, not a failure. Give it a 120s timeout before deciding something is wrong.
+-
+ ## 3. Deploy a spending-limit policy
+ 
+ ```ts
+@@ -160,7 +157,6 @@ Each template declares how it is **actually** enforced on-chain, as `enforcement
+ | `deploy()` throws a clear error while `listTemplates`, `generate` and `simulate` work | `policyAttach` was not configured | Add the `policyAttach` runtime that builds `kit.addPolicy`, passkey-signs and submits |
+ | Policy deployed, but the agent is not limited | The policy is not named in the agent key's grants, so it never co-signs | Mint the agent key with that policy contract in the grant for the token (see [Agent keys](./agent-keys.md)) |
+ | More than the cap moved in a short span | Expected: the window tumbles rather than slides, so up to 2x the cap can move around a boundary | Size the window for that worst case, or pair the limit with a cryptographic co-signer |
+-| The first gateway request takes roughly 45s (measured) | Free-tier cold start on the hosted testnet gateway | Warm it with an early call and use a 120s timeout |
+ 
+ ## Next steps
+ 
+diff --git a/website/content/docs/architecture/channel-pool.md b/website/content/docs/architecture/channel-pool.md
+index 0b0c3a9..ce750d2 100644
+--- a/website/content/docs/architecture/channel-pool.md
++++ b/website/content/docs/architecture/channel-pool.md
+@@ -137,9 +137,7 @@ or disabled by the monitor for being below the floor. Disabled accounts are
+ excluded from settlement until they are re-funded.
+ 
+ > **Note:** `/health` is exempt from the facilitator's rate limits, so you can
+-> poll it. On the hosted instance the service sleeps after 15 minutes idle and
+-> the first request takes roughly 45 seconds, so allow 120 seconds in your
+-> timeout before concluding the pool is unhealthy.
++> poll it.
+ 
+ A number that stays below 50 while traffic is idle points at funding, not load.
+ A number that dips under load and recovers is the pool working as designed.
+diff --git a/website/content/docs/buyers/discover-services.md b/website/content/docs/buyers/discover-services.md
+index 14fc3be..4117e3d 100644
+--- a/website/content/docs/buyers/discover-services.md
++++ b/website/content/docs/buyers/discover-services.md
+@@ -118,10 +118,6 @@ the same filters, and `cursor` for pagination.
+ > ⚠️ **The MCP server only discovers. It does not pay.** Paying requires a
+ > separate server that holds a key — see the [MCP payer](../agent-tooling/mcp-payer.md).
+ 
+-> ⚠️ **First tool call after idle takes roughly 45 seconds.** The facilitator
+-> runs on a free tier. Send a warming `GET /health` request (it is
+-> rate-limit-exempt) before your agent's first call.
+-
+ ## When it fails
+ 
+ | Error | Cause | Fix |
+@@ -130,7 +126,6 @@ the same filters, and `cursor` for pagination.
+ | 400 on search with empty query | query parameter is required | Pass a non-empty query string |
+ | Search returns items not resources | Parsing browse response as search | Browse returns items, search returns resources |
+ | ownerVerified false on known resource | Free-tier restart cleared ownership data | It self-heals after next settlement — wait or trigger a payment |
+-| MCP first call times out | Facilitator cold start | Send GET /health first with 120s timeout, then retry |
+ 
+ ## Next steps
+ 
+diff --git a/website/content/docs/concepts/bazaar-and-discovery.md b/website/content/docs/concepts/bazaar-and-discovery.md
+index 1e2562d..082ce77 100644
+--- a/website/content/docs/concepts/bazaar-and-discovery.md
++++ b/website/content/docs/concepts/bazaar-and-discovery.md
+@@ -12,8 +12,7 @@ all `localhost` URLs permanently.
+ - Familiarity with the x402 challenge and settle flow (see
+   [The payment loop](./payment-loop.md))
+ - Access to a facilitator. The hosted instance is
+-  `https://vellar-facilitator.onrender.com` (`stellar:testnet` only, free tier,
+-  sleeps after 15 minutes idle, so the first call takes roughly 45s (measured))
++  `https://vellar-facilitator.onrender.com` (`stellar:testnet` only)
+ - `curl` and `python3` for the inspection commands near the end
+ 
+ ## How a resource enters the catalog
+@@ -214,7 +213,7 @@ before a real request.
+ | `ownerVerified: false` on a working public seller | Trailing-slash mismatch: the canonical key strips the trailing slash, so a server answering only `/quote/` is checked at `/quote`. A `301` is not followed | Serve the challenge at the exact canonical URL with no redirect |
+ | `cataloged: false` with `binding_refused` | The resource URL is already bound to a different `payTo` under trust-on-first-use | If you are the legitimate owner, settle once from the bound `payTo`, or settle again after a restart cleared the binding on the hosted instance |
+ | `cataloged: false` with `schema_validation_failed` | Listing metadata or a route template failed validation. `serviceName` must be printable ASCII, max 64 chars; descriptions are clamped to 256 chars; tags follow the same ASCII rule | Make the name and tags printable ASCII, shorten the description, then settle once more |
+-| `ownerVerified` was `true`, now reads `false` | The free-tier hosted instance has no persistent disk, so the catalog and its ownership bindings vanish on restart or idle sleep | Nothing to fix. It self-heals after the next settled payment, subject to a 15-minute cooldown |
++| `ownerVerified` was `true`, now reads `false` | The free-tier hosted instance has no persistent disk, so the catalog and its ownership bindings vanish on restart | Nothing to fix. It self-heals after the next settled payment, subject to a 15-minute cooldown |
+ 
+ ## Next steps
+ 
+diff --git a/website/content/docs/concepts/exact-scheme.md b/website/content/docs/concepts/exact-scheme.md
+index 0017ff0..1e470ca 100644
+--- a/website/content/docs/concepts/exact-scheme.md
++++ b/website/content/docs/concepts/exact-scheme.md
+@@ -64,8 +64,7 @@ testnet, ledgers can close slower or faster than the nominal 5 seconds, so the
+ wall-clock window a given ledger offset buys you is not fixed. The timeout has to
+ cover the whole round trip: the buyer's simulation, the retry request to the
+ seller, the facilitator's verify, and the settle submission. A value tuned to a
+-perfect network leaves nothing for the facilitator's cold start, and the hosted
+-facilitator's first call after idle sleep can take roughly 45 seconds (measured).
++perfect network leaves nothing for a slow round trip.
+ 
+ The [`upto`](./upto-scheme.md) scheme adds a separate contract-enforced ceiling
+ on top of this: `expiration_ledger` must not exceed `current_ledger + 17,280`
+@@ -144,7 +143,7 @@ You can inspect any settlement hash the same way, or open it in the explorer at
+ | Error | Cause | Fix |
+ |---|---|---|
+ | `invalid_exact_stellar_payload_authorization_replayed` | The same authorization entry was already settled once. Replay protection refused the second attempt. | Sign a fresh payload. A retry of a settled payload can never succeed, by design. |
+-| Expired authorization (verify-stage refusal) | The entry's expiration ledger has passed. Usually a cached payload, a slow round trip, or a facilitator cold start eating the window. | Sign fresh and raise `maxTimeoutSeconds` so the ledger offset covers the whole round trip. |
++| Expired authorization (verify-stage refusal) | The entry's expiration ledger has passed. Usually a cached payload, or a slow round trip eating the window. | Sign fresh and raise `maxTimeoutSeconds` so the ledger offset covers the whole round trip. |
+ | `invalid_exact_stellar_payload_missing_trustline_recipient` | The seller's `payTo` has no trustline to the payment asset. The payment verifies successfully, then fails at settlement. | The seller must add a trustline for that asset. Note this reads almost exactly like a spend control refusing the payment, so check the recipient before blaming your policy. |
+ | `invalid_exact_stellar_payload_unsupported_credential_type` | `simulationSourceAccount` is the payer's own address, so Soroban authorized with source-account credentials instead of the smart account's auth entry. | Use a **different** funded classic `G...` account for `simulationSourceAccount`. It never signs and is never charged. |
+ | `fee_exceeds_maximum` | The facilitator's sponsored-fee ceiling is below what the payment costs. Policy-governed payments cost more in fees (see [Fees and Sponsorship](../reference/fees.md) for measured figures), while the reference `x402.org` facilitator defaults to 50,000 stroops. | Use a facilitator with a raised ceiling. Vellar ships 500,000 stroops, raisable via `MAX_TX_FEE_STROOPS`. |
+diff --git a/website/content/docs/concepts/payment-loop.md b/website/content/docs/concepts/payment-loop.md
+index f8bd901..1e0532b 100644
+--- a/website/content/docs/concepts/payment-loop.md
++++ b/website/content/docs/concepts/payment-loop.md
+@@ -96,10 +96,6 @@ sequenceDiagram
+     S-->>B: 200 + resource body
+ ```
+ 
+-> **Note:** The hosted facilitator runs on a free tier and sleeps after 15
+-> minutes idle. The first call after a sleep takes roughly 45 seconds
+-> (measured) before step 5 answers. Allow up to 120 seconds in your timeout.
+-
+ ## Auth entries, not transactions
+ 
+ The buyer signs an authorization entry, not a full transaction. That entry
+diff --git a/website/content/docs/facilitator.md b/website/content/docs/facilitator.md
+index d331beb..7c8f909 100644
+--- a/website/content/docs/facilitator.md
++++ b/website/content/docs/facilitator.md
+@@ -12,8 +12,8 @@ buyer never needs XLM: the facilitator re-simulates the signed payment to
+ verify it, submits it on-chain, and sponsors the network fee.
+ 
+ > **Status: testnet, pre-production.** Open for anyone to build against. It
+-> runs on a free tier for now, so the first request after idle can take up to
+-> a minute (cold start) — and the catalog does not survive that sleep (see
++> runs without a persistent disk for now, so the catalog does not survive a
++> restart (see
+ > [Limits](#limits-and-operational-caveats)). Vellar runs on stellar:testnet
+ > only. Mainnet is gated on three items: a persistent-disk deployment, a funded
+ > pubnet sponsor account, and a mainnet security audit of the spending-limit
+@@ -502,8 +502,7 @@ Things a developer building against the hosted instance should know up front:
+   correct client-side handling regardless — it costs nothing when nothing
+   fails.
+ - **The catalog is ephemeral.** The free tier has no persistent disk, so
+-  catalog entries and URL ownership bindings vanish on every restart or idle
+-  sleep — cold start doesn't just mean latency, it means data loss. A
++  catalog entries and URL ownership bindings vanish on every restart. A
+   resource is re-cataloged after its next settled payment.
+ - **URL ownership is trust-on-first-use.** The first settled payment binds a
+   resource URL to its `payTo` (then verified against the URL's own 402
+@@ -532,15 +531,6 @@ Things a developer building against the hosted instance should know up front:
+   restart, not stored). `0` means the catalog's trust state is settled;
+   anything higher means check back shortly rather than treat what you just
+   read as final.
+-- **No guaranteed warm window, but the odds are better on weekdays.** A
+-  best-effort keep-warm job pings the facilitator and demo seller every 10
+-  minutes, **07:00–21:00 UTC on weekdays** — that narrows how often you'll
+-  hit a cold instance during that window, but GitHub Actions scheduling is
+-  best-effort and can slip past the 15-minute idle timeout, so it is not a
+-  promise. Outside that window, or if a ping slips, assume cold. Send a
+-  warming `GET /health` (rate-limit-exempt) with a ~120s timeout ahead of a
+-  real request rather than let a user's first call eat the cold start. It
+-  then stays warm for 15 minutes past your last call.
+ 
+ ## Proven end to end
+ 
+diff --git a/website/content/docs/getting-started/how-it-works.md b/website/content/docs/getting-started/how-it-works.md
+index f5bb365..31d1635 100644
+--- a/website/content/docs/getting-started/how-it-works.md
++++ b/website/content/docs/getting-started/how-it-works.md
+@@ -98,7 +98,6 @@ flow as [`wallet.policies`](../agent-tooling/policies.md).
+ 
+ | Symptom | Cause | Fix |
+ |---|---|---|
+-| First request takes roughly 45 seconds | Render free tier cold start | Send a warming GET /health first |
+ | `X402NotConfiguredError` at construction | `rpcUrl` missing or invalid URL | Pass `x402.rpcUrl` in config |
+ | `invalid_exact_stellar_payload_unsupported_credential_type` | `simulationSourceAccount` is the same as the payer | Use a different funded G account for simulation |
+ | Payment settles but nothing is cataloged | `required.extensions` not echoed in payload | Echo extensions in your buyer — see Facilitator guide |
+diff --git a/website/content/docs/getting-started/installation.md b/website/content/docs/getting-started/installation.md
+index d35eb18..33e8fb1 100644
+--- a/website/content/docs/getting-started/installation.md
++++ b/website/content/docs/getting-started/installation.md
+@@ -71,11 +71,6 @@ credentials and submits to the network.
+ > hackathon projects. Run your own backend before shipping to production — it is
+ > three routes that hold your relayer and sponsor credentials.
+ 
+-> ⚠️ **Free tier cold start.** The hosted backend runs on a free Render instance
+-> that sleeps after 15 minutes of inactivity. The first request after idle can
+-> take roughly 45 seconds (measured). Retry rather than assuming a
+-> bug. Send a warming request before showing it to a user.
+-
+ ## Requirements
+ 
+ - **A secure context** — WebAuthn (passkeys) only works over HTTPS or
+diff --git a/website/content/docs/getting-started/quickstart.md b/website/content/docs/getting-started/quickstart.md
+index 786bad7..eb178fc 100644
+--- a/website/content/docs/getting-started/quickstart.md
++++ b/website/content/docs/getting-started/quickstart.md
+@@ -61,9 +61,7 @@ wallet wasm hash, and native-token contract id, so there are no magic values to
+ look up. `createHttpWalletBackend` is the ready-made client for the hosted
+ gateway.
+ 
+-> ⚠️ **Cold start warning.** The hosted backend sleeps after 15 minutes idle.
+-> The first request takes roughly 45 seconds (measured). This is a free-tier characteristic,
+-> not a bug. For production, run your own backend.
++> For production, run your own backend.
+ 
+ ## 3. Create a wallet
+ 
+@@ -141,7 +139,6 @@ throw `X402NotConfiguredError`.
+ 
+ | Symptom | Cause | Fix |
+ |---|---|---|
+-| Wallet creation hangs for roughly 45 seconds, up to 2 minutes | Backend cold start | Wait — it will respond. Allow up to 120 seconds in your timeout before retrying. |
+ | Passkey prompt never appears | Not in a secure context | Serve over HTTPS or localhost |
+ | `X402NotConfiguredError` | x402 config missing from createVellarWallet | Add the x402 block — see x402 payments page |
+ | `NoUsablePaymentOptionError` | Facilitator does not advertise areFeesSponsored | Use the Vellar facilitator URL, which sponsors fees |
+diff --git a/website/content/docs/hackathon.md b/website/content/docs/hackathon.md
+index c8e27b1..6549ef8 100644
+--- a/website/content/docs/hackathon.md
++++ b/website/content/docs/hackathon.md
+@@ -356,12 +356,6 @@ npm run dev
+ The canonical answers for the pinned channel FAQ — if these ever disagree
+ with a pinned message, this page wins.
+ 
+-**The first request is hanging / everything seems down.** The hosted backend
+-and facilitator sleep when idle (free instances). The first request after a
+-quiet spell takes roughly 45 seconds (measured) while they wake. Allow up to
+-120 seconds in your timeout and retry — after that everything is fast. Not a
+-bug in your code.
+-
+ **How do I get a funded testnet account?** Friendbot, free:
+ `curl "https://friendbot.stellar.org?addr=G...YOURKEY"`. You only need it
+ for x402's `simulationSourceAccount` (never charged) — wallet creation and
+diff --git a/website/content/docs/operators/limits.md b/website/content/docs/operators/limits.md
+index 2a09e4b..77fff43 100644
+--- a/website/content/docs/operators/limits.md
++++ b/website/content/docs/operators/limits.md
+@@ -2,7 +2,7 @@
+ 
+ > The operational limits of the hosted instance, what each one means, and how to handle them without debugging things that are not bugs.
+ 
+-By the end of this page you will know the six things that will bite you on the hosted instance, understand the cold-start timing, know which spend-control refusals are enforced versus logged, and know how to keep the catalog healthy.
++By the end of this page you will know the five things that will bite you on the hosted instance, know which spend-control refusals are enforced versus logged, and know how to keep the catalog healthy.
+ 
+ ## Prerequisites
+ 
+@@ -16,25 +16,13 @@ By the end of this page you will know the six things that will bite you on the h
+ https://vellar-facilitator.onrender.com
+ ```
+ 
+-Network: `stellar:testnet` only. Tier: free, on Render.
++Network: `stellar:testnet` only. Tier: free.
+ 
+-> ⚠️ **This is not production infrastructure.** It is a testnet demo: one instance, no uptime commitment, no persistent disk, and a cold start possible at any hour. It is fine for building and testing against. For anything real, run your own instance (see [Run your own facilitator](./run.md)).
++> ⚠️ **This is not production infrastructure.** It is a testnet demo: one instance, no uptime commitment, no persistent disk. It is fine for building and testing against. For anything real, run your own instance (see [Run your own facilitator](./run.md)).
+ 
+-## The six things that will bite you
++## The five things that will bite you
+ 
+-### 1. Cold start (about 45 seconds)
+-
+-The instance sleeps after 15 minutes idle. The first request after idle takes roughly 45 seconds. That is a Render free-tier characteristic, not a bug and not a sign the facilitator is broken.
+-
+-Send a warming request before the request you actually care about:
+-
+-```bash
+-curl -s --max-time 120 https://vellar-facilitator.onrender.com/health
+-```
+-
+-> **Note:** `/health` is exempt from rate limiting, so warming costs you nothing against your budget. Once warm, the service stays active for 15 minutes past the last call.
+-
+-### 2. Settlement failures, retry rather than debug
++### 1. Settlement failures, retry rather than debug
+ 
+ `/settle` occasionally returns an empty `transaction` field with one of two reason codes:
+ 
+@@ -47,13 +35,13 @@ Both mean the same thing: the transaction was never submitted, nothing was spent
+ 
+ The facilitator already retries internally (two attempts, 6 seconds apart) before returning the error, so what you receive is the verdict after those retries.
+ 
+-### 3. The catalog is ephemeral
++### 2. The catalog is ephemeral
+ 
+-The free tier has no persistent disk. The catalog resets on every restart and on every idle-sleep recovery.
++The free tier has no persistent disk. The catalog resets on every restart.
+ 
+-A resource re-catalogs after its next settled payment, and `ownerVerified` resets and self-heals the same way. Cold start does not just mean latency, it means data loss.
++A resource re-catalogs after its next settled payment, and `ownerVerified` resets and self-heals the same way.
+ 
+-### 4. Your first settlement writes permanently
++### 3. Your first settlement writes permanently
+ 
+ The catalog is global to the facilitator. A `localhost` URL produces a permanent, unremovable entry that is permanently unverifiable (verification is https only, no loopback). There is no self-service removal.
+ 
+@@ -61,13 +49,13 @@ Use a local facilitator for development. `seller.mjs` refuses to boot with a `lo
+ 
+ > ⚠️ **The refusal is a guardrail, not an obstacle.** Overriding it with `ALLOW_UNVERIFIABLE_ON_SHARED=1` against the hosted instance leaves an entry that every other agent reading the catalog has to skip past, and nobody can remove it.
+ 
+-### 5. Rate limits
++### 4. Rate limits
+ 
+ - 60 requests per minute per IP.
+ - `/verify` and `/settle` bodies are capped at 32 KiB.
+ - `/health` is exempt from the rate limit.
+ 
+-### 6. Spend-control refusals are log-only on testnet
++### 5. Spend-control refusals are log-only on testnet
+ 
+ The four spend-control refusal reasons are:
+ 
+@@ -117,12 +105,11 @@ For the full walkthrough (provisioning a testnet asset, running a seller, paying
+ 
+ | Symptom | Cause | Fix |
+ | --- | --- | --- |
+-| First request hangs for about 45 seconds | The instance slept after 15 minutes idle and is cold-starting | Expected on the free tier. Send a warming `curl --max-time 120` to `/health` before the real request |
+ | `/settle` returns an empty `transaction` field with `settle_exact_stellar_transaction_submission_failed` or `settle_exact_stellar_transaction_failed` | The transaction was never submitted, so nothing was spent | Sign a fresh payload and retry once. A retry cannot double-pay. Do not retry if `transaction` is non-empty |
+ | `settlement_refused` with `sponsor_balance_low` | The sponsor account is below `SPONSOR_HARD_FLOOR_STROOPS` (default 100,000,000 stroops, 10 XLM) | Wait for the operator to refund the sponsor, or fund your own sponsor if you run the instance |
+ | `400 verified_only_unavailable` | You filtered discovery on `verified_only=true` and there is no verdict source | Use `ownerVerified` instead |
+ | `curl -I` returns a plain `200` on a paid route | HEAD carries no payment challenge, so a correctly wired route looks broken | Debug with `GET`, never `HEAD` |
+-| Catalog is empty after a restart | The free tier has no persistent disk, so the catalog resets on restart and on idle-sleep recovery | Nothing to fix. A resource re-catalogs after its next settled payment. Set `CATALOG_DB_URL` on your own instance for durable storage |
++| Catalog is empty after a restart | The free tier has no persistent disk, so the catalog resets on restart | Nothing to fix. A resource re-catalogs after its next settled payment. Set `CATALOG_DB_URL` on your own instance for durable storage |
+ 
+ ## Next steps
+ 
+diff --git a/website/content/docs/reference/conformance.md b/website/content/docs/reference/conformance.md
+index ad4c1b3..63aec68 100644
+--- a/website/content/docs/reference/conformance.md
++++ b/website/content/docs/reference/conformance.md
+@@ -84,10 +84,7 @@ facilitator's sponsor account, not the buyer, which is what
+ 
+ ## Verify the live endpoints yourself
+ 
+-No wallet, key, or funded account is needed for any of this. The facilitator
+-runs on a free tier and sleeps after 15 minutes idle, so the first call takes
+-roughly 45 seconds (measured). Allow up to 120 seconds in your timeout rather
+-than assuming it is down.
++No wallet, key, or funded account is needed for any of this.
+ 
+ ```sh
+ BASE=https://vellar-facilitator.onrender.com
+@@ -269,7 +266,6 @@ Two issues are filed, one of which has attracted a community fix.
+ | Scenario fails with "Server failed to start" | Upstream build problem in the suite, not a Vellar defect; it reproduces against the upstream reference facilitator too | Nothing to fix on the Vellar side; the scenario never reaches the payment path |
+ | Hash not found on Horizon (404) | Querying the wrong network, e.g. pubnet Horizon | Use `horizon-testnet.stellar.org`; every hash here is testnet |
+ | `fee_account` is the buyer, not the sponsor | Fee sponsorship not in effect for that payment | Check `areFeesSponsored: true` on the kind in `GET /supported` |
+-| First curl to the facilitator hangs or times out | Free-tier cold start after 15 minutes idle | Retry with a 120s timeout; first call takes roughly 45s (measured) |
+ 
+ ## Next steps
+ 
+diff --git a/website/content/docs/reference/error-codes.md b/website/content/docs/reference/error-codes.md
+index 3be6b48..bbeac92 100644
+--- a/website/content/docs/reference/error-codes.md
++++ b/website/content/docs/reference/error-codes.md
+@@ -176,7 +176,6 @@ claimed.
+ | Symptom | Cause | Fix |
+ | --- | --- | --- |
+ | A paid route returns `200` to `curl -I` | `HEAD` carries no payment challenge, so a correctly wired route looks broken | Debug with `GET`, not `HEAD` |
+-| The first request hangs roughly 45 seconds | Free-tier cold start; the instance sleeps after 15 minutes idle | Send a warming `GET /health` first, with a generous timeout. `/health` is exempt from the 60 requests/min rate limit. |
+ | Repeated settles come back with an empty `transaction` field | Transient Soroban RPC `TRY_AGAIN_LATER` | Sign a fresh payload and retry once. Nothing was spent, and a cached payload will not work because signatures expire in ledgers. |
+ 
+ ## Next steps
+diff --git a/website/content/docs/reference/proofs.md b/website/content/docs/reference/proofs.md
+index ce6c000..ff2e92f 100644
+--- a/website/content/docs/reference/proofs.md
++++ b/website/content/docs/reference/proofs.md
+@@ -44,10 +44,8 @@ curl -sS -X POST "$BASE/settle" \
+ Expect `status: ok`, `stellar:testnet` with `areFeesSponsored: true` on both the
+ `exact` and `upto` kinds, and a non-null `errorReason` on the empty settle.
+ 
+-> **Note:** The instance sleeps after 15 minutes idle, so the first call takes
+-> roughly 45 seconds (measured). Allow up to 120 seconds in your timeout.
+-> `/health` is exempt from the rate limit, so warm with that rather than
+-> hammering `/supported`.
++> **Note:** `/health` is exempt from the rate limit, so use it for liveness
++> checks rather than hammering `/supported`.
+ 
+ ## Exact scheme settlements
+ 
+@@ -306,7 +304,6 @@ These claims exist in the codebase but cannot be verified from outside it:
+ | Symptom | Cause | Fix |
+ | --- | --- | --- |
+ | A hash returns 404 on Horizon | Querying pubnet Horizon rather than testnet | Every hash here is Stellar **testnet**; use `horizon-testnet.stellar.org` |
+-| The first facilitator call hangs | Free-tier cold start after 15 minutes idle | Allow up to 120 seconds; warm with `GET /health` first |
+ | `fee_account` shows an address you do not recognise | Older settlements used earlier sponsors, and the F11 test used its own | Check it against the sponsor named in that section. The test is that it is never the buyer |
+ | `stellar contract fetch` is not found | The Stellar CLI is not installed | Install it, or skip the contract check: every other command needs only curl and python3 |
+ 
+diff --git a/website/content/docs/sellers/charge-for-an-endpoint.md b/website/content/docs/sellers/charge-for-an-endpoint.md
+index ff9a293..df29616 100644
+--- a/website/content/docs/sellers/charge-for-an-endpoint.md
++++ b/website/content/docs/sellers/charge-for-an-endpoint.md
+@@ -70,10 +70,7 @@ facilitator re-simulates the signed payment to verify it, submits it on-chain,
+ and sponsors the network fee from
+ `GBUCR6H22CZC5OYHBJIEUS2JFZBOB63AHEGTCV6UEPMD2TMLKG2ZMIW4`.
+ 
+-> **Note:** The hosted facilitator is `stellar:testnet` only and runs on a free
+-> tier. It sleeps after 15 minutes idle, so the first request after a quiet spell
+-> takes roughly 45 seconds (measured). Send a warming
+-> `GET /health` before a request you care about.
++> **Note:** The hosted facilitator is `stellar:testnet` only.
+ 
+ ## 3. Declare the payment requirements
+ 
+diff --git a/website/content/docs/sellers/get-discovered.md b/website/content/docs/sellers/get-discovered.md
+index 75e6d7a..e1978a1 100644
+--- a/website/content/docs/sellers/get-discovered.md
++++ b/website/content/docs/sellers/get-discovered.md
+@@ -17,10 +17,6 @@ entry are worth reading.
+   is no registration step to begin with.
+ - `curl` and `python3` for the inspection commands below.
+ 
+-> **Note:** The hosted facilitator runs on a free tier and sleeps after 15
+-> minutes idle. The first request after a sleep takes roughly 45 seconds
+-> (measured). That is a cold start, not a failure.
+-
+ ## 1. The five requirements for ownerVerified
+ 
+ `ownerVerified: true` means the facilitator fetched your resource URL itself and

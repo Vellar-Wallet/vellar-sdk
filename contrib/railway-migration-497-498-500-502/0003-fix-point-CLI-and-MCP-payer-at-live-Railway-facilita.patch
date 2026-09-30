@@ -1,0 +1,86 @@
+From 689b5a0a9a4ae38f3754952db151bf0761d89655 Mon Sep 17 00:00:00 2001
+From: natho080 <nluka3889@gmail.com>
+Date: Wed, 30 Sep 2026 10:42:31 +0100
+Subject: [PATCH 3/4] fix: point CLI and MCP payer at live Railway facilitator
+
+---
+ packages/cli/src/commands/search.test.ts         | 2 +-
+ packages/cli/src/commands/search.ts              | 2 +-
+ packages/mcp-x402-payer/src/pay-and-call.test.ts | 3 +--
+ packages/mcp-x402-payer/src/pay-and-call.ts      | 9 ++-------
+ 4 files changed, 5 insertions(+), 11 deletions(-)
+
+diff --git a/packages/cli/src/commands/search.test.ts b/packages/cli/src/commands/search.test.ts
+index 14c4586..dc47316 100644
+--- a/packages/cli/src/commands/search.test.ts
++++ b/packages/cli/src/commands/search.test.ts
+@@ -26,7 +26,7 @@ describe("search command", () => {
+   it("defaults --facilitator to the hosted facilitator", () => {
+     // Guards the default rather than just its presence: a wrong default sends
+     // a user's query to the wrong service without any error.
+-    expect(DEFAULT_FACILITATOR_URL).toBe("https://vellar-facilitator.onrender.com");
++    expect(DEFAULT_FACILITATOR_URL).toBe("https://vellar-facilitator-production.up.railway.app");
+     expect(optionFor("--facilitator")?.defaultValue).toBe(DEFAULT_FACILITATOR_URL);
+   });
+ 
+diff --git a/packages/cli/src/commands/search.ts b/packages/cli/src/commands/search.ts
+index 9ecdc65..e67d625 100644
+--- a/packages/cli/src/commands/search.ts
++++ b/packages/cli/src/commands/search.ts
+@@ -1,6 +1,6 @@
+ import { Command } from "commander";
+ 
+-export const DEFAULT_FACILITATOR_URL = "https://vellar-facilitator.onrender.com";
++export const DEFAULT_FACILITATOR_URL = "https://vellar-facilitator-production.up.railway.app";
+ 
+ /** One entry of `accepts[]` on a catalog resource. */
+ interface Accept {
+diff --git a/packages/mcp-x402-payer/src/pay-and-call.test.ts b/packages/mcp-x402-payer/src/pay-and-call.test.ts
+index 432aaa2..3ecd1fe 100644
+--- a/packages/mcp-x402-payer/src/pay-and-call.test.ts
++++ b/packages/mcp-x402-payer/src/pay-and-call.test.ts
+@@ -134,7 +134,7 @@ describe("x402_pay_and_call", () => {
+     expect(payer.pay).not.toHaveBeenCalled();
+   });
+ 
+-  it("T-4: reports the cold-start hint when the Bazaar is unreachable", async () => {
++  it("T-4: reports an unreachable Bazaar when the Bazaar is unreachable", async () => {
+     const payer = stubPayer();
+     const call = payAndCall(
+       {
+@@ -151,7 +151,6 @@ describe("x402_pay_and_call", () => {
+     );
+ 
+     await expect(call).rejects.toThrow(/could not reach the Bazaar/);
+-    await expect(call).rejects.toThrow(/45 seconds/);
+     expect(payer.pay).not.toHaveBeenCalled();
+   });
+ 
+diff --git a/packages/mcp-x402-payer/src/pay-and-call.ts b/packages/mcp-x402-payer/src/pay-and-call.ts
+index 907ceda..073dbdd 100644
+--- a/packages/mcp-x402-payer/src/pay-and-call.ts
++++ b/packages/mcp-x402-payer/src/pay-and-call.ts
+@@ -19,7 +19,7 @@ import { log } from "./output.js";
+ import type { FetchLike, PayResult, Payer } from "./payer.js";
+ 
+ /** Hosted facilitator, used when VELLAR_X402_FACILITATOR_URL is unset. */
+-export const DEFAULT_FACILITATOR_URL = "https://vellar-facilitator.onrender.com";
++export const DEFAULT_FACILITATOR_URL = "https://vellar-facilitator-production.up.railway.app";
+ 
+ /** How many catalog entries to consider. More than this is noise for one call. */
+ const SEARCH_LIMIT = 10;
+@@ -186,13 +186,8 @@ export async function payAndCall(
+     }
+     data = (await res.json()) as SearchResponse;
+   } catch (err) {
+-    // The hosted facilitator sleeps after 15 minutes idle and the first request
+-    // then takes roughly 45 seconds. Saying so turns a retry into an informed
+-    // decision rather than a guess.
+     throw new Error(
+-      `could not reach the Bazaar at ${base}: ${err instanceof Error ? err.message : String(err)}. ` +
+-        "If this is the hosted instance it may be cold-starting, which takes roughly 45 seconds; " +
+-        "retry once before concluding it is down.",
++      `could not reach the Bazaar at ${base}: ${err instanceof Error ? err.message : String(err)}`,
+     );
+   }
+ 
