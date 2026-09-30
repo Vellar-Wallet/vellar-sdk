@@ -4,6 +4,8 @@ name: Publish
 # that guard a pull request. Security audit V-8: a compromised publish executes
 # in every consumer's browser and inside an MCP server holding a signing key, so
 # the artifact must be attributable to a specific commit and workflow.
+# Run `npm run release:check` BEFORE tagging: it runs typecheck, test and build
+# locally so a broken branch fails before the tag exists, not after.
 on:
   push:
     tags: ["v*"]
