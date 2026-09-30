@@ -87,8 +87,7 @@ asserted.
 
 ## Notes
 
-Vellar runs on `stellar:testnet` only. The hosted facilitator sleeps after 15
-minutes idle, so the first call after a sleep takes roughly 45 seconds.
+Vellar runs on `stellar:testnet` only.
 
 Debug a paid route with `GET`, never `HEAD`: a `HEAD` request carries no payment
 challenge, so a correctly wired paid route looks free.

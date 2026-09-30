@@ -243,7 +243,6 @@ the command runs.
 | `Error: provide --secret-file ...` | No secret was supplied by flag, file, or `VELLAR_SECRET` | No | Supply one. Prefer `--secret-file` |
 | `Could not build the payment` | Usually no trustline to the asset, or an empty balance | No | Add the trustline and fund the account |
 | `Transaction not found on testnet` | The hash is on the other network, or does not exist | n/a | A testnet hash returns 404 on mainnet Horizon and vice versa |
-| The first call hangs | Free-tier cold start; the hosted instance sleeps after 15 minutes idle | No | Allow up to 120 seconds. This is not a failure |
 
 ## Next steps
 

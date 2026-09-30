@@ -92,10 +92,6 @@ ceilings. The value above allows one asset and caps cumulative spend on it at
 The demo seller at `https://vellar-seller-demo.onrender.com/quote` charges 0.1
 testnet USDC with sponsored fees, so it is a cheap first target.
 
-> **Note:** It runs on a free tier and sleeps after 15 minutes idle. The first
-> call after a sleep takes roughly 45 seconds. That is a cold start, not a
-> failure.
-
 ### Step 1: Quote it
 
 Ask the price without paying. This is one HTTP request that never touches the
@@ -658,7 +654,6 @@ plain 200.
 | `Error(Contract, #110)` with a nested failed `policy__` call | Layer 2 refused the payment on-chain | No | The payment is over the policy's cap. Retrying with a larger `max_amount` will not help |
 | `Error(Contract, #110)` with no policy invocation | The signature map is malformed, often a policy missing from it | No | Set `VELLAR_X402_POLICIES` to every policy in the key's `SignerLimits` |
 | `invalid version byte. expected 48, got 16` | The official `ExactStellarScheme` cannot sign for a `C...` credential address | No | Use this package's registered smart-account scheme; see [x402-foundation/x402 issue #3158](https://github.com/x402-foundation/x402/issues/3158) (#3159 is a duplicate filed one hour later and closed) |
-| First call hangs | Free-tier facilitator cold start (sleeps after 15 min idle; first call takes roughly 45s (measured)) | No | Send a warming `GET /health` with a 120s timeout before the first payment |
 
 ## Next steps
 

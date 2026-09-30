@@ -71,11 +71,6 @@ credentials and submits to the network.
 > hackathon projects. Run your own backend before shipping to production — it is
 > three routes that hold your relayer and sponsor credentials.
 
-> ⚠️ **Free tier cold start.** The hosted backend runs on a free Render instance
-> that sleeps after 15 minutes of inactivity. The first request after idle can
-> take roughly 45 seconds (measured). Retry rather than assuming a
-> bug. Send a warming request before showing it to a user.
-
 ## Requirements
 
 - **A secure context** — WebAuthn (passkeys) only works over HTTPS or

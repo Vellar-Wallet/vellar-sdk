@@ -12,8 +12,7 @@ all `localhost` URLs permanently.
 - Familiarity with the x402 challenge and settle flow (see
   [The payment loop](./payment-loop.md))
 - Access to a facilitator. The hosted instance is
-  `https://vellar-facilitator.onrender.com` (`stellar:testnet` only, free tier,
-  sleeps after 15 minutes idle, so the first call takes roughly 45s (measured))
+  `https://vellar-facilitator.onrender.com` (`stellar:testnet` only)
 - `curl` and `python3` for the inspection commands near the end
 
 ## How a resource enters the catalog
@@ -214,7 +213,7 @@ before a real request.
 | `ownerVerified: false` on a working public seller | Trailing-slash mismatch: the canonical key strips the trailing slash, so a server answering only `/quote/` is checked at `/quote`. A `301` is not followed | Serve the challenge at the exact canonical URL with no redirect |
 | `cataloged: false` with `binding_refused` | The resource URL is already bound to a different `payTo` under trust-on-first-use | If you are the legitimate owner, settle once from the bound `payTo`, or settle again after a restart cleared the binding on the hosted instance |
 | `cataloged: false` with `schema_validation_failed` | Listing metadata or a route template failed validation. `serviceName` must be printable ASCII, max 64 chars; descriptions are clamped to 256 chars; tags follow the same ASCII rule | Make the name and tags printable ASCII, shorten the description, then settle once more |
-| `ownerVerified` was `true`, now reads `false` | The free-tier hosted instance has no persistent disk, so the catalog and its ownership bindings vanish on restart or idle sleep | Nothing to fix. It self-heals after the next settled payment, subject to a 15-minute cooldown |
+| `ownerVerified` was `true`, now reads `false` | The free-tier hosted instance has no persistent disk, so the catalog and its ownership bindings vanish on restart | Nothing to fix. It self-heals after the next settled payment, subject to a 15-minute cooldown |
 
 ## Next steps
 

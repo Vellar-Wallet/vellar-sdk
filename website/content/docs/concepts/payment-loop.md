@@ -96,10 +96,6 @@ sequenceDiagram
     S-->>B: 200 + resource body
 ```
 
-> **Note:** The hosted facilitator runs on a free tier and sleeps after 15
-> minutes idle. The first call after a sleep takes roughly 45 seconds
-> (measured) before step 5 answers. Allow up to 120 seconds in your timeout.
-
 ## Auth entries, not transactions
 
 The buyer signs an authorization entry, not a full transaction. That entry

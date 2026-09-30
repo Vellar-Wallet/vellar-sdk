@@ -61,9 +61,7 @@ wallet wasm hash, and native-token contract id, so there are no magic values to
 look up. `createHttpWalletBackend` is the ready-made client for the hosted
 gateway.
 
-> ⚠️ **Cold start warning.** The hosted backend sleeps after 15 minutes idle.
-> The first request takes roughly 45 seconds (measured). This is a free-tier characteristic,
-> not a bug. For production, run your own backend.
+> For production, run your own backend.
 
 ## 3. Create a wallet
 
@@ -141,7 +139,6 @@ throw `X402NotConfiguredError`.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Wallet creation hangs for roughly 45 seconds, up to 2 minutes | Backend cold start | Wait — it will respond. Allow up to 120 seconds in your timeout before retrying. |
 | Passkey prompt never appears | Not in a secure context | Serve over HTTPS or localhost |
 | `X402NotConfiguredError` | x402 config missing from createVellarWallet | Add the x402 block — see x402 payments page |
 | `NoUsablePaymentOptionError` | Facilitator does not advertise areFeesSponsored | Use the Vellar facilitator URL, which sponsors fees |

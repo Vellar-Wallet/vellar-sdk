@@ -70,10 +70,7 @@ facilitator re-simulates the signed payment to verify it, submits it on-chain,
 and sponsors the network fee from
 `GBUCR6H22CZC5OYHBJIEUS2JFZBOB63AHEGTCV6UEPMD2TMLKG2ZMIW4`.
 
-> **Note:** The hosted facilitator is `stellar:testnet` only and runs on a free
-> tier. It sleeps after 15 minutes idle, so the first request after a quiet spell
-> takes roughly 45 seconds (measured). Send a warming
-> `GET /health` before a request you care about.
+> **Note:** The hosted facilitator is `stellar:testnet` only.
 
 ## 3. Declare the payment requirements
 

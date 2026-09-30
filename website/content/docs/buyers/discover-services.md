@@ -118,10 +118,6 @@ the same filters, and `cursor` for pagination.
 > ⚠️ **The MCP server only discovers. It does not pay.** Paying requires a
 > separate server that holds a key — see the [MCP payer](../agent-tooling/mcp-payer.md).
 
-> ⚠️ **First tool call after idle takes roughly 45 seconds.** The facilitator
-> runs on a free tier. Send a warming `GET /health` request (it is
-> rate-limit-exempt) before your agent's first call.
-
 ## When it fails
 
 | Error | Cause | Fix |
@@ -130,7 +126,6 @@ the same filters, and `cursor` for pagination.
 | 400 on search with empty query | query parameter is required | Pass a non-empty query string |
 | Search returns items not resources | Parsing browse response as search | Browse returns items, search returns resources |
 | ownerVerified false on known resource | Free-tier restart cleared ownership data | It self-heals after next settlement — wait or trigger a payment |
-| MCP first call times out | Facilitator cold start | Send GET /health first with 120s timeout, then retry |
 
 ## Next steps
 

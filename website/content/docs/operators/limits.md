@@ -2,7 +2,7 @@
 
 > The operational limits of the hosted instance, what each one means, and how to handle them without debugging things that are not bugs.
 
-By the end of this page you will know the six things that will bite you on the hosted instance, understand the cold-start timing, know which spend-control refusals are enforced versus logged, and know how to keep the catalog healthy.
+By the end of this page you will know the five things that will bite you on the hosted instance, know which spend-control refusals are enforced versus logged, and know how to keep the catalog healthy.
 
 ## Prerequisites
 
@@ -16,25 +16,13 @@ By the end of this page you will know the six things that will bite you on the h
 https://vellar-facilitator.onrender.com
 ```
 
-Network: `stellar:testnet` only. Tier: free, on Render.
+Network: `stellar:testnet` only. Tier: free.
 
-> ⚠️ **This is not production infrastructure.** It is a testnet demo: one instance, no uptime commitment, no persistent disk, and a cold start possible at any hour. It is fine for building and testing against. For anything real, run your own instance (see [Run your own facilitator](./run.md)).
+> ⚠️ **This is not production infrastructure.** It is a testnet demo: one instance, no uptime commitment, no persistent disk. It is fine for building and testing against. For anything real, run your own instance (see [Run your own facilitator](./run.md)).
 
-## The six things that will bite you
+## The five things that will bite you
 
-### 1. Cold start (about 45 seconds)
-
-The instance sleeps after 15 minutes idle. The first request after idle takes roughly 45 seconds. That is a Render free-tier characteristic, not a bug and not a sign the facilitator is broken.
-
-Send a warming request before the request you actually care about:
-
-```bash
-curl -s --max-time 120 https://vellar-facilitator.onrender.com/health
-```
-
-> **Note:** `/health` is exempt from rate limiting, so warming costs you nothing against your budget. Once warm, the service stays active for 15 minutes past the last call.
-
-### 2. Settlement failures, retry rather than debug
+### 1. Settlement failures, retry rather than debug
 
 `/settle` occasionally returns an empty `transaction` field with one of two reason codes:
 
@@ -47,13 +35,13 @@ Both mean the same thing: the transaction was never submitted, nothing was spent
 
 The facilitator already retries internally (two attempts, 6 seconds apart) before returning the error, so what you receive is the verdict after those retries.
 
-### 3. The catalog is ephemeral
+### 2. The catalog is ephemeral
 
-The free tier has no persistent disk. The catalog resets on every restart and on every idle-sleep recovery.
+The free tier has no persistent disk. The catalog resets on every restart.
 
-A resource re-catalogs after its next settled payment, and `ownerVerified` resets and self-heals the same way. Cold start does not just mean latency, it means data loss.
+A resource re-catalogs after its next settled payment, and `ownerVerified` resets and self-heals the same way.
 
-### 4. Your first settlement writes permanently
+### 3. Your first settlement writes permanently
 
 The catalog is global to the facilitator. A `localhost` URL produces a permanent, unremovable entry that is permanently unverifiable (verification is https only, no loopback). There is no self-service removal.
 
@@ -61,13 +49,13 @@ Use a local facilitator for development. `seller.mjs` refuses to boot with a `lo
 
 > ⚠️ **The refusal is a guardrail, not an obstacle.** Overriding it with `ALLOW_UNVERIFIABLE_ON_SHARED=1` against the hosted instance leaves an entry that every other agent reading the catalog has to skip past, and nobody can remove it.
 
-### 5. Rate limits
+### 4. Rate limits
 
 - 60 requests per minute per IP.
 - `/verify` and `/settle` bodies are capped at 32 KiB.
 - `/health` is exempt from the rate limit.
 
-### 6. Spend-control refusals are log-only on testnet
+### 5. Spend-control refusals are log-only on testnet
 
 The four spend-control refusal reasons are:
 
@@ -117,12 +105,11 @@ For the full walkthrough (provisioning a testnet asset, running a seller, paying
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| First request hangs for about 45 seconds | The instance slept after 15 minutes idle and is cold-starting | Expected on the free tier. Send a warming `curl --max-time 120` to `/health` before the real request |
 | `/settle` returns an empty `transaction` field with `settle_exact_stellar_transaction_submission_failed` or `settle_exact_stellar_transaction_failed` | The transaction was never submitted, so nothing was spent | Sign a fresh payload and retry once. A retry cannot double-pay. Do not retry if `transaction` is non-empty |
 | `settlement_refused` with `sponsor_balance_low` | The sponsor account is below `SPONSOR_HARD_FLOOR_STROOPS` (default 100,000,000 stroops, 10 XLM) | Wait for the operator to refund the sponsor, or fund your own sponsor if you run the instance |
 | `400 verified_only_unavailable` | You filtered discovery on `verified_only=true` and there is no verdict source | Use `ownerVerified` instead |
 | `curl -I` returns a plain `200` on a paid route | HEAD carries no payment challenge, so a correctly wired route looks broken | Debug with `GET`, never `HEAD` |
-| Catalog is empty after a restart | The free tier has no persistent disk, so the catalog resets on restart and on idle-sleep recovery | Nothing to fix. A resource re-catalogs after its next settled payment. Set `CATALOG_DB_URL` on your own instance for durable storage |
+| Catalog is empty after a restart | The free tier has no persistent disk, so the catalog resets on restart | Nothing to fix. A resource re-catalogs after its next settled payment. Set `CATALOG_DB_URL` on your own instance for durable storage |
 
 ## Next steps
 

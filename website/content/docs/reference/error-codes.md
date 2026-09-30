@@ -176,7 +176,6 @@ claimed.
 | Symptom | Cause | Fix |
 | --- | --- | --- |
 | A paid route returns `200` to `curl -I` | `HEAD` carries no payment challenge, so a correctly wired route looks broken | Debug with `GET`, not `HEAD` |
-| The first request hangs roughly 45 seconds | Free-tier cold start; the instance sleeps after 15 minutes idle | Send a warming `GET /health` first, with a generous timeout. `/health` is exempt from the 60 requests/min rate limit. |
 | Repeated settles come back with an empty `transaction` field | Transient Soroban RPC `TRY_AGAIN_LATER` | Sign a fresh payload and retry once. Nothing was spent, and a cached payload will not work because signatures expire in ledgers. |
 
 ## Next steps

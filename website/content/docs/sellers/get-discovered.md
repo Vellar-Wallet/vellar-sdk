@@ -17,10 +17,6 @@ entry are worth reading.
   is no registration step to begin with.
 - `curl` and `python3` for the inspection commands below.
 
-> **Note:** The hosted facilitator runs on a free tier and sleeps after 15
-> minutes idle. The first request after a sleep takes roughly 45 seconds
-> (measured). That is a cold start, not a failure.
-
 ## 1. The five requirements for ownerVerified
 
 `ownerVerified: true` means the facilitator fetched your resource URL itself and

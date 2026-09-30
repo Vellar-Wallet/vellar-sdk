@@ -12,8 +12,8 @@ buyer never needs XLM: the facilitator re-simulates the signed payment to
 verify it, submits it on-chain, and sponsors the network fee.
 
 > **Status: testnet, pre-production.** Open for anyone to build against. It
-> runs on a free tier for now, so the first request after idle can take up to
-> a minute (cold start) — and the catalog does not survive that sleep (see
+> runs without a persistent disk for now, so the catalog does not survive a
+> restart (see
 > [Limits](#limits-and-operational-caveats)). Vellar runs on stellar:testnet
 > only. Mainnet is gated on three items: a persistent-disk deployment, a funded
 > pubnet sponsor account, and a mainnet security audit of the spending-limit
@@ -502,8 +502,7 @@ Things a developer building against the hosted instance should know up front:
   correct client-side handling regardless — it costs nothing when nothing
   fails.
 - **The catalog is ephemeral.** The free tier has no persistent disk, so
-  catalog entries and URL ownership bindings vanish on every restart or idle
-  sleep — cold start doesn't just mean latency, it means data loss. A
+  catalog entries and URL ownership bindings vanish on every restart. A
   resource is re-cataloged after its next settled payment.
 - **URL ownership is trust-on-first-use.** The first settled payment binds a
   resource URL to its `payTo` (then verified against the URL's own 402
@@ -532,15 +531,6 @@ Things a developer building against the hosted instance should know up front:
   restart, not stored). `0` means the catalog's trust state is settled;
   anything higher means check back shortly rather than treat what you just
   read as final.
-- **No guaranteed warm window, but the odds are better on weekdays.** A
-  best-effort keep-warm job pings the facilitator and demo seller every 10
-  minutes, **07:00–21:00 UTC on weekdays** — that narrows how often you'll
-  hit a cold instance during that window, but GitHub Actions scheduling is
-  best-effort and can slip past the 15-minute idle timeout, so it is not a
-  promise. Outside that window, or if a ping slips, assume cold. Send a
-  warming `GET /health` (rate-limit-exempt) with a ~120s timeout ahead of a
-  real request rather than let a user's first call eat the cold start. It
-  then stays warm for 15 minutes past your last call.
 
 ## Proven end to end
 
