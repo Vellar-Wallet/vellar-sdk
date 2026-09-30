@@ -21,6 +21,10 @@ export const STABLE_V1_EXPORTS = [
   "createSessionStore",
   "waitForTransaction",
   "PolicyListFilterError",
+  "classifyEnforcement",
+  "validatePolicyDefinition",
+  "DeployPolicyError",
+  "walletBackendContractTests",
 ] as const;
 
 /** Canonical experimental export names — keep in sync with README and index.ts. */

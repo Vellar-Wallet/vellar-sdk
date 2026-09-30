@@ -18,6 +18,7 @@ export * from "./payments-client";
 export * from "./policy-types";
 export * from "./policy-client";
 export * from "./policy-facade";
+export * from "./policy-validation";
 export * from "./agents-facade";
 export * from "./x402-types";
 export * from "./x402-auth-entry";
