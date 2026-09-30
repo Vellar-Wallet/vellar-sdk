@@ -150,3 +150,120 @@ describe("client.ts ↔ http-backend.ts integration harness", () => {
     expect(result.hash).toBe("txhash-submit");
   });
 });
+
+describe("wallet backend contract — error responses", () => {
+  function makeContractServer(overrides: {
+    create?: (body: Record<string, unknown>) => { status: number; body: unknown };
+    connect?: (body: Record<string, unknown>) => { status: number; body: unknown };
+    submit?: (body: Record<string, unknown>) => { status: number; body: unknown };
+  }): MockFetch {
+    return (async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      const path = new URL(String(input)).pathname;
+      let body: Record<string, unknown> = {};
+      if (init?.body) body = JSON.parse(String(init.body));
+      const json = (data: unknown, status = 200) =>
+        new Response(JSON.stringify(data), {
+          status,
+          headers: { "content-type": "application/json" },
+        });
+
+      if (path === "/wallet/create" && overrides.create) {
+        const r = overrides.create(body);
+        return json(r.body, r.status);
+      }
+      if (path === "/wallet/connect" && overrides.connect) {
+        const r = overrides.connect(body);
+        return json(r.body, r.status);
+      }
+      if (path === "/wallet/submit" && overrides.submit) {
+        const r = overrides.submit(body);
+        return json(r.body, r.status);
+      }
+      // Default success responses
+      if (path === "/wallet/create") return json({ sessionId: "sess-create" });
+      if (path === "/wallet/connect")
+        return json({ contractId: CONTRACT, sessionId: "sess-connect" });
+      if (path === "/wallet/submit") return json({ hash: "txhash-submit" });
+      return new Response(null, { status: 404 });
+    }) as MockFetch;
+  }
+
+  it("submit returns WalletApiError with status and code on validation failure", async () => {
+    const server = makeContractServer({
+      submit: () => ({ status: 422, body: { error: "invalid_xdr", message: "Malformed XDR" } }),
+    });
+    const backend = createHttpWalletBackend(API_URL, server);
+    const err = await backend
+      .submitTransaction({ signedXdr: "bad", network: "testnet" })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(err.name).toBe("WalletApiError");
+    expect(err.status).toBe(422);
+    expect(err.code).toBe("invalid_xdr");
+  });
+
+  it("connect returns undefined for unknown keyId (404)", async () => {
+    const server = makeContractServer({
+      connect: () => ({ status: 404, body: { error: "not_found" } }),
+    });
+    const backend = createHttpWalletBackend(API_URL, server);
+    const result = await backend.lookupContractId({
+      keyId: "unknown-key",
+      network: "testnet",
+    });
+    expect(result).toBeUndefined();
+  });
+
+  it("create returns WalletApiError on upstream failure", async () => {
+    const server = makeContractServer({
+      create: () => ({
+        status: 502,
+        body: { error: "upstream_error", message: "Relayer unavailable" },
+      }),
+    });
+    const backend = createHttpWalletBackend(API_URL, server);
+    const err = await backend
+      .submitWalletCreation({
+        keyId: "key123",
+        contractId: CONTRACT,
+        network: "testnet",
+        signedTx: "deploy-xdr",
+      })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(err.name).toBe("WalletApiError");
+    expect(err.status).toBe(502);
+  });
+
+  it("submit returns WalletApiError on upstream failure", async () => {
+    const server = makeContractServer({
+      submit: () => ({
+        status: 500,
+        body: { error: "internal_error", message: "Unexpected failure" },
+      }),
+    });
+    const backend = createHttpWalletBackend(API_URL, server);
+    const err = await backend
+      .submitTransaction({ signedXdr: "xdr", network: "testnet" })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(err.name).toBe("WalletApiError");
+    expect(err.status).toBe(500);
+  });
+
+  it("connect returns WalletApiError on non-404 failure", async () => {
+    const server = makeContractServer({
+      connect: () => ({
+        status: 503,
+        body: { error: "service_unavailable" },
+      }),
+    });
+    const backend = createHttpWalletBackend(API_URL, server);
+    const err = await backend
+      .lookupContractId({ keyId: "key123", network: "testnet" })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(err.name).toBe("WalletApiError");
+    expect(err.status).toBe(503);
+  });
+});
