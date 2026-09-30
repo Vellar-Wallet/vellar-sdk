@@ -93,6 +93,64 @@ const { hash } = await vellar.pay({
 `pay()` simulates **before** the passkey prompt, so failures (e.g. insufficient
 balance) surface without asking the user to sign.
 
+## React
+
+React is optional. Install it in your app and import the binding from the
+separate `vellar-sdk/react` entry; the core package does not load React.
+
+```tsx
+import { createRoot } from "react-dom/client";
+import { PasskeyKit, SACClient } from "passkey-kit";
+import { StrKey } from "@stellar/stellar-sdk";
+import { createHttpWalletBackend, TESTNET, type VellarWalletConfig } from "vellar-sdk";
+import { VellarProvider, useWallet } from "vellar-sdk/react";
+
+const config: VellarWalletConfig = {
+  network: "testnet",
+  appName: "My App",
+  kit: new PasskeyKit({
+    rpcUrl: TESTNET.rpcUrl,
+    networkPassphrase: TESTNET.networkPassphrase,
+    walletWasmHash: TESTNET.walletWasmHash,
+  }),
+  sac: new SACClient({
+    rpcUrl: TESTNET.rpcUrl,
+    networkPassphrase: TESTNET.networkPassphrase,
+  }),
+  backend: createHttpWalletBackend("https://api.myapp.com"),
+  isValidAddress: (address) =>
+    StrKey.isValidEd25519PublicKey(address) || StrKey.isValidContract(address),
+};
+
+function WalletControls() {
+  const { session, create, connect, pay, policies, loading, error } = useWallet();
+  const run = (action: Promise<unknown>) => void action.catch(() => undefined);
+
+  return (
+    <section>
+      <p>{session?.accountId ?? "No wallet connected"}</p>
+      <button disabled={loading} onClick={() => run(create({ username: "alice" }))}>Create</button>
+      <button disabled={loading} onClick={() => run(connect())}>Connect</button>
+      <button disabled={loading || !session} onClick={() => run(pay({
+        to: "CDEST...",
+        amount: 5_0000000n,
+        token: { contractId: TESTNET.nativeTokenContractId, symbol: "XLM", decimals: 7 },
+      }))}>Pay</button>
+      {policies && <button disabled={loading} onClick={() => run(policies.listTemplates())}>Policies</button>}
+      {error instanceof Error && <p role="alert">{error.message}</p>}
+    </section>
+  );
+}
+
+createRoot(document.getElementById("root")!).render(
+  <VellarProvider config={config}><WalletControls /></VellarProvider>,
+);
+```
+
+The hook tracks session changes automatically and exposes action loading/errors.
+Create, connect, and pay retain the SDK's existing explicit passkey prompts; the
+binding never signs or approves on the user's behalf.
+
 ## Your backend
 
 Submission is fee-sponsored, which requires an OpenZeppelin Relayer API key and
@@ -100,16 +158,57 @@ a funded sponsor account. **These are secrets — they must live on your server,
 never in the browser.** So the SDK never submits directly: it hands signed
 transactions to your backend, which does the sponsored submit.
 
-`createHttpWalletBackend(apiUrl)` speaks to a gateway exposing three routes:
+`createHttpWalletBackend(apiUrl)` speaks to a gateway exposing these routes:
 
 | Route                  | Purpose                                        |
 | ---------------------- | ---------------------------------------------- |
 | `POST /wallet/create`  | Submit the deployment tx; store keyId→contract |
 | `POST /wallet/connect` | Resolve the smart-account for a known passkey  |
 | `POST /wallet/submit`  | Submit an already-signed transaction           |
+| `GET /wallet/transactions` | Read cursor-paginated account activity     |
 
 You run a backend implementing these (holding your relayer/sponsor creds). Your
 backend must also allow your app's origin via CORS.
+
+The HTTP client defaults to a 30-second per-request timeout. It retries
+idempotent activity reads at most twice with backoff; wallet creation, connect
+(which opens a server session), and transaction submission are never retried.
+Configure these settings or cancel individual requests with an `AbortSignal`:
+
+```ts
+const backend = createHttpWalletBackend("https://api.myapp.com", {
+  timeoutMs: 30_000,
+  maxRetries: 2,
+  retryDelayMs: 200,
+});
+```
+
+Read activity directly from that backend client. The cursor is opaque and can
+be passed back unchanged for the next page; an account with no history returns
+an empty `items` array.
+
+```ts
+let page = await backend.listActivity({
+  accountId: session.accountId,
+  sessionId: session.serverSessionId!,
+  network: session.network,
+  limit: 20,
+});
+
+for (const item of page.items) {
+  console.log(item.type, item.counterparty, item.amount, item.token, item.transactionHash, item.timestamp);
+}
+
+if (page.hasMore && page.nextCursor) {
+  page = await backend.listActivity({
+    accountId: session.accountId,
+    sessionId: session.serverSessionId!,
+    network: session.network,
+    limit: 20,
+    cursor: page.nextCursor,
+  });
+}
+```
 
 ## API
 
@@ -135,6 +234,7 @@ Returns a `VellarWallet`:
 | `TESTNET`                      | Testnet config: `rpcUrl`, `networkPassphrase`, `walletWasmHash`, `nativeTokenContractId` |
 | `MAINNET` / `mainnetConfig()`  | Mainnet config — see [Mainnet](#mainnet) (two values you must supply)                    |
 | `WalletApiError`               | Thrown by the HTTP backend on non-2xx responses (has `status`, `code`)                   |
+| `WalletApiTimeoutError`        | Thrown when a backend request exceeds `timeoutMs`                                        |
 | `CircuitOpenError`             | Thrown by the circuit breaker when the facilitator is down — see [Circuit breaking](#circuit-breaking) |
 | `isReachable(rpcUrl)`          | Ping an RPC endpoint for reachability (from `vellar-sdk/rpc`) — see [Health check](#health-check) |
 

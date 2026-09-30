@@ -34,6 +34,17 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./react": {
+      "source": "./src/react.ts",
+      "import": {
+        "types": "./dist/react.d.ts",
+        "default": "./dist/react.js"
+      },
+      "require": {
+        "types": "./dist/react.d.cts",
+        "default": "./dist/react.cjs"
+      }
+    },
     "./balances": {
       "source": "./src/balances.ts",
       "import": {
@@ -124,10 +135,14 @@
   },
   "peerDependencies": {
     "@stellar/stellar-sdk": "^16.0.0",
-    "passkey-kit": ">=0.13.0 <0.17.0"
+    "passkey-kit": ">=0.13.0 <0.17.0",
+    "react": ">=18.0.0"
   },
   "peerDependenciesMeta": {
     "passkey-kit": {
+      "optional": true
+    },
+    "react": {
       "optional": true
     }
   },
@@ -140,6 +155,7 @@
   },
   "devDependencies": {
     "@stellar/stellar-sdk": "^16.0.1",
+    "@types/react": "^19.2.17",
     "passkey-kit": "^0.16.5",
     "tsup": "^8.5.1",
     "typescript": "^5.9.2",

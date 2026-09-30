@@ -77,6 +77,76 @@ These forward to your server, which holds the relayer/sponsor credentials and
 submits to the network. See [Installation](./getting-started/installation.md) and
 [How It Works](./getting-started/how-it-works.md).
 
+### Activity history
+
+`createHttpWalletBackend` exposes a typed reader for the backend's
+cursor-paginated `GET /wallet/transactions` route:
+
+```ts
+const page = await backend.listActivity({
+  accountId: session.accountId,
+  sessionId: session.serverSessionId!,
+  network: session.network,
+  limit: 20,
+  cursor: previousPage.nextCursor,
+});
+```
+
+The request must include the current `sessionId` bearer capability. The result
+is normalized rather than returning the backend payload:
+
+```ts
+interface WalletActivityPage {
+  items: WalletActivityItem[];
+  hasMore: boolean;
+  nextCursor?: string;
+}
+
+interface WalletActivityItem {
+  id: string;
+  type: string;
+  counterparty?: string;
+  amount?: string;
+  token?: { contractId: string; symbol?: string; decimals?: number };
+  transactionHash: string;
+  timestamp: string;
+}
+```
+
+`limit` defaults to 20. Treat `nextCursor` as opaque; when there is no
+activity, `items` is empty and `hasMore` is false.
+
+### HTTP request options
+
+`createHttpWalletBackend(apiUrl, options)` accepts `timeoutMs` (default
+30,000), `maxRetries` (default 2), `retryDelayMs` (default 200), and an optional
+`signal`. A per-call `signal` can also be supplied to backend methods. Only
+idempotent activity reads are retried; create, connect (which opens a server
+session), and submit requests are never retried. Timeouts reject with
+`WalletApiTimeoutError`.
+
+### React binding
+
+Install React as an application dependency and import the optional binding from
+`vellar-sdk/react`:
+
+```tsx
+import { VellarProvider, useWallet } from "vellar-sdk/react";
+
+function WalletPanel() {
+  const { session, create, connect, pay, policies, loading, error } = useWallet();
+  // Render actions and session state here.
+}
+
+root.render(
+  <VellarProvider config={walletConfig}><WalletPanel /></VellarProvider>,
+);
+```
+
+`VellarProvider` takes the same configuration as `createVellarWallet`. The hook
+subscribes to session changes and exposes action loading/errors. Signing still
+requires explicit user approval through the normal passkey prompt.
+
 ## Returns
 
 A [`VellarWallet`](./wallet-methods.md) handle.

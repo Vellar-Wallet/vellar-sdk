@@ -51,3 +51,8 @@ export const sdkSourceAliases = Object.entries(pkg.exports)
       },
     ];
   });
+
+export const reactTestAlias = {
+  find: /^react$/,
+  replacement: resolve(root, "src/react-test-runtime.ts"),
+};

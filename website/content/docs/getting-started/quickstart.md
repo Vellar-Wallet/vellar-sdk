@@ -34,10 +34,11 @@ import {
   createVellarWallet,
   createHttpWalletBackend,
   TESTNET,
+  type VellarWalletConfig,
 } from "vellar-sdk";
 import { StrKey } from "@stellar/stellar-sdk";
 
-const vellar = createVellarWallet({
+const walletConfig: VellarWalletConfig = {
   network: "testnet",
   appName: "My App",
   kit: new PasskeyKit({
@@ -53,7 +54,8 @@ const vellar = createVellarWallet({
   backend: createHttpWalletBackend("https://vellar-backend.onrender.com"),
   isValidAddress: (a) =>
     StrKey.isValidEd25519PublicKey(a) || StrKey.isValidContract(a),
-});
+};
+const vellar = createVellarWallet(walletConfig);
 ```
 
 `TESTNET` is shipped by the SDK and provides the RPC URL, network passphrase,
@@ -136,6 +138,70 @@ throw `X402NotConfiguredError`.
 > ⚠️ **Use the session-key signer, not the passkey signer.** The passkey signer
 > produces a valid signature but no deployed facilitator currently accepts it.
 > Build on createSessionKeySigner for x402 payments.
+
+## React binding
+
+React is an optional peer. Import the provider and hook from the separate
+`vellar-sdk/react` entry:
+
+```tsx
+import { createRoot } from "react-dom/client";
+import { VellarProvider, useWallet } from "vellar-sdk/react";
+
+function WalletPanel() {
+  const { session, create, connect, pay, policies, loading, error } = useWallet();
+
+  return (
+    <main>
+      <p>{session?.accountId ?? "No wallet connected"}</p>
+      <button disabled={loading} onClick={() => void create({ username: "alice" }).catch(() => undefined)}>
+        Create wallet
+      </button>
+      <button disabled={loading} onClick={() => void connect().catch(() => undefined)}>
+        Connect
+      </button>
+      <button disabled={loading || !session} onClick={() => void pay({
+        to: "CDEST...",
+        amount: 5_0000000n,
+        token: { contractId: TESTNET.nativeTokenContractId, symbol: "XLM", decimals: 7 },
+      }).catch(() => undefined)}>
+        Pay
+      </button>
+      {policies && <button disabled={loading} onClick={() => void policies.listTemplates().catch(() => undefined)}>
+        Policies
+      </button>}
+      {error instanceof Error && <p role="alert">{error.message}</p>}
+    </main>
+  );
+}
+
+createRoot(document.getElementById("root")!).render(
+  <VellarProvider config={walletConfig}><WalletPanel /></VellarProvider>,
+);
+```
+
+The hook subscribes to session changes and reports action loading/errors. It
+calls the same explicit wallet methods as the framework-agnostic API; passkey
+prompts are never hidden or auto-approved.
+
+## Transaction history
+
+Use the HTTP backend client to read account activity. Pages are cursor-based;
+pass `nextCursor` unchanged to load the next page. Empty accounts return
+`items: []`.
+
+```ts
+const page = await backend.listActivity({
+  accountId: session.accountId,
+  sessionId: session.serverSessionId!,
+  network: session.network,
+  limit: 20,
+});
+
+for (const item of page.items) {
+  console.log(item.type, item.counterparty, item.amount, item.token, item.transactionHash, item.timestamp);
+}
+```
 
 ## When it fails
 

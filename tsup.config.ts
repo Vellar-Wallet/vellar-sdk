@@ -7,6 +7,7 @@ import { defineConfig } from "tsup";
 export default defineConfig({
   entry: {
     index: "src/index.ts",
+    react: "src/react.ts",
     balances: "src/balances.ts",
     rpc: "src/rpc.ts",
     // The pure x402 decision layer, published separately so payers that don't
@@ -26,5 +27,5 @@ export default defineConfig({
   dts: true,
   clean: true,
   sourcemap: true,
-  external: ["@stellar/stellar-sdk", "zustand"],
+  external: ["@stellar/stellar-sdk", "react", "zustand"],
 });

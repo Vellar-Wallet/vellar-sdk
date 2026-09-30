@@ -92,6 +92,19 @@ describe("createVellarWallet", () => {
     expect(wallet.session).toBe(session);
   });
 
+  it("notifies session subscribers after create and connect", async () => {
+    const { wallet } = build();
+    const listener = vi.fn();
+    const unsubscribe = wallet.subscribe(listener);
+
+    await wallet.connect();
+    expect(listener).toHaveBeenCalledOnce();
+
+    unsubscribe();
+    await wallet.create({ username: "alice" });
+    expect(listener).toHaveBeenCalledOnce();
+  });
+
   it("pay() before connect throws WalletNotReadyError", async () => {
     const { wallet } = build();
     await expect(wallet.pay({ to: "CDEST", amount: 5n, token })).rejects.toBeInstanceOf(

@@ -8,6 +8,8 @@ export const STABLE_V1_EXPORTS = [
   "MainnetConfigError",
   "createHttpWalletBackend",
   "WalletApiError",
+  "WalletApiTimeoutError",
+  "WalletApiAbortError",
   "createBalanceService",
   "fetchBalancesBatch",
   "formatTokenAmount",

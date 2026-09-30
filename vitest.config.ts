@@ -1,5 +1,5 @@
 import { defineConfig } from "vitest/config";
-import { sdkSourceAliases } from "./vitest.alias";
+import { reactTestAlias, sdkSourceAliases } from "./vitest.alias";
 
 // The default suite is HERMETIC: no network, no local stack, no chain.
 //
@@ -11,7 +11,7 @@ import { sdkSourceAliases } from "./vitest.alias";
 export default defineConfig({
   // `vellar-sdk/*` self-imports resolve to source, so `npm test` does not
   // require a prior `npm run build`. See vitest.alias.ts.
-  resolve: { alias: sdkSourceAliases },
+  resolve: { alias: [...sdkSourceAliases, reactTestAlias] },
   test: {
     exclude: [
       "**/node_modules/**",
