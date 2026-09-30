@@ -533,6 +533,8 @@ payments, policies, agent keys, session store, and transaction status helpers.
 Experimental symbols are also re-exported flat at the package root for backward
 compatibility; treat those flat imports as unstable.
 
+//not yet implemented, give me some time
+
 The canonical export lists live in `src/export-surface.ts` and are checked by
 `src/index.exports.test.ts`.
 
