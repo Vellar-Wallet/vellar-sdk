@@ -6,6 +6,7 @@ import type {
   PolicyTemplateInfo,
   SimulateResult,
 } from "./policy-types";
+import { PolicyApiError } from "./policy-types";
 
 // The policy surface on the wallet handle (vellar.policies). Read/prepare go
 // through the HTTP client; deploy() is the headline — it runs the full
@@ -15,6 +16,15 @@ import type {
 //   3. record the completed attach
 // No silent signing; the backend is required for simulate/deploy (sponsor keys
 // live server-side), so those fail loudly when unconfigured.
+//
+// RESUME: if the process dies between step 2 landing on-chain and step 3
+// succeeding, the policy is attached but not recorded. Re-running deploy() from
+// the start would deploy a second instance and prompt for a second passkey
+// signature. Instead:
+//   - deploy() surfaces DeployPolicyError with enough state (contractId,
+//     attachHash) for a caller to call resumeDeploy() and complete only step 3.
+//   - resumeDeploy() takes a known attach tx hash and performs only the record.
+//   - The passkey prompt must never be issued twice for one logical deploy.
 
 /** The passkey-attach capability the deploy step needs. The host wires this to
  * `kit.addPolicy(contractId) → kit.sign(tx) → backend.submitTransaction(...)`;
@@ -36,6 +46,10 @@ export interface PolicyFacade {
   simulate(policyId: string): Promise<SimulateResult>;
   /** Attach a generated policy to the connected wallet (passkey-signed). */
   deploy(policyId: string): Promise<DeployPolicyResult>;
+  /** Resume a deploy from a known attach tx hash — performs only the record
+   * step, without issuing a passkey prompt. Use this when deploy() threw a
+   * DeployPolicyError with an attachHash. */
+  resumeDeploy(policyId: string, attachTxHash: string, contractId?: string): Promise<DeployPolicyResult>;
   /** The lower-level HTTP client, for custom flows. */
   readonly client: PolicyClient;
 }
@@ -55,6 +69,46 @@ export class PolicyNotDeployableError extends Error {
     super(message);
     this.name = "PolicyNotDeployableError";
   }
+}
+
+/** Thrown when deploy() fails after the instance has been deployed (and possibly
+ * after the attach has landed on-chain). Carries enough state for a caller to
+ * resume via resumeDeploy() without re-prompting the passkey. */
+export class DeployPolicyError extends Error {
+  /** The policy contract instance id (always present — the instance deploy succeeded). */
+  readonly contractId: string;
+  /** The attach tx hash, if the attach step completed before the failure. */
+  readonly attachHash?: string;
+  /** The underlying cause. */
+  readonly cause?: Error;
+
+  constructor(message: string, contractId: string, attachHash?: string, cause?: Error) {
+    super(message);
+    this.name = "DeployPolicyError";
+    this.contractId = contractId;
+    this.attachHash = attachHash;
+    this.cause = cause;
+  }
+}
+
+const MAX_RETRY_ATTEMPTS = 3;
+const RETRY_BACKOFF_MS = 500;
+
+async function retryIfRetryable<T>(fn: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      if (err instanceof PolicyApiError && err.retryable && attempt < MAX_RETRY_ATTEMPTS - 1) {
+        await new Promise((r) => setTimeout(r, RETRY_BACKOFF_MS * (attempt + 1)));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError;
 }
 
 export function createPolicyFacade(deps: PolicyFacadeDeps): PolicyFacade {
@@ -83,14 +137,59 @@ export function createPolicyFacade(deps: PolicyFacadeDeps): PolicyFacade {
           "Policy deploy needs a passkey-attach runtime. This wallet was created without one — provide `policyAttach` in the config (or use the web app runtime).",
         );
       }
-      // 1. server-side, sponsor-funded instance deploy bound to the wallet.
-      const { contractId } = await client.deployInstance(policyId, session.accountId);
-      // 2. passkey-sign the attach (the ONLY prompt).
-      if (session.keyId && deps.attach.resume) await deps.attach.resume(session.keyId);
-      const { hash } = await deps.attach.attachPolicy(contractId);
-      // 3. record the completed attach.
-      const policy = await client.recordDeployment(policyId, hash, contractId);
-      return { policy, contractId, attachTxHash: hash };
+
+      let contractId: string;
+      try {
+        // 1. server-side, sponsor-funded instance deploy bound to the wallet.
+        // Retry on retryable (503 / transport) errors — nothing was decided yet.
+        const result = await retryIfRetryable(() =>
+          client.deployInstance(policyId, session.accountId),
+        );
+        contractId = result.contractId;
+      } catch (err) {
+        throw err;
+      }
+
+      let attachHash: string | undefined;
+      try {
+        // 2. passkey-sign the attach (the ONLY prompt).
+        // Do NOT retry this step — retrying would re-prompt the user's passkey,
+        // which is the exact cost this module exists to avoid.
+        if (session.keyId && deps.attach.resume) await deps.attach.resume(session.keyId);
+        const result = await deps.attach.attachPolicy(contractId);
+        attachHash = result.hash;
+      } catch (err) {
+        throw new DeployPolicyError(
+          "Policy attach failed. Use resumeDeploy() with the contractId to retry the record step once the attach lands on-chain.",
+          contractId,
+          undefined,
+          err instanceof Error ? err : undefined,
+        );
+      }
+
+      try {
+        // 3. record the completed attach. Retry on retryable errors.
+        const policy = await retryIfRetryable(() =>
+          client.recordDeployment(policyId, attachHash!, contractId),
+        );
+        return { policy, contractId, attachTxHash: attachHash! };
+      } catch (err) {
+        throw new DeployPolicyError(
+          "Policy attach succeeded but recording failed. Use resumeDeploy() with the attachHash to complete the record step.",
+          contractId,
+          attachHash,
+          err instanceof Error ? err : undefined,
+        );
+      }
+    },
+
+    async resumeDeploy(policyId: string, attachTxHash: string, contractId?: string) {
+      deps.requireSession();
+      // Resume performs only the record step — no passkey prompt, no instance deploy.
+      const policy = await retryIfRetryable(() =>
+        client.recordDeployment(policyId, attachTxHash, contractId),
+      );
+      return { policy, contractId: contractId ?? "", attachTxHash };
     },
   };
 }

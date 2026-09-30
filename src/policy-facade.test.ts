@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { createPolicyFacade, PolicyNotDeployableError } from "./policy-facade";
+import { createPolicyFacade, PolicyNotDeployableError, DeployPolicyError } from "./policy-facade";
+import { PolicyApiError } from "./policy-types";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -99,5 +100,143 @@ describe("policy facade — deploy orchestration", () => {
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe("https://api.test/policies/p1/simulate");
     expect(JSON.parse(init!.body as string)).toEqual({ wallet: WALLET });
+  });
+});
+
+describe("policy facade — resume after lost attach response", () => {
+  it("resumeDeploy completes only the record step", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (String(url).endsWith("/policies/deploy")) {
+        return jsonResponse({ policy: { id: "p1", status: "deployed" } });
+      }
+      return jsonResponse({});
+    });
+
+    const p = facade({ fetch: fetchMock });
+    const result = await p.resumeDeploy("p1", "ATTACHTX", "CINSTANCE");
+
+    expect(result).toEqual({
+      policy: { id: "p1", status: "deployed" },
+      contractId: "CINSTANCE",
+      attachTxHash: "ATTACHTX",
+    });
+    // Only the record endpoint should be hit.
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("https://api.test/policies/deploy");
+  });
+
+  it("resumeDeploy does NOT issue a passkey prompt", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      jsonResponse({ policy: { id: "p1", status: "deployed" } }),
+    );
+    const attach = {
+      resume: vi.fn(async () => {}),
+      attachPolicy: vi.fn(async () => ({ hash: "TX" })),
+    };
+
+    const p = facade({ attach, fetch: fetchMock });
+    await p.resumeDeploy("p1", "ATTACHTX");
+
+    expect(attach.resume).not.toHaveBeenCalled();
+    expect(attach.attachPolicy).not.toHaveBeenCalled();
+  });
+});
+
+describe("policy facade — deploy failure surfaces resume state", () => {
+  it("throws DeployPolicyError with contractId when attach fails", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (String(url).endsWith("/deploy-instance")) {
+        return jsonResponse({ contractId: "CINSTANCE" });
+      }
+      return jsonResponse({});
+    });
+    const attach = {
+      attachPolicy: vi.fn(async () => {
+        throw new Error("passkey failed");
+      }),
+    };
+
+    const p = facade({ attach, fetch: fetchMock });
+    await expect(p.deploy("p1")).rejects.toMatchObject({
+      name: "DeployPolicyError",
+      contractId: "CINSTANCE",
+      attachHash: undefined,
+    });
+  });
+
+  it("throws DeployPolicyError with contractId and attachHash when record fails", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (String(url).endsWith("/deploy-instance")) {
+        return jsonResponse({ contractId: "CINSTANCE" });
+      }
+      if (String(url).endsWith("/policies/deploy")) {
+        return new Response(JSON.stringify({ error: "server down" }), {
+          status: 500,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return jsonResponse({});
+    });
+    const attach = {
+      attachPolicy: vi.fn(async () => ({ hash: "ATTACHTX" })),
+    };
+
+    const p = facade({ attach, fetch: fetchMock });
+    await expect(p.deploy("p1")).rejects.toMatchObject({
+      name: "DeployPolicyError",
+      contractId: "CINSTANCE",
+      attachHash: "ATTACHTX",
+    });
+  });
+});
+
+describe("policy facade — retryable error handling", () => {
+  it("retries deploy-instance on 503 retryable error", async () => {
+    let calls = 0;
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (String(url).endsWith("/deploy-instance")) {
+        calls++;
+        if (calls === 1) {
+          return new Response(JSON.stringify({ error: "unavailable" }), {
+            status: 503,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return jsonResponse({ contractId: "CINSTANCE" });
+      }
+      if (String(url).endsWith("/policies/deploy")) {
+        return jsonResponse({ policy: { id: "p1", status: "deployed" } });
+      }
+      return jsonResponse({});
+    });
+    const attach = {
+      attachPolicy: vi.fn(async () => ({ hash: "TX" })),
+    };
+
+    const p = facade({ attach, fetch: fetchMock });
+    const result = await p.deploy("p1");
+    expect(result.contractId).toBe("CINSTANCE");
+    expect(calls).toBe(2);
+  });
+
+  it("does NOT retry on 422 terminal error", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (String(url).endsWith("/deploy-instance")) {
+        return new Response(JSON.stringify({ error: "attach_mismatch" }), {
+          status: 422,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return jsonResponse({});
+    });
+    const attach = {
+      attachPolicy: vi.fn(async () => ({ hash: "TX" })),
+    };
+
+    const p = facade({ attach, fetch: fetchMock });
+    await expect(p.deploy("p1")).rejects.toBeInstanceOf(PolicyApiError);
+    // Only 1 call — no retry on terminal 422.
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 });
