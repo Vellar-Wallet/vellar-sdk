@@ -7,7 +7,7 @@ verified with `/health` and `/supported`, and a real test payment settled throug
 it by a seller and a buyer you also run locally.
 
 Running your own instance is the right move for local development. The hosted
-instance at `https://vellar-facilitator.onrender.com` shares a global catalog, so
+instance at `https://vellar-facilitator-production.up.railway.app` shares a global catalog, so
 a `localhost` seller URL pointed at it leaves a permanent, unremovable entry that
 can never be verified (verification is https only, no loopback). Your own
 facilitator keeps that mess local, and with `CATALOG_DB_URL` set it keeps the
@@ -158,8 +158,9 @@ curl localhost:4100/supported
 ```
 
 `/health` should report `status: "ok"`. `/supported` should list schemes
-including `stellar:testnet` `exact` with `areFeesSponsored: true`, and extensions
-including `bazaar`.
+including `stellar:pubnet` `exact` with `areFeesSponsored: true`, and extensions
+including `bazaar`. (The hosted instance advertises `stellar:pubnet`; you can
+register whichever networks you intend to serve.)
 
 Four other `/health` fields are worth reading now so they mean something later:
 

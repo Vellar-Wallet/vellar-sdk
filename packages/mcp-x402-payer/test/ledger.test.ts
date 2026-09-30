@@ -11,25 +11,25 @@ const ceilings = new Map<string, bigint>([
 describe("spend ledger", () => {
   it("allows spend up to and including the ceiling", () => {
     const ledger = createSpendLedger(ceilings);
-    expect(() => ledger.assertWithinCeiling(ASSET_A, 1000n)).not.toThrow();
-    ledger.record(ASSET_A, 1000n);
+    expect(() => ledger.reserve(ASSET_A, 1000n)).not.toThrow();
+    ledger.settle(ASSET_A, 1000n, 1000n);
     expect(ledger.remainingFor(ASSET_A)).toBe(0n);
   });
 
   it("refuses spend that would cross the ceiling", () => {
     const ledger = createSpendLedger(ceilings);
-    ledger.record(ASSET_A, 900n);
-    expect(() => ledger.assertWithinCeiling(ASSET_A, 101n)).toThrow(SessionCeilingExceededError);
-    expect(() => ledger.assertWithinCeiling(ASSET_A, 100n)).not.toThrow();
+    ledger.reserve(ASSET_A, 900n);
+    ledger.settle(ASSET_A, 900n, 900n);
+    expect(() => ledger.reserve(ASSET_A, 101n)).toThrow(SessionCeilingExceededError);
+    expect(() => ledger.reserve(ASSET_A, 100n)).not.toThrow();
   });
 
   it("FAILS CLOSED for an asset with no configured ceiling", () => {
     // An unconfigured asset must never read as unlimited.
     const ledger = createSpendLedger(ceilings);
-    expect(() => ledger.assertWithinCeiling("CUNCONFIGURED", 1n)).toThrow(
-      SessionCeilingExceededError,
-    );
-    expect(() => ledger.record("CUNCONFIGURED", 1n)).toThrow(SessionCeilingExceededError);
+    expect(() => ledger.reserve("CUNCONFIGURED", 1n)).toThrow(SessionCeilingExceededError);
+    expect(() => ledger.settle("CUNCONFIGURED", 1n, 1n)).toThrow(SessionCeilingExceededError);
+    expect(() => ledger.release("CUNCONFIGURED", 1n)).toThrow(SessionCeilingExceededError);
     expect(() => ledger.remainingFor("CUNCONFIGURED")).toThrow(SessionCeilingExceededError);
   });
 
@@ -37,27 +37,33 @@ describe("spend ledger", () => {
     // Base units are not comparable across assets; a shared total would fail
     // OPEN on a cheaply-denominated one.
     const ledger = createSpendLedger(ceilings);
-    ledger.record(ASSET_A, 1000n);
+    ledger.reserve(ASSET_A, 1000n);
+    ledger.settle(ASSET_A, 1000n, 1000n);
     expect(ledger.remainingFor(ASSET_A)).toBe(0n);
     expect(ledger.remainingFor(ASSET_B)).toBe(50n);
-    expect(() => ledger.assertWithinCeiling(ASSET_B, 50n)).not.toThrow();
+    expect(() => ledger.reserve(ASSET_B, 50n)).not.toThrow();
   });
 
   it("never reports negative remaining", () => {
     const ledger = createSpendLedger(ceilings);
-    ledger.record(ASSET_A, 900n);
-    ledger.record(ASSET_A, 900n); // direct over-record; remaining floors at 0
+    ledger.reserve(ASSET_A, 900n);
+    ledger.settle(ASSET_A, 900n, 900n);
+    // A settle with no matching reservation (only reachable if a caller skipped
+    // reserve) still floors at 0 rather than going negative.
+    ledger.settle(ASSET_A, 0n, 900n);
     expect(ledger.remainingFor(ASSET_A)).toBe(0n);
   });
 
   it("snapshots every configured asset, including untouched ones", () => {
     const ledger = createSpendLedger(ceilings);
-    ledger.record(ASSET_A, 250n);
+    ledger.reserve(ASSET_A, 250n);
+    ledger.settle(ASSET_A, 250n, 250n);
     const snap = ledger.snapshot();
     expect(snap).toHaveLength(2);
     expect(snap.find((s) => s.asset === ASSET_A)).toEqual({
       asset: ASSET_A,
       spent: "250",
+      reserved: "0",
       ceiling: "1000",
       remaining: "750",
     });
@@ -66,9 +72,10 @@ describe("spend ledger", () => {
 
   it("carries the numbers that explain the refusal", () => {
     const ledger = createSpendLedger(ceilings);
-    ledger.record(ASSET_A, 800n);
+    ledger.reserve(ASSET_A, 800n);
+    ledger.settle(ASSET_A, 800n, 800n);
     try {
-      ledger.assertWithinCeiling(ASSET_A, 300n);
+      ledger.reserve(ASSET_A, 300n);
       expect.unreachable("should have thrown");
     } catch (err) {
       const e = err as SessionCeilingExceededError;
@@ -124,9 +131,9 @@ describe("mutex", () => {
 
     const spend = (amount: bigint) =>
       exclusive(async () => {
-        ledger.assertWithinCeiling(ASSET_A, amount);
+        ledger.reserve(ASSET_A, amount);
         await new Promise((r) => setTimeout(r, 1)); // the window a race would exploit
-        ledger.record(ASSET_A, amount);
+        ledger.settle(ASSET_A, amount, amount);
       });
 
     const results = await Promise.allSettled([spend(60n), spend(60n)]);

@@ -1,19 +1,30 @@
-# Hackathon keepalive — keeps the free-tier Render services warm so
-# participants never hit a cold start mid-tutorial.
+# Hosted-service keepalive.
 #
-# Measured wake-from-sleep times (2026-08-24): backend ~89s to first response,
-# facilitator ~32s, demo seller several minutes. The docs promise "30-60s", so
-# without this, the first participant of every quiet hour eats a worse wait
-# than we advertise.
+# The free Render instances this workflow was written for (vellar-backend,
+# vellar-facilitator, vellar-seller-demo on *.onrender.com) are all suspended
+# and return HTTP 503. Every URL below now points at the Railway deployment
+# that replaced it.
 #
-# ENABLE THIS THE DAY BEFORE THE HACKATHON and DISABLE IT AFTER:
-#   - enable:  uncomment the `schedule:` block below and merge.
-#   - disable: comment the block back out (or delete this file).
-# It is shipped commented out on purpose, so merging this PR alone starts
-# nothing. `workflow_dispatch` stays available for a manual warm-up anytime.
+# Measured 2026-09-30, warm, against the Railway hosts:
+#   backend /health          200 in ~1.2s
+#   facilitator /health      200 in ~1.2s
+#   seller demo /quote       402 in ~1.2s  (402 IS the correct answer — it is a
+#                                               paid route refusing an unpaid GET)
+#   explorer /health         200 in ~1.2s
+# No idle-sleep was observed across repeated calls, and the ~89s/~32s wake
+# figures in the old header belonged to the Render free tier, which no longer
+# serves these services. A cold-start time for Railway has NOT been measured —
+# do not quote a wake figure this file does not have.
 #
-# Render free instances sleep after ~15 idle minutes; a 10-minute cadence
-# keeps them continuously warm (~4.3k requests/month per service — free).
+# Because the hosts answer fast and the workflow is still cheap, it stays
+# available on demand rather than running on a schedule. Uncomment the
+# `schedule:` block below to enable the 10-minute cadence; leave it off if you
+# are not warming anything ahead of an event.
+#
+# The run DOES fail when a service is not healthy. The previous version could
+# not: it swallowed every result, so a suspended host printed 503s in the log
+# and the workflow still went green. Slowness is tolerated (a slow response is
+# what a keepalive is for); a non-healthy status is not.
 
 name: Hackathon keepalive
 
@@ -27,14 +38,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Ping hosted services
-        # Never fail the run: a slow wake is exactly the situation this exists
-        # to absorb, and a red X every 10 minutes would just be noise. The log
-        # records each service's status and response time instead.
+        # 402 counts as healthy: it is the documented response from a paid
+        # route, not an outage. Everything else must be 2xx.
         run: |
-          for url in \
-            "https://vellar-backend.onrender.com/health" \
-            "https://vellar-facilitator.onrender.com/health" \
-            "https://vellar-seller-demo.onrender.com/quote"; do
-            code=$(curl -s -o /dev/null -m 120 -w "%{http_code} in %{time_total}s" "$url" || echo "unreachable")
-            echo "$url -> $code"
-          done
+          failed=0
+          while read -r url; do
+            [ -z "$url" ] && continue
+            result=$(curl -s -o /dev/null -m 120 -w "%{http_code} in %{time_total}s" "$url" || echo "unreachable")
+            code=${result%% *}
+            echo "$url -> $result"
+            case "$code" in
+              2*|402) ;;
+              *)
+                echo "::error::$url is not healthy (HTTP ${code:-none})"
+                failed=1
+                ;;
+            esac
+          done <<'EOF'
+          https://vellar-backend-production.up.railway.app/health
+          https://vellar-facilitator-production.up.railway.app/health
+          https://vellar-seller-demo-production.up.railway.app/quote
+          https://vellar-explorer-production.up.railway.app/health
+          EOF
+          exit "$failed"

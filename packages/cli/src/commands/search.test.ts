@@ -26,7 +26,7 @@ describe("search command", () => {
   it("defaults --facilitator to the hosted facilitator", () => {
     // Guards the default rather than just its presence: a wrong default sends
     // a user's query to the wrong service without any error.
-    expect(DEFAULT_FACILITATOR_URL).toBe("https://vellar-facilitator.onrender.com");
+    expect(DEFAULT_FACILITATOR_URL).toBe("https://vellar-facilitator-production.up.railway.app");
     expect(optionFor("--facilitator")?.defaultValue).toBe(DEFAULT_FACILITATOR_URL);
   });
 

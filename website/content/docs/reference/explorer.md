@@ -2,7 +2,7 @@
 
 > explorer.vellar.xyz is an independent Stellar indexer that classifies x402
 > payments from raw ledger data without trusting any facilitator's
-> self-reporting.
+> self-reporting. It is queried over an API; there is no web page to open.
 
 By the end of this page you will understand how the explorer decides that a
 transaction is an x402 payment, how attribution to a named facilitator works,
@@ -82,37 +82,55 @@ confirmed, so an unconfirmed key belongs in `unattributed`, not in the map.
 
 ## What the live numbers mean
 
-Live stats as of writing:
+Live stats from `GET /stats`, measured 2026-09-30:
 
 | Metric | Value |
 | --- | --- |
-| Total payments indexed | 7,988 |
-| Attributed to Vellar | 386 |
-| Unattributed | 7,602 |
+| Total payments indexed | 11,103 |
+| Attributed to Vellar | 401 |
+| Unattributed | 10,702 |
 | Registered facilitators | 1 |
-| Vellar unique buyers | 302 |
-| Vellar unique sellers | 4 |
+| Unique buyers | 1,767 |
+| Unique sellers | 1,012 |
 
-> ⚠️ **386 of 7,988 is 4.8% of indexed payments, and it is not a market-share
-> claim.** The registry knows exactly one signer key. The 7,602 unattributed
+> ⚠️ **401 of 11,103 is 3.6% of indexed payments, and it is not a market-share
+> claim.** The registry knows exactly one signer key. The 10,702 unattributed
 > payments are not competitors' measured share; they are transactions the
 > explorer cannot identify because no other facilitator is registered.
 
-The honest statement is this: the explorer has identified 386 x402 settlements
-through Vellar out of 7,988 total x402-shaped payments on Stellar testnet since
-August, across 302 unique buyers.
+The honest statement is this: the explorer has identified 401 x402 settlements
+through Vellar out of 11,103 total x402-shaped payments on Stellar since August,
+across 1,767 unique buyers.
 
-> **Note:** Both halves of that sentence are bounded. The 386 is bounded by the
-> classifier and the one registered key. The 7,988 is bounded by the same
+> **Note:** Both halves of that sentence are bounded. The 401 is bounded by the
+> classifier and the one registered key. The 11,103 is bounded by the same
 > structural heuristic, so it counts x402-shaped payments rather than payments
 > confirmed to have gone through any facilitator.
 
 ## Querying the explorer
 
-The API base URL is `https://vellar-explorer.onrender.com`.
+The API base URL is `https://vellar-explorer-production.up.railway.app`.
+
+> ⚠️ **The explorer is an API only — there is no web page to open.** The root
+> path `/` returns HTTP 404, and so do `/explorer`, `/tx`, `/docs` and
+> `/api/health` (verified 2026-09-30). Nothing is broken and nothing is
+> missing: the service was built to be queried, not browsed. If a page told you
+> to "open the explorer", it meant to `curl` it. There is no HTML UI, no
+> OpenAPI browser, and no transaction view — the only way to read it is the
+> JSON endpoints below.
+
+### Paths that exist
+
+| Path | Status | Use |
+| --- | --- | --- |
+| `/health` | 200 | Liveness |
+| `/stats` | 200 | Aggregate counts |
+| `/payments` | 200 | Recent classified payments |
+| `/facilitators` | 200 | The attribution registry |
+| `/` and every other path | 404 | Nothing served — there is no UI |
 
 ```bash
-BASE=https://vellar-explorer.onrender.com
+BASE=https://vellar-explorer-production.up.railway.app
 
 # Recent classified payments
 curl -sS "$BASE/payments?limit=5" | python3 -m json.tool
@@ -136,6 +154,7 @@ tells you how many signer keys the attribution map actually knows.
 | --- | --- | --- |
 | A Vellar settlement does not appear in the feed | The classifier is structural, so a transaction that does not meet all four conditions is not indexed. v1 missed Vellar settlements entirely because it required a CAP-15 fee-bump wrapper | Check the transaction on Horizon against the four conditions, in particular that the authorizer is not the operation source, transaction source, or fee-bump fee source. v2 covers the plain-transaction shape Vellar submits |
 | A payment shows as `unattributed` | Its `fee_account` is not in the hardcoded sponsor map, which currently holds one entry | Expected for any facilitator other than Vellar. There is no self-registration endpoint, so `unattributed` means unidentified, not non-Vellar-competitor |
+| `curl "$BASE/"` returns 404 | There is no root page or web UI; the explorer is an API, not a browsable site | Use `/health`, `/stats`, `/payments` or `/facilitators` |
 | An `upto` settlement reports the ceiling rather than the actual amount | Reading `actual_amount` from the envelope args, which carry the buyer-signed ceiling rather than the facilitator-set settled amount | Fixed in v3, which reads the amount from the token contract's emitted transfer event |
 
 ## Next steps

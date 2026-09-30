@@ -114,7 +114,25 @@ export interface PayResult {
     transaction: string;
     payer: string;
     asset: string;
+    /**
+     * What the chain actually moved, in base units.
+     *
+     * Equal to `authorizedCeiling` for `exact`. For `upto` it is the metered
+     * amount and is normally SMALLER, because the buyer signed a ceiling and
+     * the chain moved only the metered figure.
+     */
     amount: string;
+    /**
+     * The ceiling the buyer signed and authorized, in base units.
+     *
+     * This is the upper bound the payer agreed to, not the charge. The gap
+     * between the two IS the `upto` feature, so both are reported rather than
+     * only the charge: a caller that only ever sees the settled figure cannot
+     * tell a cheap metered call from an expensive ceiling it got away with.
+     */
+    authorizedCeiling: string;
+    /** True when the settled amount came back below the authorized ceiling. */
+    settledBelowCeiling: boolean;
     network: string;
   };
   /** How many signed attempts it took. >1 means benign settle failures were retried. */
@@ -182,10 +200,15 @@ export function createPayer(deps: PayerDeps): Payer {
 
   // Serialise payments HERE rather than at the MCP tool handler (security audit
   // V-9). `createPayer` is exported, so a library consumer calling `pay()`
-  // concurrently would otherwise interleave `assertWithinCeiling` with `record`
-  // and exceed the session ceiling — the check-then-act race the ledger exists
-  // to prevent. Putting the lock at the entry point every caller must pass
-  // through means the guarantee does not depend on which door they came in by.
+  // concurrently would otherwise interleave the ceiling check with the debit
+  // and exceed the session ceiling. Putting the lock at the entry point every
+  // caller must pass through means the guarantee does not depend on which door
+  // they came in by.
+  //
+  // The ledger's own `reserve`/`settle` window (#511) is the second line of
+  // defence: it holds budget for the in-flight window rather than only
+  // checking, so the guarantee survives a second writer that never passes
+  // through this mutex.
   //
   // One key, one budget, one payment at a time.
   const exclusive = createMutex();
@@ -296,99 +319,149 @@ export function createPayer(deps: PayerDeps): Payer {
 
     // Layer 1, server-owned half: the cumulative session ceiling. Checked before
     // anything is signed.
-    ledger.assertWithinCeiling(chosen.asset, amount);
+    //
+    // `reserve` HOLDS the ceiling for the whole in-flight window — request,
+    // signing, retries, settlement — rather than merely checking it. A second
+    // caller arriving mid-payment sees the reservation and is refused, so a
+    // concurrent pair cannot both pass a check-then-record test. The mutex
+    // above already serialises `pay()`; the reservation is what makes the
+    // guarantee hold for any other writer of this ledger too.
+    ledger.reserve(chosen.asset, amount);
+
+    // From here on the reservation is held, so every exit path must either
+    // settle it (money moved) or release it (nothing did). Missing one strands
+    // budget for the life of the process.
+    let reservationSettled = false;
+    const releaseUnlessSettled = () => {
+      if (reservationSettled) return;
+      reservationSettled = true;
+      try {
+        ledger.release(chosen.asset, amount);
+      } catch {
+        // Releasing must not mask the error that got us here.
+      }
+    };
 
     const narrowed = narrowTo(challenge, chosen);
     let lastReason: string | undefined;
 
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      // Re-checked every attempt. Idempotent while nothing settles, and the
-      // guard that matters if the ledger ever gains another writer.
-      ledger.assertWithinCeiling(chosen.asset, amount);
-
-      // FRESH signature per attempt — never reuse a payload across attempts.
-      const headers = await signer.signPayment(narrowed);
-      const res = await doFetch(url, { method: "GET", headers });
-
-      if (res.status === 402 || res.status >= 400) {
-        // Not every failed paid response is a rejection. Verified live: the
-        // benign settle failure arrives as an HTTP 402 whose settle header says
-        // success=false with an EMPTY transaction — nothing reached the chain
-        // and nothing was spent. Classify BEFORE deciding, because throwing on
-        // status alone means the retry loop never runs in production.
-        const settle = decodeSettleResponseHeader(res);
-        await discardBody(res);
-
-        if (isRetryableSettleFailure(settle)) {
-          lastReason =
-            settle?.errorReason ?? `attempt ${attempt} failed before submission`;
-          continue; // nothing spent — sign a fresh payload and try again
-        }
-
-        // Terminal: either a verify-stage rejection (no settle header at all,
-        // deterministic) or a submitted transaction that failed on-chain (a
-        // non-empty hash means fees were already charged; retrying burns more).
-        const reason = settle?.errorReason ?? extractRejectionReason(res);
-        throw new PaymentRejectedError(
-          `The x402 payment was not accepted (HTTP ${res.status}${reason ? `: ${reason}` : ""}).` +
-            (settle?.transaction
-              ? ` The transaction was submitted (${settle.transaction}) and fees were charged, so it was not retried.`
-              : ""),
-          reason,
-        );
-      }
-
-      const outcome = classifySettlement(res);
-
-      if (outcome.kind === "not-spent") {
-        // POSITIVE evidence nothing reached the chain — the facilitator released
-        // its fee reservation. The only state it is safe to retry.
-        lastReason = `attempt ${attempt}: ${outcome.reason}`;
-        await discardBody(res);
-        continue;
-      }
-
-      if (outcome.kind === "indeterminate") {
-        // We cannot tell whether money moved. Retrying could pay twice, so we
-        // stop — and we DEBIT, because if the payment did settle, a ledger that
-        // ignored it would under-count real spend and let the ceiling be
-        // exceeded later. Over-counting refuses a legitimate payment; the other
-        // direction permits an illegitimate one. (Security audit V-2.)
-        ledger.record(chosen.asset, amount);
-        await discardBody(res);
-        throw new IndeterminateSettlementError(
-          outcome.reason,
-          chosen.asset,
-          amount,
-          outcome.raw,
-        );
-      }
-
-      // Confirmed settlement — debit exactly once, here and nowhere else.
-      ledger.record(chosen.asset, amount);
-
-      return {
-        url,
-        paid: true,
-        content: await readContent(res, config.maxResponseBytes),
-        settlement: {
-          transaction: outcome.transaction,
-          payer: outcome.payer ?? signer.address,
-          asset: chosen.asset,
-          amount: amount.toString(),
-          network: config.network,
-        },
-        attempts: attempt,
-        sessionRemaining: ledger.remainingFor(chosen.asset).toString(),
-        ...(challenge.resource ? { resource: challenge.resource } : {}),
-        status: res.status,
-      };
+    // A transport error or a throwing signer would otherwise unwind past every
+    // explicit release below and strand the reservation. This backstop catches
+    // those, and is a no-op on any path that already settled or released.
+    try {
+      return await attemptPayment();
+    } catch (err) {
+      releaseUnlessSettled();
+      throw err;
     }
 
-    // Every attempt came back unsettled. Nothing was spent on any of them, and
-    // we deliberately do NOT return the body: handing back content we cannot
-    // prove was paid for would let the ledger and reality diverge silently.
-    throw new SettlementFailedError(MAX_ATTEMPTS, lastReason);
+    async function attemptPayment(): Promise<PayResult> {
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        // FRESH signature per attempt — never reuse a payload across attempts.
+        const headers = await signer.signPayment(narrowed);
+        const res = await doFetch(url, { method: "GET", headers });
+
+        if (res.status === 402 || res.status >= 400) {
+          // Not every failed paid response is a rejection. Verified live: the
+          // benign settle failure arrives as an HTTP 402 whose settle header says
+          // success=false with an EMPTY transaction — nothing reached the chain
+          // and nothing was spent. Classify BEFORE deciding, because throwing on
+          // status alone means the retry loop never runs in production.
+          const settle = decodeSettleResponseHeader(res);
+          await discardBody(res);
+
+          if (isRetryableSettleFailure(settle)) {
+            lastReason =
+              settle?.errorReason ?? `attempt ${attempt} failed before submission`;
+            continue; // nothing spent — sign a fresh payload and try again
+          }
+
+          // Terminal: either a verify-stage rejection (no settle header at all,
+          // deterministic) or a submitted transaction that failed on-chain (a
+          // non-empty hash means fees were already charged; retrying burns more).
+          // Either way no payment settled, so the reservation goes back.
+          releaseUnlessSettled();
+          const reason = settle?.errorReason ?? extractRejectionReason(res);
+          throw new PaymentRejectedError(
+            `The x402 payment was not accepted (HTTP ${res.status}${reason ? `: ${reason}` : ""}).` +
+              (settle?.transaction
+                ? ` The transaction was submitted (${settle.transaction}) and fees were charged, so it was not retried.`
+                : ""),
+            reason,
+          );
+        }
+
+        const outcome = classifySettlement(res);
+
+        if (outcome.kind === "not-spent") {
+          // POSITIVE evidence nothing reached the chain — the facilitator released
+          // its fee reservation. The only state it is safe to retry.
+          lastReason = `attempt ${attempt}: ${outcome.reason}`;
+          await discardBody(res);
+          continue;
+        }
+
+        if (outcome.kind === "indeterminate") {
+          // We cannot tell whether money moved. Retrying could pay twice, so we
+          // stop — and we DEBIT the AUTHORIZED CEILING, because if the payment
+          // did settle, a ledger that ignored it would under-count real spend and
+          // let the ceiling be exceeded later. Over-counting refuses a legitimate
+          // payment; the other direction permits an illegitimate one. (Security
+          // audit V-2.)
+          //
+          // We debit the ceiling rather than a settled figure because there is
+          // no confirmed settled figure to debit: the response that would have
+          // carried one is exactly the one we could not read.
+          reservationSettled = true;
+          ledger.settle(chosen.asset, amount, amount);
+          await discardBody(res);
+          throw new IndeterminateSettlementError(
+            outcome.reason,
+            chosen.asset,
+            amount,
+            outcome.raw,
+          );
+        }
+
+        // Confirmed settlement — account at the SETTLED amount, not the ceiling
+        // (#511). The reservation is dropped and only what actually moved is
+        // deducted, so a session with a large ceiling is not exhausted by `upto`
+        // payments that settled for a fraction of it.
+        //
+        // A facilitator that omits the amount, or reports a malformed one, falls
+        // back to the authorized ceiling: charging the ceiling can only refuse a
+        // payment that would otherwise have been allowed, whereas charging a
+        // made-up number would let the budget drift below real spend.
+        const settledAmount = outcome.settledAmount ?? amount;
+        reservationSettled = true;
+        ledger.settle(chosen.asset, amount, settledAmount);
+
+        return {
+          url,
+          paid: true,
+          content: await readContent(res, config.maxResponseBytes),
+          settlement: {
+            transaction: outcome.transaction,
+            payer: outcome.payer ?? signer.address,
+            asset: chosen.asset,
+            amount: settledAmount.toString(),
+            authorizedCeiling: amount.toString(),
+            settledBelowCeiling: settledAmount < amount,
+            network: config.network,
+          },
+          attempts: attempt,
+          sessionRemaining: ledger.remainingFor(chosen.asset).toString(),
+          ...(challenge.resource ? { resource: challenge.resource } : {}),
+          status: res.status,
+        };
+      }
+
+      // Every attempt came back unsettled. Nothing was spent on any of them, and
+      // we deliberately do NOT return the body: handing back content we cannot
+      // prove was paid for would let the ledger and reality diverge silently.
+      releaseUnlessSettled();
+      throw new SettlementFailedError(MAX_ATTEMPTS, lastReason);
+    }
   }
 
   return { quote, pay, payerAddress: signer.address };

@@ -51,11 +51,17 @@ skip.
 
 Be aware while the SDK is pre-`1.0`:
 
-- **Testnet only.** Vellar runs on stellar:testnet only. Mainnet is gated on
-  three items:
-  1. A persistent-disk deployment.
-  2. A funded pubnet sponsor account.
-  3. A mainnet security audit of the spending-limit policy contract. The
-     facilitator review is complete; the policy contract is a separate item.
+- **The hosted facilitator is on mainnet.** Vellar's hosted facilitator now
+  advertises `stellar:pubnet` in `/supported`, and payments settled against it
+  move real USDC (`CCW67TSZV3...`). Earlier revisions of this page said
+  "testnet only"; that is no longer accurate. Check `/supported` and set your
+  network explicitly before paying. Of the three mainnet gates, two are
+  cleared (persistent-disk deployment, funded pubnet sponsor account) and one
+  is not:
+  1. ~~A persistent-disk deployment.~~ Cleared.
+  2. ~~A funded pubnet sponsor account.~~ Cleared.
+  3. A mainnet security audit of the spending-limit policy contract. **Still
+     open** — the facilitator review is complete; the policy contract is a
+     separate, unaudited item.
 - You are responsible for securing your own backend (the submission surface) —
   rate limiting, auth, and abuse protection are your app's concern.

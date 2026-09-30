@@ -20,13 +20,22 @@ jobs:
       # a `package.json` range change is reported and decided, not forced
       # through by CI.
       #
-      # Gate softened from --audit-level=high to --audit-level=critical on
-      # 2026-09-07. Remaining highs are in the toml chain via passkey-kit →
-      # @openzeppelin/relayer-plugin-channels → @stellar/stellar-sdk ≤15.x — a
-      # major-version override is unsafe inside the passkey signing path.
+      # The gate was softened from --audit-level=high to --audit-level=critical
+      # on 2026-09-07, which also started admitting any NEW high anywhere in the
+      # tree. It is now a named allowlist instead: every high must be fixed or
+      # be one of three specific advisories in the known chain, and anything
+      # else fails the build.
+      #
+      #   passkey-kit → @openzeppelin/relayer-plugin-channels →
+      #   @stellar/stellar-sdk (≤15.x) → toml / smol-toml
+      #
+      # A major-version override is unsafe inside the passkey signing path, so
+      # the chain is allowlisted rather than overridden.
       # Tracked: https://github.com/Vellar-Wallet/vellar-sdk/issues/378
-      # Restore to --audit-level=high when upstream resolves.
-      - run: npm audit --audit-level=critical
+      # REVIEW CHECKPOINT: 2026-12-15 — the allowlist expires on that date, and
+      # the gate then fails until the advisories are re-checked. See
+      # scripts/audit-gate.mjs.
+      - run: node scripts/audit-gate.mjs
       - run: npm run typecheck
       # Docs snippets typecheck against the current source — a quickstart that
       # drifts from the real API fails the PR that introduces the drift.

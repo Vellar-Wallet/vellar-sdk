@@ -109,6 +109,33 @@ export function responsePaid(transaction: string, body = '{"ok":true}'): Respons
 }
 
 /**
+ * A 200 whose settlement also reports the amount that actually moved.
+ *
+ * This is what an `upto` settlement looks like: the buyer signed a ceiling and
+ * the chain moved the metered amount, which is normally smaller. Passing
+ * `settled` explicitly is what lets a test assert the budget is charged the
+ * metered figure rather than the ceiling.
+ */
+export function responsePaidWithAmount(
+  transaction: string,
+  settled: string,
+  body = '{"ok":true}',
+): Response {
+  return new Response(body, {
+    status: 200,
+    headers: {
+      "content-type": "application/json",
+      "X-PAYMENT-RESPONSE": b64({
+        success: true,
+        transaction: /^[0-9a-f]{64}$/i.test(transaction) ? transaction : txHash(transaction),
+        payer: PAYTO,
+        amount: settled,
+      }),
+    },
+  });
+}
+
+/**
  * A 200 whose settlement carries an EMPTY transaction. Nothing was spent.
  */
 export function responseUnsettled(body = '{"ok":true}'): Response {

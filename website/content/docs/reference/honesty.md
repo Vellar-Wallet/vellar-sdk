@@ -106,23 +106,74 @@ settlement are independent.
 
 ## Mainnet readiness
 
-Vellar runs on stellar:testnet only, and the facilitator advertises
-stellar:testnet in `/supported`.
+**The hosted facilitator now advertises `stellar:pubnet`.** This is not a
+prediction or a plan — it is what the live service returns. Verified 2026-09-30:
 
-Mainnet is gated on three items:
+```console
+$ curl -s https://vellar-facilitator-production.up.railway.app/supported
+{"kinds":[{"scheme":"exact","network":"stellar:pubnet",...},
+          {"scheme":"upto","network":"stellar:pubnet",...}]}
+```
 
-1. A persistent-disk deployment.
-2. A funded pubnet sponsor account.
-3. A mainnet security audit of the spending-limit policy contract. The
-   facilitator review is complete; the policy contract is a separate item.
+The `catalogAssets` map in that same response carries **both** networks:
 
-Production traffic should not be pointed here until all three are done.
+| Network | USDC SAC contract |
+| --- | --- |
+| `stellar:testnet` | `CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA` |
+| `stellar:pubnet` | `CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75` |
+
+The pubnet address is the genuine Circle-issued mainnet USDC contract, confirmed
+against `horizon.stellar.org`.
+
+> ⚠️ **Payments on the hosted facilitator now move real money.** A payment
+> settled against `stellar:pubnet` spends real USDC from a real account. Earlier
+> revisions of this page said "testnet only" because that was true when
+> written; it is not true now. If you are following a tutorial, **check which
+> network the facilitator advertises before you pay**, and set your network
+> explicitly rather than relying on a default. The demo seller quotes **1.00 real
+> USDC** on pubnet, not a testnet amount.
+
+### Which network a call lands on
+
+The network is chosen by what the server advertises and what the SDK is
+configured for — there is no hidden switch. Two things to check:
+
+- `GET /supported` tells you what the facilitator is currently serving. If it
+  advertises `stellar:pubnet`, assume **real funds**.
+- The SDK's network configuration (`NETWORK`, `caip2`, `VELLAR_NETWORK`) must
+  match, or the guards refuse the payment rather than misroute it.
+
+A mismatch fails closed: the guard layer rejects a challenge whose `network` is
+not the one you configured. The dangerous case is not a mismatch — it is a
+correct-looking configuration pointed at a facilitator that has since moved to
+pubnet.
+
+### Mainnet gate status
+
+The three gates previously listed, with their actual state as of 2026-09-30:
+
+| Gate | Status |
+| --- | --- |
+| A persistent-disk deployment | **Cleared.** The hosted instance is a Railway deployment, and the catalog persists across restarts. |
+| A funded pubnet sponsor account | **Cleared.** `/supported` advertises `stellar:pubnet` and the demo seller settles against mainnet USDC. |
+| A mainnet security audit of the spending-limit policy contract | **NOT cleared.** This is the one gate still open. |
+
+> ⚠️ **The spending-limit policy contract has not had its mainnet security
+> audit.** The pre-mainnet security review covered the facilitator service and
+> its cryptographic validation; the policy contract is separate work and remains
+> unaudited. This is the item to weigh before pointing a production agent at
+> pubnet with a smart account and a spending policy.
+
+The one gate that was still open is also the one that matters most for the
+spending-limit path. Settlement on pubnet is live; **policy safety on pubnet is
+not audited.**
 
 ## What the security review covered
 
 The pre-mainnet security review covered the facilitator service and its
 cryptographic validation. The spending-limit policy contract is not covered by
-that review: it is separate work, gated on mainnet.
+that review: it is separate work, and it is still unaudited for pubnet. See
+[Mainnet readiness](#mainnet-readiness).
 
 ## The upto scheme is experimental
 
@@ -145,6 +196,7 @@ for the upstream standardization effort.
 | `400 verified_only_unavailable` | `verification` is always "unknown", so the filter is refused | Filter on `ownerVerified` instead |
 | The catalog is empty after a restart | The hosted free tier has no persistent disk | Re-catalog with a settled payment, or run your own instance |
 | `txBadSeq` on concurrent `upto` settlements | Not wired into the channel-account pool | Serialize `upto` settlements |
+| A payment moved real USDC when you expected testnet | The hosted facilitator now advertises `stellar:pubnet` | Check `GET /supported` before paying, and configure the network explicitly |
 
 ## Next steps
 

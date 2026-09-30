@@ -1,0 +1,39 @@
+name: Check documented URLs
+
+# Every external URL the docs instruct a reader to call, checked for liveness.
+#
+# The failure this catches: three hosted services went from live to suspended
+# with no signal. The docs kept telling readers to `curl` them and nothing
+# noticed, leaving 17 URL occurrences across docs and code silently wrong. See
+# scripts/verify-doc-urls.mjs for the mechanism.
+#
+# SCHEDULED, not per-PR, and that is the point. A third-party or hosted-service
+# outage is not this repository's fault, and a per-PR gate would let someone
+# else's downtime block an unrelated merge. The job therefore runs on a
+# schedule, and gates only on URLs this repo actually owns — the services it
+# deploys and the defaults it ships in code. Third-party links are probed and
+# reported as warnings without failing.
+#
+# This mirrors verify-merged.yml's posture: report precisely, name the file, and
+# fail only on what the repo controls.
+on:
+  schedule:
+    # Daily, off the hour. Off-peak minute so this does not join the thundering
+    # herd of every other scheduled job on the platform.
+    - cron: "23 4 * * *"
+  workflow_dispatch:
+
+jobs:
+  check-urls:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check documented URLs resolve
+        run: node scripts/verify-doc-urls.mjs

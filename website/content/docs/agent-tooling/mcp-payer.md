@@ -12,9 +12,8 @@
 > back out.
 
 By the end of this page you will have the server wired into an MCP client, have
-made a real testnet payment and verified it on Horizon, and understand the
-difference between the two spending limits, only one of which is a security
-boundary.
+made a real payment and verified it on Horizon, and understand the difference
+between the two spending limits, only one of which is a security boundary.
 
 ## How it fits together
 
@@ -89,8 +88,11 @@ ceilings. The value above allows one asset and caps cumulative spend on it at
 
 ## Your first paid call
 
-The demo seller at `https://vellar-seller-demo.onrender.com/quote` charges 0.1
-testnet USDC with sponsored fees, so it is a cheap first target.
+> ⚠️ **The demo seller costs real money.** The demo seller at
+> `https://vellar-seller-demo-production.up.railway.app/quote` charges **1.00
+> real mainnet USDC** on `stellar:pubnet` with sponsored fees. It previously
+> quoted 0.1 testnet USDC. Every `x402_pay` call below against it spends
+> actual USDC — pass a `max_amount` you would genuinely accept.
 
 > **Note:** It runs on a free tier and sleeps after 15 minutes idle. The first
 > call after a sleep takes roughly 45 seconds. That is a cold start, not a
@@ -102,14 +104,14 @@ Ask the price without paying. This is one HTTP request that never touches the
 signer or the chain.
 
 ```
-x402_quote("https://vellar-seller-demo.onrender.com/quote")
+x402_quote("https://vellar-seller-demo-production.up.railway.app/quote")
 ```
 
 The server reports the price, the asset, and whether it would pay:
 
 ```
 Payment required (HTTP 402).
-Would pay: 1000000 base units of asset CBIN…H5ND on stellar:testnet to GBBD…FLA5.
+Would pay: 1000000 base units of asset CBIN…H5ND on stellar:pubnet to GBBD…FLA5.
 Session ceiling remaining for that asset: 5000000 base units.
 This resource is payable.
 No payment was made and nothing was signed by this call.
@@ -122,7 +124,7 @@ the price is above what it can spend, before anything is signed.
 ### Step 2: Pay it
 
 ```
-x402_pay("https://vellar-seller-demo.onrender.com/quote", "1000000")
+x402_pay("https://vellar-seller-demo-production.up.railway.app/quote", "1000000")
 ```
 
 `max_amount` is in the asset's base units as a decimal string. Stellar Asset
@@ -131,7 +133,8 @@ Contracts use 7 decimals, so `1000000` is 0.1 units and `10000000` is 1.0.
 On success the unlocked content comes back with the settlement hash:
 
 ```
-Paid 1000000 base units of asset CBIN…H5ND on stellar:testnet.
+Paid 1000000 base units of asset CCW67TSZ…JMI75 on stellar:pubnet.
+Authorized ceiling: 1000000 base units (settled in full).
 Settlement transaction: 9e1f3acf…a0eb9d2a
 Session ceiling remaining for that asset: 4000000 base units.
 Content (text/plain, 84 bytes):
@@ -140,6 +143,12 @@ Content (text/plain, 84 bytes):
 The resource content follows inside a fenced block. If the payment took more
 than one attempt, the server says so and states that the earlier attempts spent
 nothing.
+
+Two figures are always reported: the `Authorized ceiling` the buyer signed and
+the amount that actually settled. Under `upto` the settled amount is normally
+lower, and the session budget is charged the settled figure rather than the
+ceiling — so a large ceiling does not drain the budget when a small metered
+call settles against it.
 
 ### Step 3: Verify it on Horizon
 
@@ -185,8 +194,8 @@ x402_pay_and_call(query="quote", max_amount="1000000")
 
 ```
 Query: quote
-Selected: https://vellar-seller-demo.onrender.com/quote (cheapest of 1 payable result(s), from 1 found)
-Paid 1000000 base units of asset CBIELTK6…QDAMA on testnet.
+Selected: https://vellar-seller-demo-production.up.railway.app/quote (cheapest of 1 payable result(s), from 1 found)
+Paid 1000000 base units of asset CCW67TSZ…JMI75 on stellar:pubnet.
 Settlement transaction: f78d4b90c57dd59ee73f6353d8aec4b880f567db8013f0a40d41826306c4bbb0
 Session ceiling remaining for that asset: 4000000 base units.
 ```
@@ -252,7 +261,7 @@ x402_session_budget()
 Payer address: GCBB5SUM7CEGHDDMFKEL5LTBFWLUU2B6WPK2BVGCMMCEGNHDMPW4TS7O
 Network: testnet
 Per-asset session ceilings (base units):
-CBIELTK6…QDAMA: 1000000 spent of 5000000, 4000000 remaining
+CCW67TSZ…JMI75: 1000000 spent of 5000000, 4000000 remaining
 ```
 
 The ledger debited exactly 1,000,000 once, on the confirmed settlement, not once
@@ -287,7 +296,7 @@ before signing and names the cheapest price it saw:
 
 ```
 pay_and_call did not complete: nothing is under max_amount 1000000. The
-cheapest payable result costs 5000000 base units of CBIELTK6…QDAMA. Nothing
+cheapest payable result costs 5000000 base units of CCW67TSZ…JMI75. Nothing
 was signed and nothing was spent.
 ```
 

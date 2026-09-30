@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MaxAmountExceededError } from "../src/errors.js";
 import { createPayer } from "../src/payer.js";
 import { createSpendLedger } from "../src/ledger.js";
 import { SessionCeilingExceededError } from "../src/errors.js";
@@ -75,8 +76,10 @@ describe("V-9 — concurrent pay() through the library cannot bust the ceiling",
       fetchImpl: slowFetch(1),
     });
 
-    // Over max_amount: refused before signing.
-    await expect(payer.pay(URL, "3000")).rejects.toThrow();
+    // Price (1000) above max_amount (500): refused before signing. This has to
+    // be a genuine refusal — the test previously passed only because a broken
+    // payer threw a TypeError that `rejects.toThrow()` swallowed.
+    await expect(payer.pay(URL, "500")).rejects.toBeInstanceOf(MaxAmountExceededError);
     // The next caller must still be able to acquire the lock.
     await expect(payer.pay(URL, "1000")).resolves.toBeTruthy();
   });

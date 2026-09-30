@@ -10,9 +10,13 @@
 
 By the end of this page you will have paid for a real resource from the terminal
 and verified the settlement on Horizon yourself. Every command output on this
-page is real, captured from a live run against testnet, not illustrative.
+page is real, captured from a live run, not illustrative.
 
-Vellar runs on `stellar:testnet` only.
+> ⚠️ **The hosted facilitator is on mainnet.** It advertises `stellar:pubnet`, and
+> a `vellar pay` against the demo seller spends **real USDC** (1.00 per quote).
+> This page previously said "testnet only" and showed testnet asset ids; both
+> have been corrected to the values the service returns now. If you want a
+> zero-cost run, set `--facilitator` to your own testnet instance.
 
 ## Install
 
@@ -34,21 +38,21 @@ vellar search "quote" --limit 3
 ```
 
 ```
-https://vellar-seller-demo.onrender.com/quote
+https://vellar-seller-demo-production.up.railway.app/quote
   Motivational Quote
-  exact on stellar:testnet: 1000000 base units of CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA
+  exact on stellar:pubnet: 1000000 base units of CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75
   Motivational quote of the day (paid)
   trust: 286 settlements, 268 unique payers
 
-https://vellar-seller-demo.onrender.com/lorem
+https://vellar-seller-demo-production.up.railway.app/lorem
   Lorem Ipsum Generator
-  exact on stellar:testnet: 100000 base units of CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA
+  exact on stellar:pubnet: 100000 base units of CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75
   Generate placeholder lorem ipsum text. Specify how many paragraphs or words you need.
   trust: 1 settlements, 1 unique payers
 
-https://vellar-seller-demo.onrender.com/units
+https://vellar-seller-demo-production.up.railway.app/units
   Unit Converter
-  exact on stellar:testnet: 100000 base units of CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA
+  exact on stellar:pubnet: 100000 base units of CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75
   Convert between units of measurement. Supports length, mass, temperature, and volume.
   trust: 2 settlements, 1 unique payers
 ```
@@ -72,15 +76,15 @@ Checks the price of a resource without paying. One HTTP request: nothing is
 signed and no key is read.
 
 ```sh
-vellar quote https://vellar-seller-demo.onrender.com/quote
+vellar quote https://vellar-seller-demo-production.up.railway.app/quote
 ```
 
 ```
-URL:    https://vellar-seller-demo.onrender.com/quote
+URL:    https://vellar-seller-demo-production.up.railway.app/quote
 Scheme: exact
-Network:stellar:testnet
+Network:stellar:pubnet
 Amount: 1000000 (base units)
-Asset:  CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA
+Asset:  CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75
 Pay to: GAATVGLRHZXFC66GEN5QNKD56HC5JJZVHQ3P7ZJNVCCI4WKLN44FICSC
 Fees:   sponsored
 
@@ -88,7 +92,7 @@ No payment was made and nothing was signed by this call.
 ```
 
 Amounts are in the asset's base units. Stellar Asset Contracts use 7 decimals,
-so `1000000` is 0.1 units.
+so `1000000` is 1.0 units.
 
 `Fees: sponsored` means the facilitator pays the network fee from its own
 sponsor account. Without it the payer needs XLM of their own, which is the
@@ -103,18 +107,27 @@ difference between a resource a zero-XLM account can pay and one it cannot.
 Pays for a resource and prints the content.
 
 ```sh
-vellar pay https://vellar-seller-demo.onrender.com/quote \
+vellar pay https://vellar-seller-demo-production.up.railway.app/quote \
   --secret-file ~/.vellar/key \
   --max 1000000
 ```
 
 ```
 Payer:      GCBB5SUM7CEGHDDMFKEL5LTBFWLUU2B6WPK2BVGCMMCEGNHDMPW4TS7O
-Paid:       1000000 base units of CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA
+Authorized: 1000000 base units of CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75
+Settled:    1000000 base units of CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75
+            (exact scheme: settled in full)
 Settlement: 9300623177657ff1fa8bdd9261fb3d4a07cd14e9f0027ba4b7a8a9fc7ade6b34
 ---
 {"quote":"Ships are safe in harbor, but that's not what ships are for.","topic":"perseverance","settlement":{...}}
 ```
+
+`Authorized` is the ceiling you signed; `Settled` is what the chain actually
+moved. This command pays the `exact` scheme, so the two are equal by
+construction and the output says so. They are still printed separately because
+they are only guaranteed equal for `exact` — under `upto` the buyer signs a
+ceiling and the chain moves the metered amount, and a single "Paid" figure
+would hide that gap.
 
 The summary goes to stderr and the content to stdout, so `vellar pay ... > out.json`
 captures the resource and nothing else. With `--json`, only the response body is
@@ -212,7 +225,7 @@ mkdir -p ~/.vellar
 echo "S..." > ~/.vellar/key
 chmod 600 ~/.vellar/key
 
-vellar pay https://vellar-seller-demo.onrender.com/quote \
+vellar pay https://vellar-seller-demo-production.up.railway.app/quote \
   --secret-file ~/.vellar/key
 ```
 
@@ -220,7 +233,7 @@ vellar pay https://vellar-seller-demo.onrender.com/quote \
 
 ```sh
 export VELLAR_SECRET="S..."
-vellar pay https://vellar-seller-demo.onrender.com/quote
+vellar pay https://vellar-seller-demo-production.up.railway.app/quote
 ```
 
 On macOS you can source it from the keychain rather than a file:

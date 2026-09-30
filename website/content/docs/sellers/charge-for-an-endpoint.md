@@ -57,7 +57,7 @@ import { bazaarResourceServerExtension } from "@x402/extensions/bazaar";
 
 const server = new x402ResourceServer(
   new HTTPFacilitatorClient({
-    url: "https://vellar-facilitator.onrender.com",
+    url: "https://vellar-facilitator-production.up.railway.app",
   }),
 )
   .register("stellar:testnet", new ExactStellarScheme())
@@ -151,7 +151,7 @@ PAYTO=G... \
 ASSET=C... \
 PRICE_ATOMIC=1000000 \
 SELLER_PORT=4031 \
-FACILITATOR_URL=https://vellar-facilitator.onrender.com \
+FACILITATOR_URL=https://vellar-facilitator-production.up.railway.app \
 node seller.mjs
 ```
 
@@ -181,7 +181,7 @@ order, with any one failure giving `unverifiable`:
 Take one real payment, then read the catalog:
 
 ```sh
-curl -s "https://vellar-facilitator.onrender.com/discovery/resources?network=stellar:testnet&payTo=$PAYTO" \
+curl -s "https://vellar-facilitator-production.up.railway.app/discovery/resources?network=stellar:testnet&payTo=$PAYTO" \
   | python3 -m json.tool
 ```
 

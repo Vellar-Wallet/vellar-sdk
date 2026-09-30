@@ -16,10 +16,13 @@ hash, and understood why `maxAmount` is a guard and not the budget.
   the paying account
 - Testnet USDC in the paying smart account
 
-> **Note:** The demo seller at `https://vellar-seller-demo.onrender.com/quote`
-> charges 0.1 testnet USDC (Circle's official issuer
-> `GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5`) with sponsored
-> fees. Use it to test without running your own seller.
+> ⚠️ **Warning: the demo seller takes real money.** The demo seller at
+> `https://vellar-seller-demo-production.up.railway.app/quote` currently charges
+> **1.00 real mainnet USDC** on `stellar:pubnet` (the genuine Circle contract
+> `CCW67TSZV3...`), with sponsored fees. It previously quoted 0.1 testnet USDC —
+> it no longer does. Use it to test without running your own seller, but be aware
+> that a successful payment spends actual USDC. Run your own testnet seller if
+> you need a zero-cost target.
 
 ## 1. Configure x402 on the wallet
 
@@ -151,7 +154,7 @@ Pay the deployed demo seller with the classic keypair from step 2 (from
 `examples/` in the facilitator repo):
 
 ```sh
-RESOURCE_URL="https://vellar-seller-demo.onrender.com/quote?topic=perseverance" \
+RESOURCE_URL="https://vellar-seller-demo-production.up.railway.app/quote?topic=perseverance" \
 PAYER_SECRET=S...   # the secret the script printed
 node buyer-classic.mjs
 ```

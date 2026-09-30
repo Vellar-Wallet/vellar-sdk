@@ -3,7 +3,7 @@
 Vellar runs a hosted **x402 facilitator for Stellar** with Bazaar discovery:
 
 ```
-https://vellar-facilitator.onrender.com
+https://vellar-facilitator-production.up.railway.app
 ```
 
 A facilitator is the verify/settle service between a buyer and a seller in an
@@ -11,13 +11,15 @@ x402 payment. The seller's server never touches Soroban directly, and the
 buyer never needs XLM: the facilitator re-simulates the signed payment to
 verify it, submits it on-chain, and sponsors the network fee.
 
-> **Status: testnet, pre-production.** Open for anyone to build against. It
-> runs on a free tier for now, so the first request after idle can take up to
-> a minute (cold start) — and the catalog does not survive that sleep (see
-> [Limits](#limits-and-operational-caveats)). Vellar runs on stellar:testnet
-> only. Mainnet is gated on three items: a persistent-disk deployment, a funded
-> pubnet sponsor account, and a mainnet security audit of the spending-limit
-> policy contract. The facilitator review is complete; the policy contract is a
+> **Status: mainnet, pre-production.** Open for anyone to build against, and
+> **it settles real money**: the hosted instance advertises `stellar:pubnet`, so
+> a payment moves real USDC. It is a hosted demo, not production
+> infrastructure — no uptime commitment, no persistent disk. Of the three
+> mainnet gates, two are cleared (persistent-disk deployment, funded pubnet
+> sponsor account); the third — a mainnet security audit of the spending-limit
+> policy contract — is **still open**. The facilitator review is complete; the
+> policy contract is a separate, unaudited item. See
+> [Limits](#limits-and-operational-caveats).
 > separate item. Source:
 > [Vellar-Wallet/vellar-facilitator](https://github.com/Vellar-Wallet/vellar-facilitator).
 
@@ -49,17 +51,37 @@ anyone.** Its issuer keypair was generated in-process by a throwaway script,
 and the secret no longer exists — nobody can mint more of it, including us.
 If you find that contract id in `/discovery/resources`, don't spend time
 trying to get a balance of it. This warning is about **that entry only** —
-the deployed demo seller itself now charges real testnet USDC and is payable
+the deployed demo seller itself now charges real mainnet USDC and is payable
 by anyone; see the next section.
 
 ## Paying the deployed demo seller
 
 Want to test against a live seller without running your own?
-`https://vellar-seller-demo.onrender.com/quote` charges **0.1 real testnet
-USDC** (`USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5`,
-Circle's official testnet issuer) with sponsored fees. Testnet USDC is
-freely obtainable with no faucet form: Friendbot an account, then buy USDC
-on the testnet DEX with the Friendbot XLM — the same two steps the
+`https://vellar-seller-demo-production.up.railway.app/quote` charges **1.00 real
+mainnet USDC** on `stellar:pubnet`, against the genuine Circle-issued contract
+`CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75` (confirmed against
+`horizon.stellar.org`), with sponsored fees.
+
+> ⚠️ **This is a real-money endpoint. A payment here spends actual USDC from an
+> actual mainnet account — there is no faucet, no testnet balance, and no way to
+> undo it.** Earlier revisions of this page quoted "0.1 real testnet USDC" and
+> pointed at the testnet issuer; that is no longer what the seller advertises.
+> Before you run anything below, `curl` the `/quote` endpoint and read the
+> `amount` and `asset` in the challenge yourself:
+>
+> ```bash
+> curl -s https://vellar-seller-demo-production.up.railway.app/quote \
+>   | grep -o 'payment-required: .*' | cut -d' ' -f2 | base64 -d | python3 -m json.tool
+> ```
+>
+> The challenge is server-supplied and can change. If you need a zero-cost
+> target, run your own seller on testnet instead.
+
+If you would rather fund a **testnet** account and pay a testnet seller instead,
+Testnet USDC (`USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5`,
+Circle's official testnet issuer) is freely obtainable with no faucet form:
+Friendbot an account, then buy USDC on the testnet DEX with the Friendbot XLM.
+The
 [playground](https://playground.vellar.xyz) performs when it funds a
 session wallet:
 
@@ -101,7 +123,7 @@ console.log("payer:", payer.publicKey(), "secret:", payer.secret());
 Then pay the seller with that keypair (classic flow, from `examples/`):
 
 ```sh
-RESOURCE_URL="https://vellar-seller-demo.onrender.com/quote?topic=perseverance" \
+RESOURCE_URL="https://vellar-seller-demo-production.up.railway.app/quote?topic=perseverance" \
 PAYER_SECRET=S...   # the secret the script printed
 node buyer-classic.mjs
 ```
@@ -150,9 +172,9 @@ Both schemes on the Vellar facilitator advertise `areFeesSponsored: true`.
 Confirmed from the live `/supported` response:
 
 ```json
-{"x402Version":2,"scheme":"exact","network":"stellar:testnet",
+{"x402Version":2,"scheme":"exact","network":"stellar:pubnet",
  "extra":{"areFeesSponsored":true}}
-{"x402Version":2,"scheme":"upto","network":"stellar:testnet",
+{"x402Version":2,"scheme":"upto","network":"stellar:pubnet",
  "extra":{"uptoContract":"CCZL7CTRS…4YQAN","areFeesSponsored":true}}
 ```
 
@@ -222,7 +244,7 @@ import { x402ResourceServer } from "@x402/core/server";
 import { ExactStellarScheme } from "@x402/stellar/exact/server";
 
 const server = new x402ResourceServer(
-  new HTTPFacilitatorClient({ url: "https://vellar-facilitator.onrender.com" }),
+  new HTTPFacilitatorClient({ url: "https://vellar-facilitator-production.up.railway.app" }),
 ).register("stellar:testnet", new ExactStellarScheme());
 ```
 
@@ -336,7 +358,7 @@ import { HTTPFacilitatorClient } from "@x402/core/http";
 import { withBazaar } from "@x402/extensions/bazaar";
 
 const bazaar = withBazaar(
-  new HTTPFacilitatorClient({ url: "https://vellar-facilitator.onrender.com" }),
+  new HTTPFacilitatorClient({ url: "https://vellar-facilitator-production.up.railway.app" }),
 ).extensions.bazaar;
 
 const { items } = await bazaar.listResources({ network: "stellar:testnet" });
@@ -357,7 +379,7 @@ without hardcoded URLs.
       "args": ["tsx", "src/mcp.ts"],
       "cwd": "/path/to/vellar-facilitator",
       "env": {
-        "FACILITATOR_URL": "https://vellar-facilitator.onrender.com"
+        "FACILITATOR_URL": "https://vellar-facilitator-production.up.railway.app"
       }
     }
   }

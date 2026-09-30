@@ -84,13 +84,19 @@ settled payment.
 
 ## Status
 
-> ⚠️ **Testnet only.** Vellar runs on stellar:testnet only. Mainnet is gated on
-> three items:
+> ⚠️ **The hosted facilitator is on mainnet.** It advertises `stellar:pubnet` in
+> `/supported`, and a payment settled against it moves **real USDC**. This page
+> previously said "testnet only"; that is no longer true. Check
+> `GET /supported` and set your network explicitly before you pay.
 >
-> 1. A persistent-disk deployment.
-> 2. A funded pubnet sponsor account.
-> 3. A mainnet security audit of the spending-limit policy contract. The
->    facilitator review is complete; the policy contract is a separate item.
+> Of the three mainnet gates, two are cleared (persistent-disk deployment,
+> funded pubnet sponsor account) and one is still open:
+>
+> 1. ~~A persistent-disk deployment.~~ Cleared.
+> 2. ~~A funded pubnet sponsor account.~~ Cleared.
+> 3. A mainnet security audit of the spending-limit policy contract. **Still
+>    open** — the facilitator review is complete; the policy contract is a
+>    separate, unaudited item.
 >
 > APIs may change before 1.0.
 

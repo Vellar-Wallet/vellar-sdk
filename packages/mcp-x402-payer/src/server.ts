@@ -111,6 +111,15 @@ function renderPayment(result: PayResult): string {
     const s = result.settlement!;
     parts.push(
       `Paid ${s.amount} base units of asset ${s.asset} on ${s.network}.`,
+      // Both figures, always. The ceiling is what the buyer authorized and the
+      // settled amount is what the chain moved; the gap between them is the
+      // `upto` feature, so collapsing them would hide the one fact a caller
+      // cannot derive on their own. Naming both also makes a `upto` payment
+      // distinguishable from an `exact` one priced identically.
+      s.settledBelowCeiling
+        ? `Authorized ceiling: ${s.authorizedCeiling} base units; settled for ${s.amount} ` +
+            `(${BigInt(s.authorizedCeiling) - BigInt(s.amount)} base units below the ceiling).`
+        : `Authorized ceiling: ${s.authorizedCeiling} base units (settled in full).`,
       // Safe to print unfenced ONLY because classifySettlement has already
       // rejected anything that is not 64 hex characters (security audit V-2/V-3).
       // Before that check this field was arbitrary seller-controlled text in the

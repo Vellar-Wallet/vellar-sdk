@@ -36,7 +36,7 @@ export interface SpendLedger {
  * Fails CLOSED: an asset with no configured ceiling is refused outright rather
  * than treated as unlimited.
  */
-export function createSpendLedger(ceilings: ReadonlyMap): SpendLedger {
+export function createSpendLedger(ceilings: ReadonlyMap<string, bigint>): SpendLedger {
   const spent = new Map();
   const reserved = new Map();
 
@@ -114,10 +114,10 @@ export function createSpendLedger(ceilings: ReadonlyMap): SpendLedger {
  * Keeps the single shared x402 client's per-payment selection tripwire unambiguous.
  * One key, one budget, one payment at a time.
  */
-export function createMutex(): (fn: () => Promise) => Promise {
-  let tail: Promise = Promise.resolve();
+export function createMutex(): <T>(fn: () => Promise<T>) => Promise<T> {
+  let tail: Promise<unknown> = Promise.resolve();
 
-  return function run(fn: () => Promise): Promise {
+  return function run<T>(fn: () => Promise<T>): Promise<T> {
     const result = tail.then(fn, fn);
     // Keep the chain alive regardless of this call's outcome.
     tail = result.then(

@@ -12,8 +12,9 @@ all `localhost` URLs permanently.
 - Familiarity with the x402 challenge and settle flow (see
   [The payment loop](./payment-loop.md))
 - Access to a facilitator. The hosted instance is
-  `https://vellar-facilitator.onrender.com` (`stellar:testnet` only, free tier,
-  sleeps after 15 minutes idle, so the first call takes roughly 45s (measured))
+  `https://vellar-facilitator-production.up.railway.app` (advertises
+  `stellar:pubnet`, so **payments move real USDC**; check
+  `GET /supported` before paying)
 - `curl` and `python3` for the inspection commands near the end
 
 ## How a resource enters the catalog
@@ -182,7 +183,7 @@ Read this header to confirm.
 List cataloged resources and print each one with its `ownerVerified` value:
 
 ```bash
-curl -s "https://vellar-facilitator.onrender.com/discovery/resources?limit=20" \
+curl -s "https://vellar-facilitator-production.up.railway.app/discovery/resources?limit=20" \
   | python3 -c '
 import json, sys
 data = json.load(sys.stdin)
@@ -198,7 +199,7 @@ Then check the catalog's own health:
 # unverifiableEntries is ABSENT when zero, not 0, so absence means healthy.
 # reverifyPending > 0 means ownership checks are still in flight after a
 # restart, so check back shortly rather than treating what you read as final.
-curl -s "https://vellar-facilitator.onrender.com/health" | python3 -m json.tool
+curl -s "https://vellar-facilitator-production.up.railway.app/health" | python3 -m json.tool
 ```
 
 `/health` also reports `catalogFrozen`, which tells you whether the catalog has

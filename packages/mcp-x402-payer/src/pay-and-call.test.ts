@@ -161,7 +161,8 @@ describe("x402_pay_and_call", () => {
     // Ceiling fully consumed: nothing can be bought, so nothing should be
     // searched for either.
     const ledger = ledgerWith(1_000_000n);
-    ledger.record(ASSET, 1_000_000n);
+    ledger.reserve(ASSET, 1_000_000n);
+    ledger.settle(ASSET, 1_000_000n, 1_000_000n);
 
     await expect(
       payAndCall(

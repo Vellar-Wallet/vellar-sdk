@@ -1,6 +1,6 @@
 import { Command } from "commander";
 
-export const DEFAULT_FACILITATOR_URL = "https://vellar-facilitator.onrender.com";
+export const DEFAULT_FACILITATOR_URL = "https://vellar-facilitator-production.up.railway.app";
 
 /** One entry of `accepts[]` on a catalog resource. */
 interface Accept {

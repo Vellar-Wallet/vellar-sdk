@@ -14,7 +14,7 @@ with no backend setup.
 - npm or pnpm
 
 > **Note:** Everything here runs on stellar:testnet. No real money, no mainnet.
-> The hosted backend at `https://vellar-backend.onrender.com` handles fee
+> The hosted backend at `https://vellar-backend-production.up.railway.app` handles fee
 > sponsorship so your wallet needs no XLM.
 
 ## 1. Install
@@ -50,7 +50,7 @@ const vellar = createVellarWallet({
     networkPassphrase: TESTNET.networkPassphrase,
   }),
   // The hosted testnet backend — it holds the relayer/sponsor secrets.
-  backend: createHttpWalletBackend("https://vellar-backend.onrender.com"),
+  backend: createHttpWalletBackend("https://vellar-backend-production.up.railway.app"),
   isValidAddress: (a) =>
     StrKey.isValidEd25519PublicKey(a) || StrKey.isValidContract(a),
 });

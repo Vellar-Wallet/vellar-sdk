@@ -13,26 +13,35 @@ By the end of this page you will know the six things that will bite you on the h
 ## The hosted instance
 
 ```
-https://vellar-facilitator.onrender.com
+https://vellar-facilitator-production.up.railway.app
 ```
 
-Network: `stellar:testnet` only. Tier: free, on Render.
+Network: advertises `stellar:pubnet` — **payments move real USDC**. Tier: a
+hosted Railway deployment.
 
-> ⚠️ **This is not production infrastructure.** It is a testnet demo: one instance, no uptime commitment, no persistent disk, and a cold start possible at any hour. It is fine for building and testing against. For anything real, run your own instance (see [Run your own facilitator](./run.md)).
+> ⚠️ **This is not production infrastructure, and it now handles real money.**
+> One instance, no uptime commitment, no persistent disk. It is fine for
+> building against, but a payment to it spends actual USDC. For anything
+> production-shaped, run your own instance (see
+> [Run your own facilitator](./run.md)).
 
 ## The six things that will bite you
 
-### 1. Cold start (about 45 seconds)
+### 1. Cold start (previously ~45 seconds on the old host)
 
-The instance sleeps after 15 minutes idle. The first request after idle takes roughly 45 seconds. That is a Render free-tier characteristic, not a bug and not a sign the facilitator is broken.
+This used to be a real problem: the Render free-tier instance slept after 15
+minutes idle and the first request took roughly 45 seconds. The hosted instance
+now runs on Railway, and **no idle-sleep was observed** — repeated calls measured
+~1.2s warm on 2026-09-30, with no wake penalty. A cold-start time for the
+current host has not been measured, so treat this as a caveat rather than a
+number.
 
-Send a warming request before the request you actually care about:
+Warming is still cheap insurance, and costs you nothing against your budget
+because `/health` is exempt from rate limiting:
 
 ```bash
-curl -s --max-time 120 https://vellar-facilitator.onrender.com/health
+curl -s --max-time 120 https://vellar-facilitator-production.up.railway.app/health
 ```
-
-> **Note:** `/health` is exempt from rate limiting, so warming costs you nothing against your budget. Once warm, the service stays active for 15 minutes past the last call.
 
 ### 2. Settlement failures, retry rather than debug
 
@@ -83,7 +92,7 @@ On testnet these are logged as would-reject and the settlement proceeds, so you 
 ## Reading /health
 
 ```bash
-curl -s https://vellar-facilitator.onrender.com/health | python3 -m json.tool
+curl -s https://vellar-facilitator-production.up.railway.app/health | python3 -m json.tool
 ```
 
 | Field | What it means |

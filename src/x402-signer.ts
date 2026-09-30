@@ -228,6 +228,7 @@ export interface SessionKeySignerConfig {
    * to keep a tamper-evident record of who authorized or was denied which payment.
    */
   onSignerAction?: X402SignerActionHook;
+  /**
    * Client-side capability scoping (#224): restrict which resource
    * type (contract) + action (function name) combinations this signer will
    * sign, independent of the on-chain policy. Omit for no scoping (signs

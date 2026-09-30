@@ -11,7 +11,7 @@ retrying is safe, and which errors mean money has already moved on-chain.
 - Familiarity with the [payment loop](../concepts/payment-loop.md) (verify,
   then settle)
 - A wallet with `x402` configured, or a client talking directly to
-  `https://vellar-facilitator.onrender.com`
+  `https://vellar-facilitator-production.up.railway.app`
 - The facilitator advertises `stellar:testnet` only, so every code below is
   observed on testnet
 

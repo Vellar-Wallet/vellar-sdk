@@ -272,10 +272,47 @@ export function makePayCommand(): Command {
             return;
           }
 
-          const settlement = (body as { settlement?: { transaction?: string } } | null)?.settlement;
+          const settlement = (
+            body as
+              | {
+                  settlement?: {
+                    transaction?: string;
+                    /** Metered amount; absent or equal to the ceiling for `exact`. */
+                    amount?: string | number;
+                  };
+                }
+              | null
+          )?.settlement;
           if (settlement?.transaction) {
+            // Both figures are printed, side by side, always.
+            //
+            // `Authorized` is the ceiling the buyer signed; `Settled` is what the
+            // chain actually moved. For the `exact` scheme this command pays they
+            // are equal by construction, and the output says so rather than
+            // leaving the reader to assume. Reporting the ceiling alone would
+            // over-report spend for any future `upto` path, and the gap between
+            // the two is the whole point of that scheme.
+            //
+            // A malformed or absent settled amount falls back to the signed
+            // price: it is server-supplied, so it is only ever displayed, never
+            // trusted, and a bad value must not become the number we report as
+            // spent.
+            const settledRaw =
+              settlement.amount !== undefined && /^\d+$/.test(String(settlement.amount))
+                ? BigInt(settlement.amount)
+                : price;
+            const settled = settledRaw < price ? settledRaw : price;
+
             console.error(`Payer:      ${keypair.publicKey()}`);
-            console.error(`Paid:       ${price} base units of ${chosen.asset ?? "?"}`);
+            console.error(`Authorized: ${price} base units of ${chosen.asset ?? "?"}`);
+            console.error(`Settled:    ${settled} base units of ${chosen.asset ?? "?"}`);
+            if (settled === price) {
+              console.error("            (exact scheme: settled in full)");
+            } else {
+              console.error(
+                `            (settled ${price - settled} base units below the authorized ceiling)`,
+              );
+            }
             console.error(`Settlement: ${settlement.transaction}`);
             if (extensionResponses) console.error(`Extensions: ${extensionResponses}`);
             console.error("---");

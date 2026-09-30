@@ -190,6 +190,19 @@ export interface SettleResult {
   payer?: string;
   errorReason?: string;
   network?: string;
+  /**
+   * What actually settled, in the asset's base units, as a decimal string.
+   *
+   * For `exact` this equals the amount the buyer signed. For `upto` it is the
+   * metered amount and is typically LESS than the signed ceiling — the buyer
+   * authorized a ceiling, the chain moved the metered amount. The facilitator
+   * sets this at settlement time from the contract's emitted transfer event, so
+   * it is the figure to charge a budget against.
+   *
+   * Optional because `exact` facilitators may omit it; callers must fall back to
+   * the signed amount rather than assume it is present.
+   */
+  amount?: string;
 }
 
 /**
@@ -262,7 +275,7 @@ const TRANSACTION_HASH = /^[0-9a-f]{64}$/i;
  * absence of evidence.
  */
 export type SettlementOutcome =
-  | { kind: "settled"; transaction: string; payer?: string }
+  | { kind: "settled"; transaction: string; payer?: string; settledAmount?: bigint }
   | { kind: "not-spent"; reason: string }
   | { kind: "indeterminate"; reason: string; raw?: string };
 
@@ -309,10 +322,22 @@ export function classifySettlement(res: Response): SettlementOutcome {
     };
   }
 
+  // The amount the facilitator reports as settled. For `upto` this is the
+  // metered figure and is smaller than the buyer-signed ceiling; for `exact`
+  // it equals the signed amount. A malformed or negative value is DROPPED
+  // rather than coerced: falling back to the signed ceiling charges at most the
+  // authorized amount, whereas parsing garbage into a number would let a
+  // seller-supplied string set the budget debit.
+  let settledAmount: bigint | undefined;
+  if (settle.amount !== undefined && /^\d+$/.test(settle.amount)) {
+    settledAmount = BigInt(settle.amount);
+  }
+
   return {
     kind: "settled",
     transaction: tx,
     ...(settle.payer !== undefined ? { payer: settle.payer } : {}),
+    ...(settledAmount !== undefined ? { settledAmount } : {}),
   };
 }
 

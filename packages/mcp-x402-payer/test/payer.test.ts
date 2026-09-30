@@ -24,6 +24,7 @@ import {
   requirement,
   response402,
   responsePaid,
+  responsePaidWithAmount,
   responseSettleFailed,
   responseSubmittedButFailed,
   responseUnsettled,
@@ -39,6 +40,15 @@ import type { SpendLedger } from "../src/ledger.js";
 import type { PayerConfig } from "../src/config.js";
 
 const URL = "https://res.test/paid";
+
+/** A fetch that answers every request after a delay, widening the race window. */
+function slowFetch(delayMs: number) {
+  return async (_url: string, init?: RequestInit): Promise<Response> => {
+    const paid = Boolean(init?.headers && "PAYMENT-SIGNATURE" in init.headers);
+    await new Promise((r) => setTimeout(r, delayMs));
+    return paid ? responsePaid("tx-slow") : response402();
+  };
+}
 
 function makePayer(
   responses: Response[],
@@ -172,6 +182,148 @@ describe("pay — settlement accounting", () => {
     expect(result.attempts).toBe(1);
     expect(ledger.remainingFor(ASSET_A)).toBe(1_000_000n - 1_000n);
     expect(result.sessionRemaining).toBe((1_000_000n - 1_000n).toString());
+  });
+
+  // #510: the ceiling-versus-settled gap is the feature of `upto`, and it has
+  // to be visible in the result and in the budget for the scheme to be usable.
+  it("reports the authorized ceiling and the settled amount side by side", async () => {
+    const config = testConfig();
+    const ledger = testLedger(config);
+    // A 5000-unit ceiling, metered down to 1000 by the facilitator.
+    const { payer } = makePayer(
+      [
+        response402(challenge([requirement({ amount: "5000" })])),
+        responsePaidWithAmount("tx-upto", "1000"),
+      ],
+      stubSigner(),
+      config,
+      ledger,
+    );
+
+    const result = await payer.pay(URL, "1000000");
+
+    expect(result.paid).toBe(true);
+    expect(result.settlement?.authorizedCeiling).toBe("5000");
+    expect(result.settlement?.amount).toBe("1000");
+    expect(result.settlement?.settledBelowCeiling).toBe(true);
+  });
+
+  it("charges the session budget the SETTLED amount, not the ceiling", async () => {
+    const config = testConfig({ assets: `${ASSET_A}:10000` });
+    const ledger = testLedger(config);
+
+    // Ten upto payments, each authorized at a 1000 ceiling but metered down to
+    // 100. Charging the ceiling would exhaust this 10000 session on the tenth
+    // and refuse anything after; charging what settled spends 1000 in total.
+    const make = (n: number) =>
+      createPayer({
+        config,
+        ledger,
+        signer: stubSigner(),
+        fetchImpl: scriptedFetch([
+          response402(challenge([requirement({ amount: "1000" })])),
+          responsePaidWithAmount(`tx-${n}`, "100"),
+        ]),
+      });
+
+    for (let i = 0; i < 10; i++) {
+      await make(i).pay(URL, "1000000");
+    }
+
+    // 10 payments x 100 settled = 1000 of a 10000 ceiling.
+    expect(ledger.remainingFor(ASSET_A)).toBe(9_000n);
+  });
+
+  it("holds the ceiling in reservation during flight, so a concurrent pair cannot both pass", async () => {
+    // The reservation is what closes the in-flight window. A ceiling of exactly
+    // one payment admits one: the second is refused while the first is in
+    // flight, even though the first will only settle for a fraction.
+    const config = testConfig({ assets: `${ASSET_A}:1000` });
+    const ledger = testLedger(config);
+    const payer = createPayer({
+      config,
+      ledger,
+      signer: stubSigner(),
+      fetchImpl: slowFetch(25),
+    });
+
+    const results = await Promise.allSettled([
+      payer.pay(URL, "1000000"),
+      payer.pay(URL, "1000000"),
+    ]);
+
+    expect(results.filter((r) => r.status === "rejected")).toHaveLength(1);
+    expect(ledger.remainingFor(ASSET_A)).toBe(0n);
+  });
+
+  it("falls back to the ceiling when the facilitator omits the settled amount", async () => {
+    const config = testConfig();
+    const ledger = testLedger(config);
+    // responsePaid carries no `amount`, so both figures are the signed price.
+    const { payer } = makePayer(
+      [response402(challenge([requirement({ amount: "1000" })])), responsePaid("tx-no-amount")],
+      stubSigner(),
+      config,
+      ledger,
+    );
+
+    const result = await payer.pay(URL, "1000000");
+
+    expect(result.settlement?.authorizedCeiling).toBe("1000");
+    expect(result.settlement?.amount).toBe("1000");
+    expect(result.settlement?.settledBelowCeiling).toBe(false);
+    expect(ledger.remainingFor(ASSET_A)).toBe(1_000_000n - 1_000n);
+  });
+
+  it("ignores a malformed settled amount rather than debiting it", async () => {
+    const config = testConfig({ assets: `${ASSET_A}:5000` });
+    const ledger = testLedger(config);
+    // A server-supplied non-numeric amount must not become the budget debit.
+    const { payer } = makePayer(
+      [
+        response402(challenge([requirement({ amount: "5000" })])),
+        responsePaidWithAmount("tx-bad-amount", "not-a-number"),
+      ],
+      stubSigner(),
+      config,
+      ledger,
+    );
+
+    const result = await payer.pay(URL, "1000000");
+
+    expect(result.settlement?.authorizedCeiling).toBe("5000");
+    expect(result.settlement?.amount).toBe("5000");
+    expect(ledger.remainingFor(ASSET_A)).toBe(0n);
+  });
+
+  it("releases the reservation when the facilitator rejects the payment", async () => {
+    const config = testConfig();
+    const ledger = testLedger(config);
+    const { payer } = makePayer(
+      [response402(), responseVerifyRejected()],
+      stubSigner(),
+      config,
+      ledger,
+    );
+
+    await expect(payer.pay(URL, "1000000")).rejects.toBeInstanceOf(PaymentRejectedError);
+    // The reservation must go back, or the budget is stranded for the session.
+    expect(ledger.remainingFor(ASSET_A)).toBe(1_000_000n);
+  });
+
+  it("releases the reservation when the transport fails mid-payment", async () => {
+    const config = testConfig();
+    const ledger = testLedger(config);
+    const impl = async (_url: string, init?: RequestInit): Promise<Response> => {
+      if (init?.headers && "PAYMENT-SIGNATURE" in init.headers) {
+        throw new Error("socket hang up");
+      }
+      return response402();
+    };
+    const payer = createPayer({ config, ledger, signer: stubSigner(), fetchImpl: impl });
+
+    await expect(payer.pay(URL, "1000000")).rejects.toThrow("socket hang up");
+    expect(ledger.remainingFor(ASSET_A)).toBe(1_000_000n);
   });
 
   it("accumulates spend across payments and then refuses at the ceiling", async () => {

@@ -118,7 +118,7 @@ once. Losing a handful of accounts costs concurrency, not correctness.
 currently usable for settlement.
 
 ```bash
-curl -s https://vellar-facilitator.onrender.com/health \
+curl -s https://vellar-facilitator-production.up.railway.app/health \
   | python3 -c \
   "import json,sys; \
   d=json.load(sys.stdin); \

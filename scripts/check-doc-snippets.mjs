@@ -17,15 +17,42 @@
 // with their real SDK types — see the comment on PREAMBLES.
 
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+// Pages whose ```ts fences are typechecked against the live SDK source.
+//
+// Grown incrementally, one page at a time: adding a page is how drift gets
+// found, so a page is added because it contains snippets a reader could
+// copy-paste, not because it is easy. Every entry here has either runnable
+// snippets in order (no preamble needed) or a PREAMBLES entry below declaring
+// the names it deliberately leaves free.
+//
+// A page with ```ts fences that is NOT listed here is unchecked, which is the
+// gap this list is being closed against. `npm run check:docs` prints the
+// unchecked pages at the end so the backlog stays visible rather than silently
+// tolerated.
 const PAGES = [
   "website/content/docs/getting-started/quickstart.md",
+  "website/content/docs/getting-started/installation.md",
   "website/content/docs/x402.md",
   "website/content/docs/buyers/pay-for-a-resource.md",
+  "website/content/docs/buyers/discover-services.md",
+  "website/content/docs/buyers/spend-controls.md",
+  "website/content/docs/agent-tooling/agent-keys.md",
+  "website/content/docs/agent-tooling/policies.md",
+  "website/content/docs/agent-tooling/vscode.md",
+  "website/content/docs/sellers/charge-for-an-endpoint.md",
+  "website/content/docs/sellers/upto-metered-payments.md",
+  "website/content/docs/facilitator.md",
+  "website/content/docs/api-reference.md",
+  "website/content/docs/advanced.md",
+  "website/content/docs/upto.md",
+  "website/content/docs/wallet-methods.md",
+  "website/content/docs/architecture/spending-policies.md",
 ];
 
 // Ambient declarations injected ahead of a page's snippets, for pages that
@@ -52,7 +79,39 @@ declare const sessionKeySecret: string;
 declare const aFundedGAccount: string;
 `.trim();
 
+// Pages that document a facilitator-side SHAPE. These snippets are
+// configuration fragments lifted out of their surrounding object literal, so
+// they are not standalone programs and cannot be run as one. What still gets
+// checked is the part that matters: the property names, value types and the
+// constructor signatures they are passed to. A renamed SDK export or a changed
+// constructor argument still fails here.
+const FACILITATOR_SHAPE_PREAMBLE = `
+declare const server: {
+  register(network: string, scheme: unknown): void;
+};
+declare const facilitator: {
+  settle(input: {
+    paymentPayload: string;
+    paymentRequirements: Record<string, unknown>;
+  }): Promise<{ amount?: string; transaction?: string }>;
+};
+declare const paymentPayload: string;
+declare const requirements: Record<string, unknown>;
+declare const result: { tokensGenerated: number };
+declare const request: unknown;
+`.trim();
+
 const PREAMBLES = {
+  "website/content/docs/facilitator.md": FACILITATOR_SHAPE_PREAMBLE,
+  "website/content/docs/sellers/upto-metered-payments.md": FACILITATOR_SHAPE_PREAMBLE,
+  // The `upto` page shows the two fields that differ from `exact` — the buyer
+  // ceiling on the requirements, and `actualAmount` on the settled extras —
+  // each as a bare object literal.
+  "website/content/docs/upto.md": FACILITATOR_SHAPE_PREAMBLE,
+  // A full MCP client config object, spread across several fences.
+  "website/content/docs/agent-tooling/vscode.md": `
+declare const mcpServers: Record<string, unknown>;
+`.trim(),
   "website/content/docs/x402.md": X402_CONFIG_PREAMBLE,
   // The closing block inspects a settlement on its own, without the
   // destructuring that introduced it two blocks earlier — each later block is
@@ -72,9 +131,96 @@ if (orphaned.length > 0) {
   process.exit(1);
 }
 
+// Pages that MIX runnable statements with config fragments, so the kind of each
+// individual fence decides how it is compiled rather than the page as a whole.
+const MIXED_PAGES = new Set([
+  "website/content/docs/sellers/upto-metered-payments.md",
+  "website/content/docs/upto.md",
+  "website/content/docs/agent-tooling/vscode.md",
+]);
+
+/**
+ * Is this block a bare object-literal FRAGMENT rather than statements?
+ *
+ * Decided per block, because a page can show a `server.register(...)` call in
+ * one fence and a bare `{ amount: "..." }` in the next. The test is structural:
+ * a fragment's first meaningful line opens an object literal, so it carries a
+ * top-level property and has no statement of its own.
+ */
+function isFragment(body) {
+  const lines = body
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0 && !l.startsWith("//") && !l.startsWith("*") && !l.startsWith("/*"));
+  if (lines.length === 0) return false;
+
+  const first = lines[0];
+  // A fragment is a lone property (`amount: "1000000"`) or a literal that opens
+  // an object (`{`). Anything that starts a statement is not one.
+  if (first.startsWith("{")) return true;
+  if (!/^[A-Za-z_$][\w$]*\s*[:,]/.test(first)) return false;
+  // A lone `key: value,` is a fragment only if no statement keyword appears.
+  return !/^(const|let|var|return|await|import|export|function|throw|if|for|while|class)\b/.test(
+    first,
+  );
+}
+
 const outDir = path.join(root, ".doc-snippets");
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outDir, { recursive: true });
+
+/**
+ * The type a config fragment is checked against.
+ *
+ * The x402 requirements shape merged with the route-config fields a facilitator
+ * adds (`price`, `description`, `uptoContract`, MCP client keys), so a
+ * misspelled property still fails. Declared here rather than imported because
+ * these are FACILITATOR-internal shapes: the SDK's `PaymentRequirements` is the
+ * flattened wire form and carries no `price`, so borrowing it would reject
+ * correct documentation.
+ */
+const FRAGMENT_TYPE = `{
+  [key: string]: unknown;
+  scheme?: string;
+  network?: string;
+  asset?: string;
+  amount?: string;
+  payTo?: string;
+  price?: { asset?: string; amount?: string | bigint };
+  extra?: Record<string, unknown>;
+  maxTimeoutSeconds?: number;
+  description?: string;
+}`;
+
+let fragmentCount = 0;
+
+/**
+ * Wrap a config fragment so it parses as an object literal, not a block.
+ *
+ * The annotated type already ends in `= {`, so the initializer's braces are
+ * supplied. A fragment written in the docs as a complete `{ … }` literal has
+ * its own pair, which is stripped here; a bare `key: value` fragment has none
+ * and is dropped straight in.
+ */
+function wrapFragment(body, index) {
+  fragmentCount += 1;
+  const lines = body.trim().startsWith("{") ? stripOuterBraces(body) : body.split("\n");
+  return [
+    `const __fragment_${index}: ${FRAGMENT_TYPE} = {`,
+    ...lines,
+    "};",
+    `void __fragment_${index};`,
+  ].join("\n");
+}
+
+/** Remove exactly one balanced pair of outer braces, and the blank edges with it. */
+function stripOuterBraces(body) {
+  const lines = body.split("\n");
+  let start = lines.findIndex((l) => l.trim().length > 0);
+  let end = lines.length - 1;
+  while (end > start && lines[end].trim().length === 0) end -= 1;
+  return lines.slice(start + 1, end);
+}
 
 let extracted = 0;
 for (const page of PAGES) {
@@ -99,16 +245,32 @@ for (const page of PAGES) {
     bodies.push(body.join("\n").trim());
   }
 
-  const [first, ...rest] = bodies;
-  const wrapped = rest
-    .filter((b) => b.length > 0)
-    .map((b, i) => `async function __snippet_${i + 2}() {\n${b}\n}\nvoid __snippet_${i + 2};`);
+  const mixed = MIXED_PAGES.has(page);
+  const nonEmpty = bodies.filter((b) => b.length > 0);
+
+  // The FIRST non-empty block stays at top level: it is the page's shared setup,
+  // and the bindings it declares are referenced by the later blocks. Everything
+  // after it gets its own scope, since each is wrapped in a function.
+  //
+  // The exception is a first block that is itself a fragment on a mixed page:
+  // there is no setup to hoist, and a bare `{ … }` at top level parses as a
+  // block rather than an object literal, so it has to be wrapped like the rest.
+  const [first, ...rest] = nonEmpty;
+  const firstIsFragment = mixed && isFragment(first);
+
+  let n = 0;
+  const wrap = (b) => {
+    n += 1;
+    if (mixed && isFragment(b)) return wrapFragment(b, n);
+    return `async function __snippet_${n}() {\n${b}\n}\nvoid __snippet_${n};`;
+  };
+
   const file = [
     `// GENERATED from ${page} by scripts/check-doc-snippets.mjs — do not edit.`,
     [...imports].join("\n"),
     PREAMBLES[page] ?? "",
-    first,
-    ...wrapped,
+    firstIsFragment ? wrap(first) : first,
+    ...rest.map(wrap),
     "export {};",
   ]
     .filter((part) => part.length > 0)
@@ -154,3 +316,30 @@ try {
   process.exit(1);
 }
 console.log("doc snippets typecheck clean");
+
+// Report, do not fail: the point of the list is that it grows. Naming what is
+// still unchecked keeps the remaining drift visible instead of letting an
+// unlisted page look covered by the fact that CI is green.
+const docsDir = path.join(root, "website/content/docs");
+const checked = new Set(PAGES.map((p) => path.resolve(root, p)));
+const unchecked = [];
+(function walk(dir) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) walk(full);
+    else if (entry.name.endsWith(".md")) {
+      const md = readFileSync(full, "utf8");
+      if (/```ts\n/.test(md) && !checked.has(full)) {
+        const blocks = [...md.matchAll(/```ts\n([\s\S]*?)```/g)].length;
+        unchecked.push(`${path.relative(root, full)} (${blocks} block(s))`);
+      }
+    }
+  }
+})(docsDir);
+
+if (unchecked.length > 0) {
+  console.log(
+    `\n${unchecked.length} page(s) with ts snippets are still UNCHECKED — add them to PAGES in ` +
+      `scripts/check-doc-snippets.mjs:\n  ${unchecked.join("\n  ")}`,
+  );
+}

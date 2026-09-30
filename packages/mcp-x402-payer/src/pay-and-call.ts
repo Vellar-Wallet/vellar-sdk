@@ -18,8 +18,14 @@ import type { SpendLedger } from "./ledger.js";
 import { log } from "./output.js";
 import type { FetchLike, PayResult, Payer } from "./payer.js";
 
-/** Hosted facilitator, used when VELLAR_X402_FACILITATOR_URL is unset. */
-export const DEFAULT_FACILITATOR_URL = "https://vellar-facilitator.onrender.com";
+/**
+ * Hosted facilitator, used when VELLAR_X402_FACILITATOR_URL is unset.
+ *
+ * The hosted instance advertises `stellar:pubnet` in `/supported`, so a payment
+ * made through it moves REAL USDC. That is a mainnet endpoint and is treated as
+ * one throughout this package.
+ */
+export const DEFAULT_FACILITATOR_URL = "https://vellar-facilitator-production.up.railway.app";
 
 /** How many catalog entries to consider. More than this is noise for one call. */
 const SEARCH_LIMIT = 10;
