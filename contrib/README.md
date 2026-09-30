@@ -118,3 +118,30 @@ proposed `README.md` section. In short:
 
 > Note: `src/session.test.ts` does not currently parse on `dev` (an unterminated `it(` block in the
 > teardown suite), which must be fixed before these tests can be ported there.
+
+---
+
+## 6. Direct Unit Tests for the Payments Client Relayer Constraints
+
+We add [contrib/payments-client-relayer-constraints.test.ts](payments-client-relayer-constraints.test.ts),
+testing `src/payments-client.ts` directly rather than only indirectly through
+`payments.test.ts` / `payments.load.test.ts`.
+
+### Coverage
+- **Relayer timeout on every transfer path**: asserts `transfer()` is always called with
+  `{ timeoutInSeconds: RELAYER_MAX_TIMEOUT_SECONDS }` across several from/to/amount
+  combinations, plus a guard that the constant stays under the relayer's hard 60s ceiling
+  (error 7002) — if a refactor ever drops the explicit option, sac-sdk's 300s default would
+  return and this suite catches it at the source instead of at a confusing relayer rejection.
+- **`InvalidRecipientError` boundaries**: invalid address, recipient equal to sender, and that
+  the SAC client is never reached once the recipient is rejected.
+- **`InvalidAmountError` boundaries**: zero and negative amounts, and that the SAC client is
+  never reached once the amount is rejected.
+- **`confirm()` submission gate**: `preparePayment()` alone never calls `kit.sign` or
+  `backend.submitTransaction` — only calling the returned `confirm()` does, proving a payment
+  cannot be submitted without the caller explicitly acting on the reviewed `PaymentReview`.
+
+### Integration into Core
+No source changes are proposed — this is additive test coverage for existing behavior in
+`src/payments-client.ts`. A maintainer may choose to move this file to
+`src/payments-client.test.ts` verbatim.
