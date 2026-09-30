@@ -1,0 +1,19 @@
+name: "Service Keepalive"
+on:
+  schedule:
+    - cron: "*/14 * * * *" # Runs every 14 minutes to prevent Railway free-tier sleep
+  workflow_dispatch:
+
+# MEASUREMENTS (Railway Free Tier):
+# Backend wake time: ~10s
+# Facilitator wake time: ~8s
+# Explorer wake time: ~6s
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Facilitator
+        run: curl -s -o /dev/null -w "%{http_code}" https://vellar-facilitator-production.up.railway.app/health | grep 200
+      - name: Ping Explorer
+        run: curl -s -o /dev/null -w "%{http_code}" https://vellar-explorer-production.up.railway.app/health | grep 200
