@@ -2,12 +2,13 @@
 //
 // WHY THIS IS CODE AND NOT A README WARNING: this suite pays a real,
 // already publicly-cataloged demo resource against the shared hosted
-// facilitator (see local-only.ts for why the OTHER integration suite refuses
-// that same endpoint — this one exists precisely to cover it, since nothing
-// else in the repo pays a real resource end to end). The one failure mode
-// that must never happen is the same request settling on a pubnet network:
-// that would spend real funds instead of testnet XLM. The check runs before
-// a payment is trusted as complete, and it throws.
+// facilitator (see packages/mcp-x402-payer/test/integration/local-only.ts for
+// why the OTHER integration suite refuses that same endpoint — this one
+// exists precisely to cover it, since nothing else in the repo pays a real
+// resource end to end). The one failure mode that must never happen is the
+// same request settling on a pubnet network: that would spend real funds
+// instead of testnet XLM. The check runs before a payment is trusted as
+// complete, and it throws.
 
 export class NonTestnetNetworkError extends Error {
   constructor(network: string) {

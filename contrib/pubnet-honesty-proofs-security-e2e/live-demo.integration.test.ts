@@ -1,7 +1,7 @@
 // End-to-end payment against the demo resource on the LIVE hosted
 // facilitator, testnet only.
 //
-// Opt-in and skipped by default — see ../../vitest.integration.config.ts. Set
+// Opt-in and skipped by default — see ./vitest.config.ts and README.md. Set
 // VELLAR_LIVE_X402_SECRET and VELLAR_LIVE_X402_TEST_ASSET to run it (a funded
 // testnet keypair and the SAC contract id of the asset it holds).
 //
@@ -16,12 +16,17 @@
 // The settle step fails benignly about one time in three — an empty
 // `transaction` field means nothing was charged and a retry is safe (see
 // packages/cli/README.md) — which is exactly what `attempts` below covers.
+//
+// Imports reach into packages/mcp-x402-payer/src directly: this module only
+// uses its public building blocks (config, ledger, payer, signer), so it can
+// live entirely inside contrib/ per the contribution rules. See README.md for
+// where this belongs once lifted into core.
 
 import { beforeAll, describe, expect, it } from "vitest";
-import { loadConfig } from "../../src/config.js";
-import { createSpendLedger } from "../../src/ledger.js";
-import { createPayer, type Payer } from "../../src/payer.js";
-import { createOfficialSigner } from "../../src/signer.js";
+import { loadConfig } from "../../packages/mcp-x402-payer/src/config.js";
+import { createSpendLedger } from "../../packages/mcp-x402-payer/src/ledger.js";
+import { createPayer, type Payer } from "../../packages/mcp-x402-payer/src/payer.js";
+import { createOfficialSigner } from "../../packages/mcp-x402-payer/src/signer.js";
 import {
   assertTestnetNetwork,
   readLiveIntegrationEnv,
