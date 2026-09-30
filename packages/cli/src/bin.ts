@@ -4,6 +4,7 @@ import { makeSearchCommand } from "./commands/search.js";
 import { makeQuoteCommand } from "./commands/quote.js";
 import { makePayCommand } from "./commands/pay.js";
 import { makeInspectCommand } from "./commands/inspect.js";
+import { makePreflightCommand } from "./commands/preflight.js";
 
 const program = new Command();
 
@@ -16,5 +17,6 @@ program.addCommand(makeSearchCommand());
 program.addCommand(makeQuoteCommand());
 program.addCommand(makePayCommand());
 program.addCommand(makeInspectCommand());
+program.addCommand(makePreflightCommand());
 
 program.parse();
