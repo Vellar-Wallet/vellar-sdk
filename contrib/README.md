@@ -118,3 +118,123 @@ proposed `README.md` section. In short:
 
 > Note: `src/session.test.ts` does not currently parse on `dev` (an unterminated `it(` block in the
 > teardown suite), which must be fixed before these tests can be ported there.
+
+---
+
+## 6. Direct Unit Tests for the Payments Client Relayer Constraints
+
+We add [contrib/payments-client-relayer-constraints.test.ts](payments-client-relayer-constraints.test.ts),
+testing `src/payments-client.ts` directly rather than only indirectly through
+`payments.test.ts` / `payments.load.test.ts`.
+
+### Coverage
+- **Relayer timeout on every transfer path**: asserts `transfer()` is always called with
+  `{ timeoutInSeconds: RELAYER_MAX_TIMEOUT_SECONDS }` across several from/to/amount
+  combinations, plus a guard that the constant stays under the relayer's hard 60s ceiling
+  (error 7002) — if a refactor ever drops the explicit option, sac-sdk's 300s default would
+  return and this suite catches it at the source instead of at a confusing relayer rejection.
+- **`InvalidRecipientError` boundaries**: invalid address, recipient equal to sender, and that
+  the SAC client is never reached once the recipient is rejected.
+- **`InvalidAmountError` boundaries**: zero and negative amounts, and that the SAC client is
+  never reached once the amount is rejected.
+- **`confirm()` submission gate**: `preparePayment()` alone never calls `kit.sign` or
+  `backend.submitTransaction` — only calling the returned `confirm()` does, proving a payment
+  cannot be submitted without the caller explicitly acting on the reviewed `PaymentReview`.
+
+### Integration into Core
+No source changes are proposed — this is additive test coverage for existing behavior in
+`src/payments-client.ts`. A maintainer may choose to move this file to
+`src/payments-client.test.ts` verbatim.
+
+---
+
+## 7. Direct Unit Tests for the HTTP Wallet Backend
+
+We add [contrib/http-backend-tests.test.ts](http-backend-tests.test.ts), testing
+`src/http-backend.ts` directly. It was previously covered only indirectly via
+`client-backend-harness.test.ts`.
+
+### Coverage
+- **Every `toApiError` branch**: a JSON error body with `message`, a JSON body with only
+  `error`, a non-JSON body (the `catch` fallthrough), and the fallback `Wallet API request
+  failed (<status>)` message when the body has neither field.
+- **`WalletApiError.status` and `.code`**: asserted directly off the thrown instance, including
+  the case where `.code` is `undefined` because the body carried no `error` field.
+- **All three documented endpoints** (`/wallet/create`, `/wallet/connect`, `/wallet/submit`)
+  post the exact request shape, and `/wallet/connect`'s 404-as-`undefined` special case is
+  covered separately from its generic error path.
+
+### Integration into Core
+No source changes are proposed — this is additive test coverage for existing behavior in
+`src/http-backend.ts`. A maintainer may choose to move this file to `src/http-backend.test.ts`
+verbatim.
+
+---
+
+## 8. License Decision: AGPL-3.0 Transitive Dependency
+
+We record the finding in [contrib/license-decision.md](license-decision.md): the production
+tree carries exactly one copyleft package, `@openzeppelin/relayer-sdk@1.10.0`
+(AGPL-3.0-or-later), reached only via `passkey-kit@0.16.5 -> @openzeppelin/relayer-plugin-channels@0.20.0`.
+
+### Verified
+- The chain and its license, directly against `package-lock.json`.
+- `passkey-kit` is a `devDependency` and an *optional* `peerDependency` — the AGPL branch
+  carries `"dev": true` in the lockfile, so it is absent from a production install unless a
+  consumer opts into `passkey-kit` themselves.
+- No `package.json` in this repo lists it, and nothing under `src/`, `packages/cli/src`, or
+  `packages/mcp-x402-payer/src` imports from `passkey-kit`.
+
+### Decision
+No action required on vellar-sdk's own licensing: the AGPL package is unreachable from
+anything vellar-sdk ships and is never bundled into `dist/`. Full reasoning and the conditions
+that would require revisiting this are in the doc.
+
+### Integration into Core
+Move [contrib/license-decision.md](license-decision.md) to `reference/license.md` (the
+directory does not exist on `dev` yet).
+
+---
+
+## 9. Warn Loudly Before Any Mainnet Payment
+
+We implement `confirmMainnetPayment` and `formatMainnetWarning` inside
+[contrib/mainnet-payment-warning.ts](mainnet-payment-warning.ts), with tests in
+[contrib/mainnet-payment-warning.test.ts](mainnet-payment-warning.test.ts).
+
+### Behavior
+- **No-op off mainnet.** Any network other than `"mainnet"` returns immediately — no banner,
+  no prompt.
+- **`formatMainnetWarning`**: an unmistakable notice showing network, asset, and amount,
+  printed before anything is signed.
+- **`confirmMainnetPayment`**: on mainnet, always prints the warning first (even with
+  `assumeYes: true`, so a scripted run's logs still show what was spent), then either skips
+  the prompt (`assumeYes`), refuses outright when input is non-interactive and `assumeYes` is
+  not set (fails closed instead of hanging on an unanswerable prompt), or prompts and requires
+  the literal answer `"YES"`. A refusal throws `RealFundsConfirmationDeclinedError` — nothing
+  is signed.
+- **`withNetwork`**: a pure helper to merge `network` onto any MCP payer result, so it appears
+  at the top level even on responses without a `settlement` (e.g. "no payment required").
+
+### Integration into Core
+1. **CLI** (`packages/cli/src/commands/pay.ts`): add a `--yes` boolean option to `makePayCommand`
+   (default `false`). Between step 2 (ceiling/sponsorship checks, ~line 202) and step 3
+   (build-and-sign, ~line 204), call:
+   ```ts
+   await confirmMainnetPayment({
+     network: opts.network,
+     asset: chosen.asset ?? "?",
+     amount: price.toString(),
+     assumeYes: opts.yes,
+   });
+   ```
+   wrapped in the existing top-level `try`, so `RealFundsConfirmationDeclinedError` is reported
+   through the same `catch (err)` → `console.error` → `process.exit(1)` path already there.
+2. **MCP payer startup** (`packages/mcp-x402-payer/src/bin.ts`): already logs `network:
+   config.network` in the `"vellar x402 payer ready"` log line (lines 30-38) — no change
+   needed there.
+3. **MCP payer results** (`packages/mcp-x402-payer/src/payer.ts`): wrap each `QuoteResult` and
+   `PayResult` return value in `withNetwork(result, config.network)` — currently `network` only
+   appears inside `settlement`, which is absent on the "no payment required" / unpayable
+   branches (e.g. the early return at `payer.ts:229`, the refusal branch around `payer.ts:263-268`,
+   and the no-challenge return around `payer.ts:284-289`).
