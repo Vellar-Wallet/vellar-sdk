@@ -16,8 +16,8 @@
 // See CONTRIBUTING.md for full documentation.
 //
 import { describe, expect, it } from "vitest";
-import { createPaymentClient } from "../src/payments-client";
-import type { TokenInfo } from "../src/balances";
+import { createPaymentClient } from "../../src/payments-client";
+import type { TokenInfo } from "../../src/balances";
 
 const CONCURRENCY_LEVELS = [1, 5, 10, 25, 50, 100];
 const PER_LEVEL = 150;
