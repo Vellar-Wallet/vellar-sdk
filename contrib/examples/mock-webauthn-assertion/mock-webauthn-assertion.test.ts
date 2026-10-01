@@ -1,3 +1,4 @@
+import "../test-browser-context";
 import { describe, expect, it } from "vitest";
 import { xdr } from "@stellar/stellar-sdk";
 import {

@@ -1,3 +1,4 @@
+import "../test-browser-context";
 import { describe, expect, it } from "vitest";
 import { buildAuthorizationEntryPreimage, hash, xdr } from "@stellar/stellar-sdk";
 import { TESTNET } from "../../../src/config";

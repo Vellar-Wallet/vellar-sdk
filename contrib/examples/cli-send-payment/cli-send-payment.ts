@@ -130,11 +130,11 @@ export async function runSendPayment(
     );
   }
 
+  const amount = parseTokenAmountLoose(args.amount, token.decimals);
   log(`Creating a mock wallet...`);
   const session = await wallet.create({ username: "cli-test-user" });
   log(`Wallet created: ${session.accountId}`);
 
-  const amount = parseTokenAmountLoose(args.amount, token.decimals);
   log(`Sending ${args.amount} ${token.symbol} to ${args.to}...`);
   const result = await wallet.pay({ to: args.to, amount, token });
   log(`Payment submitted. Transaction hash: ${result.hash}`);

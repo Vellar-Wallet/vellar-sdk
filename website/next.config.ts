@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Docs site — deployed standalone to sdk.vellar.xyz.
+  // Docs site — deployed standalone to docs.vellar.xyz.
   async rewrites() {
     return [
       // Serve the self-contained pitch deck at a clean, unlisted route.
@@ -10,7 +10,7 @@ const nextConfig: NextConfig = {
       // Raw markdown for agents: /docs/<slug>.md → the app/md route handler.
       // afterFiles rewrites are matched before the dynamic /docs/[slug] page,
       // so the .md suffix wins over the HTML route.
-      { source: "/docs/:slug.md", destination: "/md/:slug" },
+      { source: "/docs/:path*.md", destination: "/md/:path*" },
     ];
   },
 };

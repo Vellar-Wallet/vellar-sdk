@@ -5,7 +5,9 @@ import {
   PasskeyBrowserRequiredError,
   resumeKitConnection,
   WalletNetworkMismatchError,
+  type PasskeyKitConnectorOptions,
   type PasskeyKitLike,
+  type SessionKeyRotationRuntime,
   type WalletBackend,
 } from "./passkeykit-connector";
 
@@ -218,6 +220,150 @@ describe("signTransaction", () => {
       connector(kit).signTransaction({ xdr: "tx-xdr", network: "mainnet" }),
     ).rejects.toBeInstanceOf(WalletNetworkMismatchError);
     expect(kit.sign).not.toHaveBeenCalled();
+  });
+});
+
+describe("session key rotation on re-authentication (#223)", () => {
+  function fakeRotation(overrides: Partial<SessionKeyRotationRuntime> = {}): SessionKeyRotationRuntime & {
+    mint: ReturnType<typeof vi.fn>;
+    revoke: ReturnType<typeof vi.fn>;
+  } {
+    return {
+      mint: vi.fn().mockResolvedValue({ publicKey: "GNEWKEY000000000000000000000000000000000000000000000000" }),
+      revoke: vi.fn().mockResolvedValue(undefined),
+      ...overrides,
+    } as SessionKeyRotationRuntime & { mint: ReturnType<typeof vi.fn>; revoke: ReturnType<typeof vi.fn> };
+  }
+
+  function connectorWithRotation(
+    rotation: SessionKeyRotationRuntime,
+    extra: Partial<PasskeyKitConnectorOptions> = {},
+  ) {
+    return createPasskeyKitConnector({
+      kit: fakeKit(),
+      backend: fakeBackend(),
+      network: "testnet",
+      appName: "Vellar",
+      now: () => FIXED_NOW,
+      sessionKeyRotation: rotation,
+      ...extra,
+    });
+  }
+
+  it("does not rotate when sessionKeyRotation is not configured (backward compatible)", async () => {
+    const session = await connector().connectWallet("testnet");
+    expect(session.accountId).toBe("CCONTRACT");
+    // No rotation runtime supplied at all — nothing to assert on except that
+    // connectWallet still resolves normally.
+  });
+
+  it("mints a fresh session key on successful re-authentication", async () => {
+    const rotation = fakeRotation();
+    await connectorWithRotation(rotation).connectWallet("testnet");
+    expect(rotation.mint).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not revoke anything on the first connect (no previous key to invalidate)", async () => {
+    const rotation = fakeRotation();
+    await connectorWithRotation(rotation).connectWallet("testnet");
+    expect(rotation.revoke).not.toHaveBeenCalled();
+  });
+
+  it("revokes the previous session key on a second re-authentication", async () => {
+    const rotation = fakeRotation();
+    rotation.mint
+      .mockResolvedValueOnce({ publicKey: "GFIRST00000000000000000000000000000000000000000000000000" })
+      .mockResolvedValueOnce({ publicKey: "GSECOND0000000000000000000000000000000000000000000000000" });
+    const conn = connectorWithRotation(rotation);
+
+    await conn.connectWallet("testnet");
+    expect(rotation.revoke).not.toHaveBeenCalled();
+
+    await conn.connectWallet("testnet");
+    expect(rotation.revoke).toHaveBeenCalledTimes(1);
+    expect(rotation.revoke).toHaveBeenCalledWith("GFIRST00000000000000000000000000000000000000000000000000");
+  });
+
+  it("rejects the old key after rotation: a runtime backed by a real revoke list denies it", async () => {
+    // Simulate a runtime backed by a revocation list, standing in for the
+    // on-chain signer removal `wallet.agents.revoke` performs.
+    const revoked = new Set<string>();
+    const rotation: SessionKeyRotationRuntime = {
+      mint: vi
+        .fn()
+        .mockResolvedValueOnce({ publicKey: "GFIRST00000000000000000000000000000000000000000000000000" })
+        .mockResolvedValueOnce({ publicKey: "GSECOND0000000000000000000000000000000000000000000000000" }),
+      revoke: vi.fn().mockImplementation(async (publicKey: string) => {
+        revoked.add(publicKey);
+      }),
+    };
+    const conn = connectorWithRotation(rotation);
+
+    await conn.connectWallet("testnet");
+    await conn.connectWallet("testnet");
+
+    expect(revoked.has("GFIRST00000000000000000000000000000000000000000000000000")).toBe(true);
+    expect(revoked.has("GSECOND0000000000000000000000000000000000000000000000000")).toBe(false);
+  });
+
+  it("still returns a fresh session when minting the new key fails", async () => {
+    const rotation = fakeRotation({ mint: vi.fn().mockRejectedValue(new Error("mint down")) });
+    const session = await connectorWithRotation(rotation).connectWallet("testnet");
+    expect(session.accountId).toBe("CCONTRACT");
+  });
+
+  it("still returns a fresh session when revoking the previous key fails", async () => {
+    const rotation = fakeRotation();
+    const conn = connectorWithRotation(rotation);
+    await conn.connectWallet("testnet");
+    rotation.revoke.mockRejectedValueOnce(new Error("revoke down"));
+    const session = await conn.connectWallet("testnet");
+    expect(session.accountId).toBe("CCONTRACT");
+  });
+
+  it("logs a session-key-rotated debug event with previous and new public keys", async () => {
+    const rotation = fakeRotation();
+    rotation.mint
+      .mockResolvedValueOnce({ publicKey: "GFIRST00000000000000000000000000000000000000000000000000" })
+      .mockResolvedValueOnce({ publicKey: "GSECOND0000000000000000000000000000000000000000000000000" });
+    const onDebugLog = vi.fn();
+    const conn = connectorWithRotation(rotation, { onDebugLog });
+
+    await conn.connectWallet("testnet");
+    expect(onDebugLog).toHaveBeenCalledWith("session-key-rotated", {
+      previousPublicKey: undefined,
+      newPublicKey: "GFIRST00000000000000000000000000000000000000000000000000",
+    });
+
+    await conn.connectWallet("testnet");
+    expect(onDebugLog).toHaveBeenCalledWith("session-key-rotated", {
+      previousPublicKey: "GFIRST00000000000000000000000000000000000000000000000000",
+      newPublicKey: "GSECOND0000000000000000000000000000000000000000000000000",
+    });
+    expect(onDebugLog).toHaveBeenCalledWith("session-key-revoked", {
+      publicKey: "GFIRST00000000000000000000000000000000000000000000000000",
+    });
+  });
+
+  it("logs mint and revoke failures instead of throwing", async () => {
+    const onDebugLog = vi.fn();
+    const mintFailing = fakeRotation({ mint: vi.fn().mockRejectedValue(new Error("mint down")) });
+    await connectorWithRotation(mintFailing, { onDebugLog }).connectWallet("testnet");
+    expect(onDebugLog).toHaveBeenCalledWith(
+      "session-key-rotation-mint-failed",
+      expect.objectContaining({ error: "mint down" }),
+    );
+
+    onDebugLog.mockClear();
+    const revokeFailing = fakeRotation();
+    const conn = connectorWithRotation(revokeFailing, { onDebugLog });
+    await conn.connectWallet("testnet");
+    revokeFailing.revoke.mockRejectedValueOnce(new Error("revoke down"));
+    await conn.connectWallet("testnet");
+    expect(onDebugLog).toHaveBeenCalledWith(
+      "session-key-revoke-failed",
+      expect.objectContaining({ error: "revoke down" }),
+    );
   });
 });
 

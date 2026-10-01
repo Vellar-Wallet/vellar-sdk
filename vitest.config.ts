@@ -18,6 +18,7 @@ export default defineConfig({
       "**/dist/**",
       "**/.{idea,git,cache,output,temp}/**",
       "**/*.integration.test.ts",
+      "**/*.load.test.ts",
     ],
   },
 });

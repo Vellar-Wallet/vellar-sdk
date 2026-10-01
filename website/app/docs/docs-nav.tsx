@@ -3,14 +3,20 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { DOC_SECTIONS } from "@/lib/docs-registry";
+import { getDocTab, getTabSections } from "@/lib/docs-registry";
 
 // Client-side docs nav: section-grouped links with active-link highlighting +
 // a mobile open/close toggle (the sidebar is off-canvas below the breakpoint).
+//
+// The sidebar shows only the sections under the active tab, so each tab in the
+// row above swaps the whole rail rather than scrolling one long combined list.
+// The tab is resolved from the pathname, the same way DocsTabs does it, because
+// app/docs/layout.tsx sits above the [...slug] segment and gets no params.
 
 export function DocsNav() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const sections = getTabSections(getDocTab(pathname.replace(/^\/docs\/?/, "")));
 
   return (
     <>
@@ -25,7 +31,7 @@ export function DocsNav() {
 
       <aside className={`docs-sidebar${open ? " open" : ""}`}>
         <nav>
-          {DOC_SECTIONS.map((group) => (
+          {sections.map((group) => (
             <div key={group.section} className="docs-nav-group">
               {/* A group that is just one self-titled page needs no label */}
               {(group.pages.length > 1 || group.pages[0]?.nav !== group.section) && (

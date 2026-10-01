@@ -182,3 +182,52 @@ describe("x402 rpcUrl validation at construction", () => {
     expect(wallet.x402).toBeDefined();
   });
 });
+
+describe("circuit breaker around facilitator calls", () => {
+  it("fast-fails pay() with CircuitOpenError once the breaker opens", async () => {
+    const { wallet, backend } = build({
+      // Trip the breaker after a single failure so we can observe the fast-fail.
+      circuitBreaker: { failureThreshold: 1, openDurationMs: 60_000 },
+    });
+    await wallet.connect();
+
+    // The reconnect lookup succeeds (breaker stays closed), then break the
+    // submission path so the next pay() call trips the circuit.
+    backend.submitTransaction.mockRejectedValueOnce(new Error("facilitator down"));
+
+    await expect(wallet.pay({ to: "CDEST", amount: 5n, token })).rejects.toThrow(
+      "facilitator down",
+    );
+
+    // Circuit is now OPEN: the next pay() must fail fast WITHOUT calling the
+    // backend again (no hang, no slow failure).
+    backend.submitTransaction.mockClear();
+    await expect(wallet.pay({ to: "CDEST", amount: 5n, token })).rejects.toThrow(
+      "circuit is open",
+    );
+    expect(backend.submitTransaction).not.toHaveBeenCalled();
+  });
+
+  it("create() fails fast with CircuitOpenError when the breaker is open", async () => {
+    const { wallet, backend } = build({
+      circuitBreaker: { failureThreshold: 1, openDurationMs: 60_000 },
+    });
+    backend.submitWalletCreation.mockRejectedValueOnce(new Error("deploy down"));
+    await expect(wallet.create({ username: "alice" })).rejects.toThrow("deploy down");
+
+    backend.submitWalletCreation.mockClear();
+    await expect(wallet.create({ username: "alice" })).rejects.toThrow("circuit is open");
+    expect(backend.submitWalletCreation).not.toHaveBeenCalled();
+  });
+
+  it("circuitBreaker: null disables the breaker entirely", async () => {
+    const { wallet, backend } = build({ circuitBreaker: null });
+    await wallet.connect();
+    backend.submitTransaction.mockRejectedValueOnce(new Error("down"));
+    await expect(wallet.pay({ to: "CDEST", amount: 1n, token })).rejects.toThrow("down");
+    // No fast-fail: the next call still reaches the backend.
+    backend.submitTransaction.mockClear();
+    await expect(wallet.pay({ to: "CDEST", amount: 1n, token })).resolves.toBeTruthy();
+    expect(backend.submitTransaction).toHaveBeenCalledOnce();
+  });
+});

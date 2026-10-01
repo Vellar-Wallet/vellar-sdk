@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
 import "../test-browser-context";
+import { describe, expect, it, vi } from "vitest";
 import { createMockWallet, parseArgs, runSendPayment } from "./cli-send-payment";
 
 describe("parseArgs", () => {
@@ -42,9 +42,11 @@ describe("runSendPayment", () => {
 
   it("rejects an amount with too many decimal places", async () => {
     const { wallet } = createMockWallet("testnet");
+    const create = vi.spyOn(wallet, "create");
     await expect(
       runSendPayment({ to: "GRECIPIENT", amount: "1.12345678", token: "USDC" }, wallet),
     ).rejects.toThrow(/at most 7 decimal places/);
+    expect(create).not.toHaveBeenCalled();
   });
 
   it("produces a different hash for each payment submitted through the same mock wallet", async () => {

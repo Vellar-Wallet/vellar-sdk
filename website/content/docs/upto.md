@@ -29,6 +29,41 @@ refuses the transaction if it tries — this isn't a promise the facilitator
 makes, it's a bound the contract enforces regardless of what the facilitator
 does.
 
+### For sellers
+
+To accept metered payments, register the `upto` scheme on your resource server:
+
+```ts
+import { UptoStellarScheme } from "@x402/stellar/upto/server";
+
+server.register("stellar:testnet",
+  new UptoStellarScheme({
+    contractId: "CCZL7CTRS6GWEYXDYD54DZM3OUHQW2S2A4KSU75SH275P3SFZLL4YQAN"
+  })
+);
+```
+
+Declare the route's `amount` as the **ceiling** — the maximum the buyer
+authorizes, not what you charge:
+
+```ts
+amount: "1000000",  // buyer authorizes up to 1.0 USDC
+```
+
+After serving the resource, supply the actual metered amount in
+`extra.actualAmount`:
+
+```ts
+extra: { actualAmount: "250000" }  // buyer pays 0.25 USDC
+```
+
+**Omit `actualAmount` and the facilitator settles the full ceiling** — a silent
+overcharge, not an error.
+
+`wallet.x402` cannot pay `upto` yet. Sellers accepting only `upto` cannot be
+paid by SDK buyers today. Advertise both schemes until `upto` wallet support
+lands.
+
 ## Using it
 
 `GET /supported` now advertises both schemes for `stellar:testnet`:
@@ -41,7 +76,7 @@ does.
       "scheme": "upto",
       "network": "stellar:testnet",
       "extra": {
-        "uptoContract": "CDHPA64M73TUTEM4MMHIWIXINBQXH7JJXFGZMGH22VJWFJFROMR6QV2S",
+        "uptoContract": "CCZL7CTRS6GWEYXDYD54DZM3OUHQW2S2A4KSU75SH275P3SFZLL4YQAN",
         "areFeesSponsored": true
       }
     }
@@ -155,20 +190,23 @@ page — every value below is independently checkable.
 
 | | |
 | --- | --- |
-| Contract ID (testnet) | `CDHPA64M73TUTEM4MMHIWIXINBQXH7JJXFGZMGH22VJWFJFROMR6QV2S` |
-| Wasm hash (on-chain) | `c276b905981eab91704ce9b9046ebb4867b164dd7e4ba0e0ecda841527d398a9` |
-| Source | `contracts/upto-stellar/` in the [facilitator repo](https://github.com/Vellar-Wallet/vellar-facilitator) — vendored verbatim (Apache-2.0) from [rail402](https://github.com/tolgayayci/rail402)'s `contracts/upto-stellar/` at commit `ff504b85ac065369dc985759afe4164a4541d861`, reviewed line-by-line before vendoring |
-| Deployed | 2026-08-21, from the facilitator repo's own sponsor account |
+| Contract ID (testnet) | `CCZL7CTRS6GWEYXDYD54DZM3OUHQW2S2A4KSU75SH275P3SFZLL4YQAN` |
+| Wasm hash (on-chain) | `92365d9e5effe046a1db5b959bd2357672aef3f4b2137653c8095a0764d1f6c8` |
+| Source | `contracts/upto-vellar/` in the [facilitator repo](https://github.com/Vellar-Wallet/vellar-facilitator) — Vellar's own implementation (MIT), written from the x402 `upto` scheme specification, with the design brief committed before the implementation |
+| Deployed | 2026-09-09, from the facilitator repo's own sponsor account |
+| First settlement | `be33bb71b0a2c74c465bf0243c45e081bc7c5b66a337e2d8a5c0bbb82f54ede6`, ledger 4587956, 0.01 USDC settled against a 0.05 USDC ceiling |
 
 The on-chain wasm hash is the sha256 of the wasm, so anyone can rebuild and
 compare:
 
 ```sh
-cd contracts/upto-stellar
+cd contracts/upto-vellar
 stellar contract build
-shasum -a 256 target/wasm32v1-none/release/x402_upto_stellar.wasm
-# → c276b905981eab91704ce9b9046ebb4867b164dd7e4ba0e0ecda841527d398a9
+shasum -a 256 target/wasm32v1-none/release/x402_upto_vellar.wasm
+# → 92365d9e5effe046a1db5b959bd2357672aef3f4b2137653c8095a0764d1f6c8
 ```
+
+Built with rustc 1.96.0 and stellar-cli 26.1.0, targeting `wasm32v1-none`.
 
 Full deployment record, including the fetch-and-compare steps against the
 live contract and the first on-chain settlement's transaction hash:
@@ -184,14 +222,14 @@ Stellar ledger. It shows `upto` settlements correctly today, verified rather
 than assumed: three settlements against the hosted facilitator each appear on
 [the feed](https://explorer.vellar.xyz) with `scheme: upto`,
 `settled by: vellar`, and the metered actual amount displayed, not the
-signed ceiling — `be728773…` (0.0555 USDC of a 0.15 ceiling), `f558307e…`
+signed ceiling — `be72877332bbd7f8d38511cccf00620fb20869cfedbc7530588ca856ac646d9a`
+(ledger 4252896, 0.0555 USDC of a 0.15 ceiling), `f558307e…`
 (0.0312 of 0.08), and `12f0fa5c…` (0.0417 of 0.12); full tx hashes and the
 Horizon-confirmed record in the facilitator repo's
 [`docs/upto-deployment.md`](https://github.com/Vellar-Wallet/vellar-facilitator/blob/main/docs/upto-deployment.md).
-Per the explorer's own attribution breakdown at time of writing, 6 of 4,799 payments
-indexed across the visible testnet ecosystem carry a known facilitator, and
-all six are ours — a small, testnet-scale number stated as one, not a
-market-share claim.
+The explorer classifies x402 payments directly from Stellar ledger data. See
+[The Explorer](./reference/explorer.md) for current figures and how attribution
+works.
 
 One thing worth knowing rather than discovering: the first settlement
 attempted through this path didn't show up at all when this was verified —

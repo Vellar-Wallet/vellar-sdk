@@ -1,3 +1,4 @@
+import "../test-browser-context";
 import { afterEach, describe, expect, it } from "vitest";
 import { Keypair } from "@stellar/stellar-sdk";
 import { createSessionKeySignerFromEnv, DEFAULT_ENV_VAR } from "./signer-from-env";
