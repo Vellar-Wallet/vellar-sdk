@@ -350,3 +350,133 @@ Keys expire after 24 hours.
 2. **`src/passkeykit-connector.ts`**: Wrap `backend.submitWalletCreation` with
    `withIdempotencyKey(backend)` so retries reuse the same key.
 3. **`README.md`**: Document the `Idempotency-Key` header and server obligations.
+
+---
+
+## 14. CLI Secret-Leak Failure Matrix (#451)
+
+We implement [contrib/cli-secret-redact/cli-output.ts](cli-secret-redact/cli-output.ts)
+with tests in [contrib/cli-secret-redact/cli-secret-leak.test.ts](cli-secret-redact/cli-secret-leak.test.ts).
+
+### What It Does
+- **Routes every CLI output path through a redactor**: stdout, stderr, the `--json` envelope,
+  and error messages from dependencies.
+- **Reuses the same approach** as the MCP payer's `output.ts` (exact-match registry + shape
+  pattern for Stellar secret seeds `S…`), so the two implementations stay in sync.
+- **Never prints a stack trace** on a path that could carry argument values — `formatError`
+  emits name and message only, matching the payer's reasoning.
+
+### Test Matrix
+Each failure mode drives a DIFFERENT path through the output module and captures all three
+channels (result, stdout, stderr):
+- Error message quoting the secret (network throw)
+- stderr log containing the secret
+- stdout log containing the secret
+- JSON envelope containing the secret
+- Non-Error throw carrying the secret
+- Object throw carrying the secret
+- Guards-the-guard: asserts a leak IS caught when redact is bypassed
+
+### Integration into Core
+1. **CLI commands** (`packages/cli/src/commands/*.ts`): replace direct `console.error` / `console.log`
+   with `logStderr` / `logStdout` / `jsonStdout` from this module.
+2. **CLI startup** (`packages/cli/src/bin.ts`): call `registerSecret(secret)` once, before any
+   command handler runs.
+3. **`packages/cli/src/commands/pay.ts`**: wrap the `catch (err)` handler with `formatError`
+   instead of `err instanceof Error ? err.message : String(err)`.
+
+---
+
+## 15. Offline Signing Path for Air-Gapped Agent Keys (#452)
+
+We implement [contrib/offline-signing/offline-signer.ts](offline-signing/offline-signer.ts)
+with tests in [contrib/offline-signing/offline-signer.test.ts](offline-signing/offline-signer.test.ts).
+
+### What It Does
+A three-part split of the existing signing flow from `src/x402-signer.ts`:
+1. **`exportPayload`** — produces the exact bytes to be signed, derived from the same
+   `buildAuthorizationEntryPreimage` and `hash` path the inline signer uses. Runs
+   `assertAuthEntryInvocation` FIRST (V-1: hostile RPC cannot get an operator to sign
+   a redirected payment offline).
+2. **`assembleSignature`** — accepts a raw ed25519 signature and assembles the smart-wallet
+   signature map, including policy co-signers in the correct ScVal order.
+3. **`signOffline`** — convenience wrapper combining both for round-trip testing.
+
+### Test Coverage
+- **Byte-identity**: offline round trip produces a signature byte-identical to the inline
+  `createSessionKeySigner` for the same input.
+- **Policy co-signers**: verifies ScVal ordering with unsorted policy addresses.
+- **V-1 guard**: rejects redirected recipient and contract on the export path.
+- **Payload inspection**: exports token, recipient, amount, and expiration ledger.
+
+### Integration into Core
+Export `exportPayload` and `assembleSignature` from `src/x402-signer.ts` so offline signers
+can import them without duplicating the encoding logic.
+
+---
+
+## 16. Deterministic Replay of Recorded x402 Sessions (#453)
+
+We implement [contrib/rpc-replay-harness/rpc-replay.ts](rpc-replay-harness/rpc-replay.ts)
+with tests in [contrib/rpc-replay-harness/rpc-replay.test.ts](rpc-replay-harness/rpc-replay.test.ts).
+
+### What It Does
+- **Record mode**: captures real RPC request/response pairs, stripping secrets before writing.
+- **Replay mode**: serves recorded interactions deterministically, matched by method AND params.
+- **Strict matching**: fails loudly on an unmatched request rather than returning an empty
+  result — a silently empty simulation is exactly the failure mode that produces confusing
+  test output.
+- **Secret guarantee**: `assertNoSecretsInRecording` verifies no secret appears in a fixture
+  before writing it to disk. Recording also strips anything matching a Stellar secret seed shape.
+
+### How to Re-Record Against Testnet
+```ts
+import { recordInteractions, assertNoSecretsInRecording } from "./rpc-replay.js";
+
+const recordings = await recordInteractions(
+  [{ method: "simulateTransaction", params: { transaction: "..." } }],
+  { rpcUrl: "https://soroban-testnet.stellar.org", secrets: [process.env.SECRET!] },
+);
+assertNoSecretsInRecording(recordings, [process.env.SECRET!]);
+// Write to fixtures/soroban-rpc-recording.json
+```
+
+### Integration into Core
+Refactor `packages/mcp-x402-payer/test/hostile-rpc.test.ts` to use `createReplayHandler`
+instead of its inline HTTP server stub. The harness handles the same recording format.
+
+---
+
+## 17. Multi-Asset Selection for x402 Payment Decisions (#454)
+
+We implement [contrib/x402-multi-asset/multi-asset-selector.ts](x402-multi-asset/multi-asset-selector.ts)
+with conformance vectors in [contrib/x402-multi-asset/multi-asset-selector.test.ts](x402-multi-asset/multi-asset-selector.test.ts).
+
+### The Bug
+`selectRequirements` in `src/x402-guards.ts` picks the cheapest allowed option by comparing
+`parseAmount(a.amount) < parseAmount(cheapest.amount)`. This is correct within a single asset,
+but when candidates span multiple assets (e.g. 100 USDC vs 500 XLM), it compares numbers
+that have no common unit — the cheaper-looking option wins by accident of magnitude.
+
+### What It Does
+- **Single-asset case**: picks the cheapest within that asset (same behavior as current code).
+- **Multi-asset case with preference**: uses an ordered `preferredAssets` list — the first
+  preferred asset among the candidates is selected, then the cheapest within that asset.
+- **Multi-asset case without preference**: refuses with a clear error explaining that amounts
+  are not comparable across assets. Refusing is more defensible than guessing.
+- **Never compares base-unit amounts across assets** — the correctness bug this issue documents.
+
+### Conformance Vectors
+- Single-asset cheapest pick
+- Multi-asset refusal without preference
+- Multi-asset selection with preference
+- Cheapest within preferred asset
+- Fall-through preference list
+- Empty preference list (same as omitted)
+- None of the preferred assets offered
+- Documents the current bug (100 TOKEN_A vs 500 TOKEN_B)
+
+### Integration into Core
+Replace the `reduce` in `selectRequirements` (src/x402-guards.ts:142-144) with
+`selectWithAssetPreference` when candidates span multiple assets, or add an optional
+`preferredAssets` field to `X402PayOptions`.
