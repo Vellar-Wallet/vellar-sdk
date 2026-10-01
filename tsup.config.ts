@@ -13,6 +13,9 @@ export default defineConfig({
     // share the smart-account signing path (e.g. the MCP payer) can import the
     // guards without pulling in the wallet plumbing.
     "x402-guards": "src/x402-guards.ts",
+    // Conformance vectors for the guard layer, so a second implementation can
+    // verify itself against the same decisions.
+    "x402-guards-vectors": "src/x402-guards-vectors.ts",
     // The untrusted-data fence + its conformance vectors. Shared with the
     // facilitator so one format has one implementation.
     "x402-untrusted": "src/x402-untrusted.ts",
