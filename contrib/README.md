@@ -237,4 +237,116 @@ We implement `confirmMainnetPayment` and `formatMainnetWarning` inside
    `PayResult` return value in `withNetwork(result, config.network)` — currently `network` only
    appears inside `settlement`, which is absent on the "no payment required" / unpayable
    branches (e.g. the early return at `payer.ts:229`, the refusal branch around `payer.ts:263-268`,
-   and the no-challenge return around `payer.ts:284-289`).
+    and the no-challenge return around `payer.ts:284-289`).
+
+---
+
+## 10. Fuzz Tests for Auth-Entry Validation (#442)
+
+We add [contrib/auth-entry-fuzz/auth-entry-fuzz.test.ts](auth-entry-fuzz/auth-entry-fuzz.test.ts),
+extending the coverage in `src/x402-auth-entry.test.ts` with structurally hostile XDR inputs.
+
+### Coverage
+- **Wrong ScVal types in each arg position**: string, u32, bool, map, and vec where an address
+  or i128 is expected. Every case asserts the typed `AuthEntryMismatchError` and the specific
+  `field` — never merely that something threw.
+- **Deeply nested sub-invocations**: depth 1, 3, 10, and multiple siblings. The existing test
+  covers one level; these exercise the length comparison against arbitrarily deep nesting.
+- **i128 boundary amounts**: maximum (`2^127 - 1`), minimum (`-2^127`), negative, and zero.
+  Both the refusal case (expected ≠ actual) and the acceptance case (expected = actual) at
+  the boundaries.
+- **Truncated and structurally invalid XDR**: empty buffer, single byte, random bytes,
+  truncated valid entry, and raw non-XDR text. Every case asserts the function never returns
+  normally on input it could not fully parse.
+
+### Integration into Core
+No source changes — these are additive fuzz tests for existing validation in
+`src/x402-auth-entry.ts`. A maintainer may move this file to `src/x402-auth-entry.fuzz.test.ts`.
+
+---
+
+## 11. Load Test for the x402 Payment Path (#443)
+
+We add [contrib/x402-load-test/x402-payment.load.test.ts](x402-load-test/x402-payment.load.test.ts),
+following the structure and naming of `src/payments.load.test.ts`.
+
+### What It Tests
+- **Guard layer throughput at increasing concurrency**: the pure `selectRequirements` and
+  `parseAmount` functions plus `assertAuthEntryInvocation`, driven at concurrency levels
+  [1, 5, 10, 25, 50, 100] with 200 iterations per level. Reports p50/p95 latency and throughput.
+- **Identical decisions under concurrency**: 50 workers × 100 iterations, asserting every
+  guard decision is structurally identical. Any divergence indicates shared mutable state.
+- **No unbounded memory growth**: 5,000 iterations of the full guard + validation pipeline,
+  asserting heap growth stays under 10 MB. This is the failure an agent looping for hours
+  would hit.
+
+### Integration into Core
+Wire this file into the existing load-test CI job in `.github/workflows/ci.yml` by adding
+it to the `vitest.run` command alongside `src/payments.load.test.ts`. It is excluded from
+`npm test` by the `*.load.test.ts` glob in `vitest.config.ts`.
+
+---
+
+## 12. Type-Level Verification of the Passkey-Kit Range (#444)
+
+We add [contrib/passkey-kit-range/passkey-kit-range-check.test.ts](passkey-kit-range/passkey-kit-range-check.test.ts),
+verifying that the `PasskeyKitLike` structural seam matches the real `PasskeyKit` class.
+
+### What It Checks
+- **`PasskeyKit extends PasskeyKitLike`**: the critical assignability check. If passkey-kit
+  adds a required parameter to `createWallet`/`connectWallet`, or changes the return shape,
+  this file fails at compile time.
+- **Return type shape**: destructured fields `keyIdBase64`, `contractId`, and `signedTx` from
+  `createWallet`, and `keyIdBase64` + `contractId` from `connectWallet`, verified against the
+  actual return types.
+- **`wallet` property**: must exist and be optional (the connector checks `kit.wallet` to
+  decide whether to reconnect).
+- **`connectWallet` keyId type**: must accept `string` (the connector passes `string` from
+  `resumeKitConnection`).
+
+### Limitations
+This verifies against the installed devDependency (`^0.16.5`, the upper end of the declared
+range `>=0.13.0 <0.17.0`). The lower end (0.13.0) would require installing that version in a
+separate CI step — if the seam breaks there, the correct fix may be narrowing the declared
+range rather than widening the seam.
+
+### Integration into Core
+No source changes. Runs as part of `npm test` (hermetic, type-level only). If the seam needs
+narrowing, update the `peerDependencies` range in `package.json`.
+
+---
+
+## 13. Idempotency Key for Wallet Backend Submission (#446)
+
+We implement [contrib/idempotency-key/idempotency-key.ts](idempotency-key/idempotency-key.ts)
+with tests in [contrib/idempotency-key/idempotency-key.test.ts](idempotency-key/idempotency-key.test.ts).
+
+### What It Does
+- **Generates a UUID idempotency key per logical submission** (not per attempt). The same key
+  is reused across retries of the same submission so the backend can deduplicate.
+- **Distinguishes definite from ambiguous failures**: DNS resolution failure and connection
+  refused mean the backend never saw the request (safe to retry with a fresh key via
+  `DefiniteNetworkError`). Timeouts and connection resets are ambiguous — the request may
+  have been received (surfaced as `AmbiguousSubmissionError` with the key attached).
+- **Retries up to 3 times** on ambiguous failures with exponential backoff (100ms, 200ms,
+  400ms).
+- **Documents the server contract**: the backend must read `Idempotency-Key` from the request
+  header and return the original response on a repeat key.
+
+### Server Contract
+```
+POST /wallet/create
+Header: Idempotency-Key: <uuid>
+Body:   { keyId, contractId, network, signedTx }
+
+Same key → original 200 (deduplicated).
+Same key, in-flight → 409 Conflict.
+Same key, original failed → allow retry.
+Keys expire after 24 hours.
+```
+
+### Integration into Core
+1. **`src/http-backend.ts`**: Accept an optional `Idempotency-Key` header on POST `/wallet/create`.
+2. **`src/passkeykit-connector.ts`**: Wrap `backend.submitWalletCreation` with
+   `withIdempotencyKey(backend)` so retries reuse the same key.
+3. **`README.md`**: Document the `Idempotency-Key` header and server obligations.
