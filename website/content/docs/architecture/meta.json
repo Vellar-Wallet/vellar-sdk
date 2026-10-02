@@ -1,0 +1,11 @@
+{
+  "pages": [
+    "overview",
+    "settlement-path",
+    "channel-pool",
+    "catalog-integrity",
+    "spending-policies",
+    "threat-model",
+    "search-and-retrieval"
+  ]
+}

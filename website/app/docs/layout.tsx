@@ -1,50 +1,16 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
-import { DocsNav } from "./docs-nav";
-import { DocsTabs } from "./docs-tabs";
+import { getTabPageTrees } from "@/lib/fuma-page-tree";
+import { baseLayoutOptions } from "@/lib/layout-shared";
+import { DocsShell } from "./docs-shell";
 
-// Docs shell: brand topbar + section tab row + section-grouped sidebar +
-// content column. The tab row and sidebar nav are client components (both read
-// the pathname to resolve the active tab, since this layout sits above the
-// [...slug] segment and receives no params); everything else is a server
-// component. Self-contained — no dependency on the wallet app.
-
+// Docs shell: brand topbar (via DocsLayout's nav/links slots, see
+// lib/layout-shared.ts) + tab row + tab-scoped sidebar + content column.
+// DocsShell (client) picks the right pre-built tree for the current
+// pathname and renders DocsLayout with it.
 export default function DocsLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="docs-root">
-      <header className="docs-topbar">
-        <Link href="/" className="docs-brand">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className="docs-wordmark" src="/logo-mark.png" alt="Vellar SDK" />
-        </Link>
-        <div className="docs-topbar-spacer" />
-        <a
-          href="https://explorer.vellar.xyz"
-          className="docs-toplink"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Explorer
-        </a>
-        <a
-          href="https://github.com/Vellar-Wallet/vellar-facilitator"
-          className="docs-toplink"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          GitHub
-        </a>
-        <a href="https://vellar.xyz" className="docs-launch">
-          Open Vellar Wallet
-        </a>
-      </header>
-
-      <DocsTabs />
-
-      <div className="docs-body">
-        <DocsNav />
-        <main className="docs-content">{children}</main>
-      </div>
-    </div>
+    <DocsShell trees={getTabPageTrees()} baseOptions={baseLayoutOptions()}>
+      {children}
+    </DocsShell>
   );
 }

@@ -4,3 +4,5 @@ out/
 *.tsbuildinfo
 next-env.d.ts
 .DS_Store
+# fumadocs-mdx generated source cache (built from content/docs + lib/source.ts)
+.source/

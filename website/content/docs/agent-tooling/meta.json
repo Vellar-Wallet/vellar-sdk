@@ -1,0 +1,9 @@
+{
+  "pages": [
+    "mcp-payer",
+    "policies",
+    "cli",
+    "vscode",
+    "agent-keys"
+  ]
+}

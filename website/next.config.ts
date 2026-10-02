@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { createMDX } from "fumadocs-mdx/next";
 
 const nextConfig: NextConfig = {
   // Docs site — deployed standalone to docs.vellar.xyz.
@@ -15,4 +16,11 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Wraps the config with fumadocs-mdx's Next.js plugin: compiles content/docs
+// (via lib/fuma-source.ts's defineDocs + source.config.ts's global MDX
+// options) into importable page data. Every docs route stays statically
+// generated (generateStaticParams in app/docs/[...slug]/page.tsx) — this
+// plugin only changes how .md files are compiled, not Next's rendering mode.
+const withMDX = createMDX();
+
+export default withMDX(nextConfig);

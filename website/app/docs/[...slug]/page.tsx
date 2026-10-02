@@ -1,12 +1,25 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { DOC_PAGES, getDocMarkdown, getDocPage } from "@/lib/docs";
+import {
+  PageArticle,
+  PageBreadcrumb,
+  PageFooter,
+  PageRoot,
+  PageTOC,
+  PageTOCItems,
+  PageTOCTitle,
+} from "fumadocs-ui/layouts/docs/page";
+import { createRelativeLink } from "fumadocs-ui/mdx";
+import { DOC_PAGES, getDocPage } from "@/lib/docs-registry";
+import { findPagerNeighbours, getTabPageTrees } from "@/lib/fuma-page-tree";
+import { source } from "@/lib/fuma-source";
 import { CopyForAgentButton } from "../copy-button";
-import { Markdown } from "../markdown";
+import { getMDXComponents } from "../mdx-components";
 
-// Statically generate one page per doc in the registry. A catch-all route, so
-// a nested slug ("getting-started/quickstart") arrives as path segments.
+// Statically generate one page per doc in the registry. A catch-all route
+// (required, not optional — /docs itself is its own page.tsx that redirects
+// to the first registry entry, see app/docs/page.tsx), so a nested slug
+// ("getting-started/quickstart") arrives as path segments.
 export function generateStaticParams() {
   return DOC_PAGES.map((p) => ({ slug: p.slug.split("/") }));
 }
@@ -25,45 +38,48 @@ export async function generateMetadata({
 export default async function DocPage({ params }: { params: Promise<{ slug: string[] }> }) {
   const { slug: segments } = await params;
   const slug = segments.join("/");
-  const page = getDocPage(slug);
+  const registryPage = getDocPage(slug);
+  if (!registryPage) notFound();
+
+  const page = source.getPage(segments);
   if (!page) notFound();
 
-  const markdown = getDocMarkdown(slug);
-  const index = DOC_PAGES.findIndex((p) => p.slug === slug);
-  const prev = index > 0 ? DOC_PAGES[index - 1] : undefined;
-  const next = index < DOC_PAGES.length - 1 ? DOC_PAGES[index + 1] : undefined;
+  const MDX = page.data.body;
+  const url = `/docs/${slug}`;
+
+  // Prev/next walk the same tab-scoped tree the sidebar renders
+  // (lib/fuma-page-tree.ts) — so a hidden page (e.g. hackathon, which
+  // belongs to no tab's tree) can never appear as a neighbour, and the
+  // order matches DOC_PAGES exactly, since that's how the tree itself was
+  // built.
+  const tree = getTabPageTrees()[registryPage.tab];
+  const { previous, next } = findPagerNeighbours(tree, url);
 
   return (
-    <article className="docs-article">
-      <div className="docs-head">
-        <div>
-          <p className="docs-eyebrow mono">{page.section}</p>
-          <h1 className="docs-title">{page.title}</h1>
+    <PageRoot toc={{ toc: page.data.toc }}>
+      <PageTOC>
+        <PageTOCTitle />
+        <PageTOCItems />
+      </PageTOC>
+      <PageArticle>
+        <PageBreadcrumb />
+        <div className="docs-head">
+          <div>
+            <p className="docs-eyebrow mono">{registryPage.section}</p>
+            <h1 className="docs-title">{registryPage.title}</h1>
+          </div>
+          <CopyForAgentButton slug={slug} />
         </div>
-        <CopyForAgentButton slug={slug} />
-      </div>
-      <div className="docs-prose">
-        <Markdown>{markdown}</Markdown>
-      </div>
-
-      <nav className="docs-pager">
-        {prev ? (
-          <Link href={`/docs/${prev.slug}`} className="docs-pager-link">
-            <span className="docs-pager-dir">← Previous</span>
-            <span className="docs-pager-title">{prev.title}</span>
-          </Link>
-        ) : (
-          <span />
-        )}
-        {next ? (
-          <Link href={`/docs/${next.slug}`} className="docs-pager-link docs-pager-next">
-            <span className="docs-pager-dir">Next →</span>
-            <span className="docs-pager-title">{next.title}</span>
-          </Link>
-        ) : (
-          <span />
-        )}
-      </nav>
-    </article>
+        <p className="docs-description">{registryPage.description}</p>
+        <div className="docs-prose prose">
+          <MDX
+            components={getMDXComponents({
+              a: createRelativeLink(source, page),
+            })}
+          />
+        </div>
+        <PageFooter items={{ previous, next }} className="docs-pager" />
+      </PageArticle>
+    </PageRoot>
   );
 }

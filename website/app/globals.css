@@ -1,17 +1,40 @@
 /* ============================================================
-   Vellar SDK docs — "paper & signals" docs UI, self-contained.
+   Vellar SDK docs — "paper & signals" docs UI, on Fumadocs.
    Token values are a copy of the system source of truth
    (vellar-dapp: apps/web/app/landing/landing.css .lp block) — keep in
    sync; a shared token sheet is the eventual home.
 
-   Same rules as every Vellar surface: white paper ground, forest ink,
-   zero border-radius with 45° cut corners (two-layer clip borders), no
-   elevation shadows, Cabinet Grotesk display, mono only for genuinely
-   monospaced content. Code blocks invert to ink panels — the docs'
-   section-level dark moment.
+   White paper ground, forest ink, zero border-radius (square corners — the
+   brand's 45° cut-corner treatment was tried during the Fumadocs migration
+   and then dropped everywhere; there is no clip-path anywhere in this
+   file), no elevation shadows, Cabinet Grotesk display, mono only for
+   genuinely monospaced content. Code blocks use fumadocs' own light default
+   background (bg-fd-card) rather than a custom dark panel — two earlier
+   passes (brand forest-ink, then a neutral charcoal) both read as an
+   unwanted dark box once seen rendered, see the comment above
+   `.docs-prose .shiki` below.
    Security/status text on white (AA-checked): ok #0d7a55 · bad #c2372b.
+
+   Structure: Tailwind v4 + fumadocs' CSS contract first (its `--color-fd-*`
+   theme tokens, carrying the brand palette into every fumadocs component —
+   sidebar, search dialog, callouts, etc. — without overriding their classes
+   directly, per the decision to theme *through* fumadocs' contract rather
+   than fight it with raw class overrides), then our own brand primitives
+   (--paper/--ink/etc., unchanged names from the pre-migration CSS so nothing
+   else in this file needed renaming), then the `.docs-*` component styles
+   that survive the migration (topbar, tab row, mermaid panel, pager, copy
+   button) layered on top of fumadocs' generated markup. Classes fumadocs
+   itself renders directly (sidebar links, search dialog, TOC, callouts,
+   cards) are intentionally NOT re-styled here with bespoke `.docs-*` rules —
+   they keep fumadocs' own default shapes, themed only through the
+   `--color-fd-*` variables below.
    ============================================================ */
 
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+
+/* ---- Brand primitives (unchanged from the pre-migration token sheet) ---- */
 :root {
   --paper: #ffffff;
   --paper-tint: #f5f9f6;
@@ -26,47 +49,81 @@
   --sun-soft: #ffefc9;
   --ok: #0d7a55;
   --bad: #c2372b;
-  --on-dark: #ffffff;
-  --on-dark-soft: rgba(255, 255, 255, 0.78);
-  --line-dark: rgba(255, 255, 255, 0.16);
 
   --display: "Cabinet Grotesk", "Plus Jakarta Sans", system-ui, sans-serif;
   --body: "Plus Jakarta Sans", system-ui, sans-serif;
   --mono-stack: "Space Mono", ui-monospace, monospace;
+}
 
-  /* Cut shapes + 1px-inset inner shapes (the two-layer border) */
-  --clip-card: polygon(0 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%);
-  --clip-card-in: polygon(
-    1px 1px,
-    calc(100% - 1px) 1px,
-    calc(100% - 1px) calc(100% - 16.41px),
-    calc(100% - 16.41px) calc(100% - 1px),
-    1px calc(100% - 1px)
-  );
-  --clip-sm: polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%);
-  --clip-sm-in: polygon(
-    1px 1px,
-    calc(100% - 1px) 1px,
-    calc(100% - 1px) calc(100% - 10.41px),
-    calc(100% - 10.41px) calc(100% - 1px),
-    1px calc(100% - 1px)
-  );
-  --side-clip: polygon(
-    0 0,
-    calc(100% - 20px) 0,
-    100% 20px,
-    100% calc(100% - 20px),
-    calc(100% - 20px) 100%,
-    0 100%
-  );
-  --side-clip-in: polygon(
-    1px 1px,
-    calc(100% - 20.41px) 1px,
-    calc(100% - 1px) 20.41px,
-    calc(100% - 1px) calc(100% - 20.41px),
-    calc(100% - 20.41px) calc(100% - 1px),
-    1px calc(100% - 1px)
-  );
+/* Dark variant of the same brand primitives — same relationship as light
+   mode (neutral ground + neutral ink, mint/sun reserved as accents), just
+   inverted in lightness rather than in hue identity. --paper/--paper-tint
+   are true hue-neutral charcoal (R≈G≈B, no channel bias at all) — two prior
+   passes both still had a green-weighted ground (first a literal forest
+   green #0a211c, then a "neutral-ish" #0d1412/#141c19 that still carried a
+   +4–8 green-over-red/blue bias per channel) and at near-black lightness
+   even that small a bias reads as "green" once it fills a large flat
+   surface — a callout box or a table body, not just a thin sidebar strip,
+   is where it actually became visible. Ink is a neutral off-white, not
+   mint-tinted, so body text carries no green cast either; mint/sun stay
+   lifted for contrast against the darker base, since they're the part
+   that's supposed to read as brand color. Scoped under fumadocs' own
+   `.dark` class (next-themes toggles this at the <html> level) so it
+   participates in the same toggle as every fumadocs component. */
+:root.dark {
+  --paper: #0e0e0f;
+  --paper-tint: #18181a;
+  --ink: #f2f5f4;
+  --ink-soft: rgba(242, 245, 244, 0.74);
+  --ink-faint: rgba(242, 245, 244, 0.55);
+  --line: rgba(242, 245, 244, 0.14);
+  --line-strong: rgba(242, 245, 244, 0.28);
+  --mint: #4ff3bc;
+  --mint-soft: rgba(79, 243, 188, 0.16);
+  --sun: #ffd874;
+  --sun-soft: rgba(255, 216, 116, 0.16);
+  --ok: #3fe3a6;
+  --bad: #ff6b5b;
+}
+
+/* ---- Fumadocs' own theme contract, carrying the brand into every
+   fumadocs-rendered component (sidebar, search dialog, callouts, cards,
+   code blocks) without touching their internal class names. ---- */
+/* Tells fumadocs' own sticky sidebar/TOC/etc. how much fixed chrome sits
+   above its layout (our topbar + tab row, both rendered as DocsLayout
+   siblings — see app/docs/docs-shell.tsx), via its own --fd-banner-height
+   variable — the generic "extra fixed header space" slot fumadocs computes
+   --fd-sidebar-top from (see fumadocs-ui/components/layout/sidebar.js),
+   intended for exactly this kind of custom chrome above its layout. */
+:root {
+  --fd-banner-height: 112px;
+}
+
+@theme {
+  --color-fd-background: var(--paper);
+  --color-fd-foreground: var(--ink);
+  --color-fd-muted: var(--paper-tint);
+  --color-fd-muted-foreground: var(--ink-soft);
+  --color-fd-popover: var(--paper);
+  --color-fd-popover-foreground: var(--ink);
+  --color-fd-card: var(--paper-tint);
+  --color-fd-card-foreground: var(--ink);
+  --color-fd-border: var(--line);
+  --color-fd-primary: var(--ink);
+  --color-fd-primary-foreground: var(--paper);
+  --color-fd-secondary: var(--mint-soft);
+  --color-fd-secondary-foreground: var(--ink);
+  --color-fd-accent: var(--mint-soft);
+  --color-fd-accent-foreground: var(--ink);
+  --color-fd-ring: var(--ink);
+  --color-fd-overlay: rgba(12, 59, 49, 0.32);
+
+  --font-sans: var(--body);
+  --font-mono: var(--mono-stack);
+}
+
+:root.dark {
+  --color-fd-overlay: rgba(0, 0, 0, 0.55);
 }
 
 * {
@@ -86,24 +143,14 @@ body {
 .mono {
   font-family: var(--mono-stack);
 }
-a {
-  color: inherit;
-  text-decoration: none;
-}
 ::selection {
   background: var(--mint);
   color: var(--ink);
 }
-:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
-}
 
-.docs-root {
-  min-height: 100vh;
-}
-
-/* Topbar */
+/* Brand topbar — hand-rendered as a sibling of DocsLayout (see
+   app/docs/docs-shell.tsx's <Topbar> for why), same classes/markup as
+   pre-migration. */
 .docs-topbar {
   position: sticky;
   top: 0;
@@ -121,6 +168,9 @@ a {
   align-items: center;
   gap: 10px;
 }
+.docs-topbar-spacer {
+  flex: 1;
+}
 .docs-wordmark {
   /* asset is 1400×540 (~2.59:1); pin both dims so it can't squish */
   display: block;
@@ -129,9 +179,6 @@ a {
   object-fit: contain;
   flex-shrink: 0;
 }
-.docs-topbar-spacer {
-  flex: 1;
-}
 .docs-toplink {
   font-size: 14px;
   font-weight: 600;
@@ -139,17 +186,19 @@ a {
   padding-bottom: 2px;
   border-bottom: 3px solid transparent;
   transition: border-color 0.2s ease;
+  white-space: nowrap;
 }
 .docs-toplink:hover {
   border-bottom-color: var(--sun);
 }
 .docs-launch {
+  display: inline-flex;
+  align-items: center;
   font-size: 14px;
   font-weight: 700;
   color: var(--ink);
   background: var(--sun);
   padding: 9px 16px;
-  clip-path: var(--clip-sm);
   white-space: nowrap;
   transition:
     background 0.2s ease,
@@ -160,9 +209,11 @@ a {
   color: var(--sun);
 }
 
-/* Section tabs: a full-width band between the topbar and the sidebar. Each tab
-   swaps the whole sidebar. Sticky below the 64px topbar, at a lower z-index so
-   it slides under the topbar rather than over it. */
+/* Section tabs: a full-width band between the brand topbar and the
+   sidebar+content region (see app/docs/docs-shell.tsx for why both this and
+   the topbar are siblings of DocsLayout rather than one of its slots).
+   Sticky just below the topbar's own 64px height, at a lower z-index so it
+   slides under the topbar rather than over it. */
 .docs-tabrow {
   position: sticky;
   top: 64px;
@@ -202,101 +253,45 @@ a {
   outline-offset: -4px;
 }
 
-/* Body: sidebar + content. Full-bleed — the sidebar is pinned to the viewport's
-   left edge the way a docs site expects, so no centering max-width here. The
-   reading measure is held by .docs-article instead, not by narrowing the shell. */
-.docs-body {
+/* Page head: eyebrow + title + copy-for-agent button, same row as
+   pre-migration. DocsTitle/DocsDescription are fumadocs components rendered
+   inside this wrapper (see app/docs/[...slug]/page.tsx) — their own
+   typography classes are left alone; only this surrounding layout is ours. */
+.docs-head {
   display: flex;
   align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
 }
-/* Flush-left rail. The border is a plain border-right, NOT the two-layer
-   clip-path trick used elsewhere: that draws its fill with an
-   `inset: 0` ::before, which in a scrolling container sizes to the visible box
-   rather than the scroll height — so once the nav overflowed, everything below
-   the first viewport lost its fill and showed the bare border colour. */
-.docs-sidebar {
-  position: sticky;
-  /* 64px topbar + 48px tab row */
-  top: 112px;
-  flex-shrink: 0;
-  width: 268px;
-  height: calc(100vh - 112px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 28px 20px 40px 24px;
-  background: var(--paper);
-  border-right: 1px solid var(--line-strong);
-}
-.docs-nav-group {
-  margin-bottom: 22px;
-}
-.docs-nav-label {
-  font-size: 10px;
+.docs-eyebrow {
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink-faint);
-  margin: 0 0 10px 12px;
-}
-.docs-nav-link {
-  display: block;
-  padding: 8px 12px;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--ink-soft);
-  clip-path: var(--clip-sm);
-  transition:
-    color 0.2s ease,
-    background 0.2s ease;
-}
-.docs-nav-link:hover {
-  color: var(--ink);
-  background: var(--paper-tint);
-}
-/* Active: mint fill inside a sharp ink border, cut corner included
-   (two-layer clip — the element paints the border, ::before the fill) */
-.docs-nav-link.active {
-  position: relative;
-  color: var(--ink);
-  background: var(--ink); /* the 1px border */
-  font-weight: 700;
-}
-.docs-nav-link.active::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: var(--mint-soft);
-  clip-path: var(--clip-sm-in);
-}
-/* the clip would cut an outer focus ring — draw it inset */
-.docs-nav-link:focus-visible {
-  outline: none;
-  box-shadow: inset 0 0 0 2px var(--ink);
-}
-
-/* Content */
-.docs-content {
-  flex: 1;
-  min-width: 0;
-  padding: 40px clamp(20px, 5vw, 64px) 96px;
-}
-/* The shell is full-bleed, so the reading measure lives here. Centring inside
-   the content column keeps line length comfortable on a wide display instead of
-   pinning the text to the sidebar with dead space on the right. */
-.docs-article {
-  max-width: 860px;
-  margin: 0 auto;
+  margin: 0 0 6px;
 }
 .docs-title {
   font-family: var(--display);
   font-size: clamp(2rem, 4vw, 2.8rem);
   font-weight: 700;
   letter-spacing: -0.02em;
-  margin: 6px 0 28px;
+  margin: 6px 0 0;
+}
+.docs-description {
+  font-size: 1.05rem;
+  color: var(--ink-soft);
+  margin: 10px 0 28px;
 }
 
-/* Prose */
+/* Prose — layered on top of fumadocs' bundled Tailwind-typography `prose`
+   class (applied alongside .docs-prose in app/docs/[...slug]/page.tsx):
+   `prose` supplies sensible resets (list markers, blockquote defaults,
+   table layout) and this block supplies the brand's actual type ramp,
+   colors, and the inverted-ink code-block treatment — the same rules this
+   docs UI used pre-migration, now layered on a generic base instead of
+   being the sole source of every typographic rule. */
 .docs-prose {
   font-size: 15.5px;
   line-height: 1.72;
@@ -362,62 +357,31 @@ a {
   padding: 1px 6px;
   color: var(--ink);
 }
-/* Code blocks: the docs' inverted ink moment (cut corner on a solid fill) */
-.docs-prose pre {
-  background: var(--ink);
-  border: 0;
-  border-radius: 0;
-  clip-path: var(--clip-card);
-  padding: 18px 20px;
-  overflow-x: auto;
-  margin: 18px 0;
-}
-.docs-prose pre code {
-  background: none;
-  border: none;
-  padding: 0;
-  color: var(--on-dark);
+/* Code blocks: fumadocs' own default `CodeBlock` look (bg-fd-card light
+   panel, rounded-xl corners), left entirely unstyled here. Two earlier
+   passes tried a custom dark panel (first brand forest-ink, then a neutral
+   charcoal) and a square-corner override on top of it — both read as an
+   unwanted dark box once seen rendered, and the square corners didn't match
+   the soft-rounded light panel actually wanted. fumadocs-ui/components/
+   codeblock's `CodeBlock`/`Pre` is what every ``` fence in MDX-compiled
+   output renders through (via defaultMdxComponents.pre — see
+   app/docs/mdx-components.tsx); its defaults already match, so there is
+   nothing left to override here beyond font sizing.
+   The border/background/padding resets below undo `.docs-prose code`
+   (the inline `` `code` `` pill rule just above) specifically for a code
+   block's own <code> element: both rules are the same specificity (3
+   classes) and target different properties, so neither one overrides the
+   other — `.docs-prose code`'s pill border+background was leaking straight
+   through onto the <code> inside every fenced block, rendering as a square,
+   same-color box visibly nested inside the figure's own rounded panel. */
+.docs-prose .shiki code {
   font-size: 13px;
   line-height: 1.6;
-}
-/* Mermaid diagrams: a paper panel, not the inverted ink one code blocks get.
-   The SVG scrolls inside its own box so a wide sequence diagram never makes
-   the page scroll sideways. */
-.docs-mermaid {
-  margin: 22px 0;
-  padding: 20px;
-  background: var(--paper-tint);
-  border: 1px solid var(--line);
-  clip-path: var(--clip-card);
-  overflow-x: auto;
-}
-.docs-mermaid svg {
-  display: block;
-  max-width: 100%;
-  height: auto;
-  margin: 0 auto;
-}
-/* Pre-render and no-JS fallback: the diagram source, legible rather than styled
-   as a finished picture. */
-.docs-mermaid-source {
-  margin: 22px 0;
-  padding: 18px 20px;
-  background: var(--paper-tint);
-  border: 1px solid var(--line);
-  clip-path: var(--clip-card);
-  overflow-x: auto;
-  font-family: var(--mono-stack);
-  font-size: 12.5px;
-  line-height: 1.6;
-  color: var(--ink-soft);
-}
-.docs-mermaid-source code {
   background: none;
   border: none;
+  border-radius: 0;
   padding: 0;
-  color: inherit;
 }
-
 .docs-prose table {
   width: 100%;
   border-collapse: collapse;
@@ -459,107 +423,59 @@ a {
   margin: 36px 0;
 }
 
-/* Pager — cut-corner two-layer cards */
-.docs-pager {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  margin-top: 56px;
+/* Mermaid diagrams: a paper panel, not fumadocs' default code-block
+   treatment (the ```mermaid fence never reaches Shiki — see
+   source.config.ts). The SVG scrolls inside its own box so a wide sequence
+   diagram never makes the page scroll sideways. */
+.docs-mermaid {
+  margin: 22px 0;
+  padding: 20px;
+  background: var(--paper-tint);
+  border: 1px solid var(--line);
+  overflow-x: auto;
 }
-.docs-pager-link {
+.docs-mermaid svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+/* Pre-render and no-JS fallback: the diagram source, legible rather than
+   styled as a finished picture. */
+.docs-mermaid-source {
+  margin: 22px 0;
+  padding: 18px 20px;
+  background: var(--paper-tint);
+  border: 1px solid var(--line);
+  overflow-x: auto;
+  font-family: var(--mono-stack);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+.docs-mermaid-source code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+}
+
+/* Pager, reapplied on top of fumadocs' Footer component.
+   app/docs/[...slug]/page.tsx passes both the previous/next items (via
+   findNeighbour against our custom per-tab tree) AND this className
+   directly to <DocsPage footer={{ items, className: "docs-pager" }}> —
+   Footer spreads an unrecognised prop like `className` straight onto its
+   own wrapper <div>, which is the only hook it exposes (fumadocs ships no
+   semantic class/data-attribute on the footer or its per-item links, just
+   Tailwind utility classes — so targeting those directly here would
+   silently break on any utility-class reshuffle in a future fumadocs
+   release). Shaping only this wrapper and its direct <a> children leaves
+   fumadocs' own classes (spacing, colors, hover states) untouched. */
+.docs-pager > a {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 16px 20px;
-  min-width: 180px;
-  background: var(--line-strong); /* the 1px border */
-  clip-path: var(--clip-card);
-  transition: translate 0.2s ease;
-}
-.docs-pager-link::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: var(--paper);
-  clip-path: var(--clip-card-in);
-}
-.docs-pager-link:hover {
-  translate: 0 -2px;
-}
-.docs-pager-next {
-  text-align: right;
-  align-items: flex-end;
-}
-.docs-pager-dir {
-  font-size: 12px;
-  color: var(--ink-faint);
-}
-.docs-pager-title {
-  font-weight: 700;
-  color: var(--ink);
 }
 
-/* Mobile */
-.docs-menu-btn {
-  display: none;
-}
-@media (max-width: 860px) {
-  .docs-menu-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 10px 16px;
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--ink);
-    background: var(--sun);
-    border: none;
-    clip-path: var(--clip-sm);
-    position: fixed;
-    right: 16px;
-    bottom: 16px;
-    z-index: 60;
-    cursor: pointer;
-  }
-  .docs-sidebar {
-    position: fixed;
-    /* clears the topbar and the tab row, same as the desktop rail */
-    top: 112px;
-    left: 0;
-    z-index: 55;
-    height: calc(100vh - 112px);
-    width: 260px;
-    margin: 0;
-    clip-path: none;
-    transform: translateX(-100%);
-    transition: transform 0.2s ease;
-    background: var(--paper);
-    border-right: 1px solid var(--line-strong);
-  }
-  .docs-sidebar::before {
-    display: none;
-  }
-  .docs-sidebar.open {
-    transform: translateX(0);
-  }
-  .docs-content {
-    padding: 28px 20px 96px;
-  }
-  .docs-launch {
-    display: none;
-  }
-}
-
-/* Copy-for-agent button (docs page header) */
-.docs-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
+/* Copy-for-agent button (docs page header) — unchanged from pre-migration. */
 .docs-copy {
   position: relative;
   display: flex;
@@ -622,4 +538,10 @@ a {
 .docs-copy-menu a:hover {
   color: var(--ink);
   background: var(--paper-tint);
+}
+
+@media (max-width: 860px) {
+  .docs-launch {
+    display: none;
+  }
 }
