@@ -1,5 +1,6 @@
 import "../test-browser-context";
 import { describe, expect, it } from "vitest";
+import "../test-browser-context";
 import { createMockVellarWallet, createMockWalletBackend } from "./mock-full-backend";
 
 const token = { symbol: "USDC", contractId: "CUSDCMOCK", decimals: 7 };
