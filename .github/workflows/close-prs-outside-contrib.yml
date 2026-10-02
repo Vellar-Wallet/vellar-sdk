@@ -3,7 +3,7 @@ name: Close PRs touching files outside contrib/
 on:
   pull_request_target:
     types: [opened, reopened, ready_for_review, edited, synchronize]
-    branches: [drips]
+    branches: [dev]
 
 permissions:
   pull-requests: write
@@ -52,7 +52,7 @@ jobs:
                 "",
                 list + more,
                 "",
-                `Please open a new PR with your changes scoped to \`contrib/\` only. See [CONTRIBUTING.md](${repoUrl}/blob/main/CONTRIBUTING.md) and [contrib/README.md](${repoUrl}/blob/main/contrib/README.md). If your assigned issue genuinely needs changes elsewhere, say so on the issue first — don't open a PR outside \`contrib/\`.`,
+                `Please open a new PR with your changes scoped to \`contrib/\` only, targeting \`dev\`. See [CONTRIBUTING.md](${repoUrl}/blob/main/CONTRIBUTING.md) and [contrib/README.md](${repoUrl}/blob/main/contrib/README.md). If your assigned issue genuinely needs changes elsewhere, say so on the issue first — don't open a PR outside \`contrib/\`.`,
                 "",
                 "Questions? Ask in the [Telegram group](https://t.me/+RWPCKXXJTj45Njk0).",
               ].join("\n"),

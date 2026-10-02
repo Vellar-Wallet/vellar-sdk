@@ -1,7 +1,7 @@
 {
   "name": "vellar-sdk",
-  "version": "0.4.0",
-  "description": "Passkey smart-wallet SDK for Stellar \u2014 add passkey login, a Soroban smart account, fee-sponsored payments, and programmable policies to your app.",
+  "version": "0.6.2",
+  "description": "Passkey smart-wallet SDK for Stellar — add passkey login, a Soroban smart account, fee-sponsored payments, and programmable policies to your app.",
   "license": "Apache-2.0",
   "type": "module",
   "sideEffects": false,
@@ -25,21 +25,91 @@
   "exports": {
     ".": {
       "source": "./src/index.ts",
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./react": {
+      "source": "./src/react.ts",
+      "import": {
+        "types": "./dist/react.d.ts",
+        "default": "./dist/react.js"
+      },
+      "require": {
+        "types": "./dist/react.d.cts",
+        "default": "./dist/react.cjs"
+      }
     },
     "./balances": {
       "source": "./src/balances.ts",
-      "types": "./dist/balances.d.ts",
-      "import": "./dist/balances.js",
-      "require": "./dist/balances.cjs"
+      "import": {
+        "types": "./dist/balances.d.ts",
+        "default": "./dist/balances.js"
+      },
+      "require": {
+        "types": "./dist/balances.d.cts",
+        "default": "./dist/balances.cjs"
+      }
     },
     "./rpc": {
       "source": "./src/rpc.ts",
-      "types": "./dist/rpc.d.ts",
-      "import": "./dist/rpc.js",
-      "require": "./dist/rpc.cjs"
+      "import": {
+        "types": "./dist/rpc.d.ts",
+        "default": "./dist/rpc.js"
+      },
+      "require": {
+        "types": "./dist/rpc.d.cts",
+        "default": "./dist/rpc.cjs"
+      }
+    },
+    "./x402-guards": {
+      "source": "./src/x402-guards.ts",
+      "import": {
+        "types": "./dist/x402-guards.d.ts",
+        "default": "./dist/x402-guards.js"
+      },
+      "require": {
+        "types": "./dist/x402-guards.d.cts",
+        "default": "./dist/x402-guards.cjs"
+      }
+    },
+    "./x402-untrusted": {
+      "source": "./src/x402-untrusted.ts",
+      "import": {
+        "types": "./dist/x402-untrusted.d.ts",
+        "default": "./dist/x402-untrusted.js"
+      },
+      "require": {
+        "types": "./dist/x402-untrusted.d.cts",
+        "default": "./dist/x402-untrusted.cjs"
+      }
+    },
+    "./x402-untrusted-vectors": {
+      "source": "./src/x402-untrusted-vectors.ts",
+      "import": {
+        "types": "./dist/x402-untrusted-vectors.d.ts",
+        "default": "./dist/x402-untrusted-vectors.js"
+      },
+      "require": {
+        "types": "./dist/x402-untrusted-vectors.d.cts",
+        "default": "./dist/x402-untrusted-vectors.cjs"
+      }
+    },
+    "./x402-request-auth": {
+      "source": "./src/x402-request-auth.ts",
+      "import": {
+        "types": "./dist/x402-request-auth.d.ts",
+        "default": "./dist/x402-request-auth.js"
+      },
+      "require": {
+        "types": "./dist/x402-request-auth.d.cts",
+        "default": "./dist/x402-request-auth.cjs"
+      }
     }
   },
   "main": "./dist/index.cjs",
@@ -50,19 +120,43 @@
     "README.md",
     "LICENSE"
   ],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "build": "tsup",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p packages/mcp-x402-payer/tsconfig.json && tsc --noEmit -p packages/cli/tsconfig.json",
+    "check:docs": "node scripts/check-doc-snippets.mjs",
+    "test": "vitest run",
+    "test:integration": "npm run test:integration --workspace @vellar/mcp-x402-payer",
+    "test:load": "vitest run --config vitest.load.config.ts",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build",
+    "verify:merged": "node scripts/verify-merged.mjs"
   },
   "peerDependencies": {
-    "@stellar/stellar-sdk": "^16.0.0"
+    "@stellar/stellar-sdk": "^16.0.0",
+    "passkey-kit": ">=0.13.0 <0.17.0",
+    "react": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "passkey-kit": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  },
+  "//overrides": "fast-uri: closes 4 high-severity advisories (host confusion via IDN and percent-encoded scheme; SSRF via malformed IPv6 and repeated percent-decoding), all fixed in 3.1.6. Pinned inside ajv's declared ^3.0.1 rather than an open >= range, which npm resolves to 4.x — a major bump ajv@8 never declared support for.",
+  "overrides": {
+    "fast-uri": "3.1.7"
   },
   "dependencies": {
     "zustand": "^5.0.0"
   },
   "devDependencies": {
     "@stellar/stellar-sdk": "^16.0.1",
+    "@types/react": "^19.2.17",
+    "passkey-kit": "^0.16.5",
     "tsup": "^8.5.1",
     "typescript": "^5.9.2",
     "vitest": "^3.2.0"

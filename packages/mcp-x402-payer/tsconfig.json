@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "types": ["node"],
+    // Resolve the SDK to source, mirroring the vitest alias (vitest.alias.ts).
+    // Without this, tsc follows the exports map to ../../dist/*.d.ts, which does
+    // not exist until `npm run build` — so `npm run typecheck` would depend on
+    // build order and fail on a clean checkout, which is exactly how this broke
+    // in CI. Emission of those .d.ts files is still validated by the build step.
+    "paths": {
+      "vellar-sdk": ["../../src/index.ts"],
+      "vellar-sdk/x402-guards": ["../../src/x402-guards.ts"],
+      "vellar-sdk/x402-untrusted": ["../../src/x402-untrusted.ts"],
+      "vellar-sdk/x402-untrusted-vectors": ["../../src/x402-untrusted-vectors.ts"]
+    }
+  },
+  "include": ["src", "test"]
+}

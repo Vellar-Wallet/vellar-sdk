@@ -6,12 +6,29 @@ import {
   type PasskeyKitLike,
   type WalletBackend,
 } from "./passkeykit-connector";
+import {
+  createCircuitBreakingBackend,
+  createCircuitBreaker,
+  type CircuitBreaker,
+  type CircuitBreakerOptions,
+} from "./circuit-breaker";
 import { createPaymentClient, type PaymentClient, type SacClientLike } from "./payments-client";
 import type { WalletConnector } from "./connector";
 import { createPolicyFacade, type PolicyAttachRuntime, type PolicyFacade } from "./policy-facade";
+import { createAgentsFacade, type AgentKeyRuntime, type AgentsFacade } from "./agents-facade";
 import { createX402Facade } from "./x402-facade";
 import type { FetchLike } from "./x402-client";
-import { X402NotConfiguredError, type SmartAccountX402Signer, type X402Client } from "./x402-types";
+import {
+  assertValidX402RpcUrl,
+  X402NotConfiguredError,
+  type SmartAccountX402Signer,
+  type X402Client,
+} from "./x402-types";
+import {
+  createInMemoryBudgetAttributeTracker,
+  type BudgetAttributeRule,
+  type BudgetAttributeTracker,
+} from "./x402-budget-attributes";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Vellar Wallet SDK — public client facade.
@@ -67,6 +84,12 @@ export interface VellarWalletConfig {
    */
   policyAttach?: PolicyAttachRuntime;
   /**
+   * Passkey-signed wallet-admin runtime for `wallet.agents` (mint/revoke scoped
+   * agent session keys). Wire to kit.addEd25519 / kit.remove + kit.sign +
+   * backend submit; without it `wallet.agents` calls throw a clear error.
+   */
+  agentKeys?: AgentKeyRuntime;
+  /**
    * x402 config for `wallet.x402` (agentic payments, technical-doc.md §17).
    * Without it, `wallet.x402` throws a clear error. The `signer` is chosen by the
    * caller: `createSessionKeySigner` (agent/headless ed25519) or
@@ -81,9 +104,28 @@ export interface VellarWalletConfig {
     rpcUrl?: string;
     fetchImpl?: FetchLike;
     expirationLedgerOffset?: number;
+    /**
+     * Attribute-based scoping for the session key's x402 budget (#225):
+     * merchant, category, and time-window rules checked before a payment is
+     * built or signed, on top of (never instead of) each call's `maxAmount`
+     * and the on-chain spending-limit policy. See
+     * ./x402-budget-attributes.ts for what this does and does not guarantee.
+     */
+    budgetAttributes?: readonly BudgetAttributeRule[];
+    /** Running-spend accounting for `budgetAttributes` rules with a
+     * `periodMaxAmount`. Defaults to an in-memory, process-lifetime tracker
+     * when `budgetAttributes` includes one and no tracker is supplied. */
+    budgetAttributeTracker?: BudgetAttributeTracker;
   };
   /** RPC URL for x402 simulation when `x402.rpcUrl` is not given. */
   rpcUrl?: string;
+  /**
+   * Circuit breaker for calls to the vellar-facilitator backend (create,
+   * connect, and payment submission). Protects consumers from a downstream
+   * outage turning every call into a slow failure. Omit for the defaults
+   * (threshold 5, open 30s); pass `null` to disable the breaker entirely.
+   */
+  circuitBreaker?: CircuitBreakerOptions | null;
 }
 
 export interface PayInput {
@@ -103,6 +145,8 @@ export interface PayInput {
 export interface VellarWallet {
   /** The current session, or null before create/connect. */
   readonly session: WalletSession | null;
+  /** Subscribe to session changes; returns an unsubscribe function. */
+  subscribe(listener: () => void): () => void;
   /** Register a passkey and create the smart account. Prompts WebAuthn. */
   create(input?: { username?: string }): Promise<WalletSession>;
   /** Reconnect with an existing passkey. Prompts WebAuthn (or resumes silently
@@ -124,6 +168,9 @@ export interface VellarWallet {
    * `apiUrl`; `deploy` additionally requires `policyAttach`.
    */
   readonly policies: PolicyFacade;
+  /** Agent session keys: mint/revoke policy-limited signers ("give your agent
+   * a budget, not your keys"). Requires `agentKeys` in the config. */
+  readonly agents: AgentsFacade;
   /**
    * x402 agentic payments (technical-doc.md §17): fetch a resource, transparently
    * paying an HTTP-402 challenge from this smart account. The budget is enforced
@@ -144,9 +191,22 @@ export interface VellarWallet {
 export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
   const signedToXdr = config.signedToXdr ?? defaultSignedToXdr;
 
+  // The backend carries every call the SDK makes to the vellar-facilitator
+  // (deploy submission, reconnect lookup, payment submission). Funnel them
+  // through a circuit breaker so a downstream outage fast-fails instead of
+  // hanging every consumer call. `config.circuitBreaker === null` opts out; any
+  // other value (or omission) uses the defaults or the supplied options.
+  const breaker: CircuitBreaker | null =
+    config.circuitBreaker === null
+      ? null
+      : createCircuitBreaker(config.circuitBreaker ?? {});
+  const backend = breaker
+    ? createCircuitBreakingBackend(config.backend, breaker)
+    : config.backend;
+
   const connector = createPasskeyKitConnector({
     kit: config.kit,
-    backend: config.backend,
+    backend,
     network: config.network,
     appName: config.appName,
     signedToXdr,
@@ -155,22 +215,39 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
   const payments = createPaymentClient({
     kit: config.kit,
     sac: config.sac,
-    backend: config.backend,
+    backend,
     network: config.network,
     isValidAddress: config.isValidAddress,
     signedToXdr,
   });
 
   let session: WalletSession | null = null;
+  const sessionListeners = new Set<() => void>();
+  const notifySession = () => {
+    for (const listener of sessionListeners) listener();
+  };
+
+  // Validate at construction so a missing/malformed RPC URL fails here, next to
+  // the config that caused it — not later inside wallet.x402.fetch(). (The
+  // facade re-validates on every call via createX402Client, in case the config
+  // object is mutated after construction.)
+  const x402RpcUrl = config.x402 ? (config.x402.rpcUrl ?? config.rpcUrl) : undefined;
+  if (config.x402) assertValidX402RpcUrl(x402RpcUrl);
 
   const x402 = createX402Facade({
     config: config.x402
       ? {
-          rpcUrl: config.x402.rpcUrl ?? config.rpcUrl ?? "",
+          rpcUrl: x402RpcUrl as string,
           network: config.network,
           simulationSourceAccount: config.x402.simulationSourceAccount,
           fetchImpl: config.x402.fetchImpl,
           expirationLedgerOffset: config.x402.expirationLedgerOffset,
+          budgetAttributes: config.x402.budgetAttributes,
+          budgetAttributeTracker:
+            config.x402.budgetAttributeTracker ??
+            (config.x402.budgetAttributes?.length
+              ? createInMemoryBudgetAttributeTracker()
+              : undefined),
         }
       : undefined,
     resolveSigner: () => {
@@ -190,6 +267,16 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
     },
   });
 
+  const agents = createAgentsFacade({
+    requireSession: () => {
+      if (!session) {
+        throw new WalletNotReadyError("Call create() or connect() before using agents");
+      }
+      return { accountId: session.accountId, keyId: session.keyId };
+    },
+    runtime: config.agentKeys,
+  });
+
   const policies = createPolicyFacade({
     // Policies need a gateway; if apiUrl is omitted every policy call fails
     // loudly with a clear message rather than hitting an empty base URL.
@@ -207,6 +294,13 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
   return {
     get session() {
       return session;
+    },
+    subscribe(listener) {
+      sessionListeners.add(listener);
+      return () => sessionListeners.delete(listener);
+    },
+    get agents(): AgentsFacade {
+      return agents;
     },
     get policies() {
       if (!config.apiUrl) {
@@ -231,11 +325,13 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
         network: config.network,
         username: input?.username,
       });
+      notifySession();
       return session;
     },
 
     async connect() {
       session = await connector.connectWallet(config.network);
+      notifySession();
       return session;
     },
 

@@ -25,6 +25,39 @@ import {
   xdr,
 } from "@stellar/stellar-sdk";
 import type { SmartAccountX402Signer } from "./x402-types";
+import {
+  assertCapability,
+  assertValidCapabilityRules,
+  type CapabilityRule,
+} from "./x402-signer-capabilities";
+
+// ── signer audit hook ──────────────────────────────────────────────────────────
+//
+// Every signer action a consumer cares about for audit logging is enumerated
+// here so callers can hook them all without magic strings. The SDK fires
+// `onSignerAction` (when configured) for each action with the actor context
+// and the outcome, so a host can ship a tamper-evident audit trail of who
+// authorized (or was denied) which payment.
+
+/** The complete set of signer actions that warrant an audit hook. */
+export type X402SignerAction = "authorize" | "deny";
+
+/** Payload passed to {@link X402SignerActionHook} for every signer action. */
+export interface X402SignerActionEvent {
+  /** Which signer action occurred. */
+  action: X402SignerAction;
+  /** The C-address actor performing (or attempting) the action. */
+  actor: string;
+  /** Whether the action succeeded or errored out. */
+  outcome: "success" | "error";
+  /** The network passphrase the action ran against. */
+  networkPassphrase: string;
+  /** Present when `outcome` is `"error"` — the thrown value. */
+  error?: unknown;
+}
+
+/** A consumer-supplied audit sink invoked for every signer action. */
+export type X402SignerActionHook = (event: X402SignerActionEvent) => void | Promise<void>;
 
 // ── raw ScVal builders (byte-identical to the wallet contract spec; verified) ──
 //
@@ -34,18 +67,26 @@ import type { SmartAccountX402Signer } from "./x402-types";
 //   Signature::Ed25519(sig)     = scvVec([sym "Ed25519", bytes(sig64)])
 //   Signature::Secp256r1(sig)   = scvVec([sym "Secp256r1", <Secp256r1Signature struct>])
 
-// stellar-sdk's scvBytes accepts a Uint8Array directly, so no Buffer is needed
-// (this package targets browsers/bundlers and does not depend on @types/node).
+// stellar-sdk's scvBytes accepts a Uint8Array at runtime, but its declaration
+// names a Node `Buffer`. This package targets browsers/bundlers and must never
+// depend on Buffer existing — and whether the `Buffer` TYPE is even in scope
+// depends on whether anything else in the workspace pulled in @types/node, which
+// is ambient and global. Going through the declared parameter type keeps this
+// file compiling either way, with no runtime change.
+type ScvBytesInput = Parameters<typeof xdr.ScVal.scvBytes>[0];
+const scvBytes = (value: Uint8Array): xdr.ScVal =>
+  xdr.ScVal.scvBytes(value as unknown as ScvBytesInput);
+
 function ed25519SignerKey(rawPk: Uint8Array): xdr.ScVal {
-  return xdr.ScVal.scvVec([xdr.ScVal.scvSymbol("Ed25519"), xdr.ScVal.scvBytes(rawPk)]);
+  return xdr.ScVal.scvVec([xdr.ScVal.scvSymbol("Ed25519"), scvBytes(rawPk)]);
 }
 
 function ed25519Signature(sig: Uint8Array): xdr.ScVal {
-  return xdr.ScVal.scvVec([xdr.ScVal.scvSymbol("Ed25519"), xdr.ScVal.scvBytes(sig)]);
+  return xdr.ScVal.scvVec([xdr.ScVal.scvSymbol("Ed25519"), scvBytes(sig)]);
 }
 
 function secp256r1SignerKey(keyId: Uint8Array): xdr.ScVal {
-  return xdr.ScVal.scvVec([xdr.ScVal.scvSymbol("Secp256r1"), xdr.ScVal.scvBytes(keyId)]);
+  return xdr.ScVal.scvVec([xdr.ScVal.scvSymbol("Secp256r1"), scvBytes(keyId)]);
 }
 
 /**
@@ -58,9 +99,9 @@ function secp256r1Signature(a: WebAuthnAssertion): xdr.ScVal {
   const entry = (name: string, val: xdr.ScVal) =>
     new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol(name), val });
   const structVal = xdr.ScVal.scvMap([
-    entry("authenticator_data", xdr.ScVal.scvBytes(a.authenticatorData)),
-    entry("client_data_json", xdr.ScVal.scvBytes(a.clientDataJSON)),
-    entry("signature", xdr.ScVal.scvBytes(a.signature)),
+    entry("authenticator_data", scvBytes(a.authenticatorData)),
+    entry("client_data_json", scvBytes(a.clientDataJSON)),
+    entry("signature", scvBytes(a.signature)),
   ]);
   return xdr.ScVal.scvVec([xdr.ScVal.scvSymbol("Secp256r1"), structVal]);
 }
@@ -84,16 +125,84 @@ function payloadHashForEntry(
   return hash(preimage.toXDR());
 }
 
-/** Set the entry's signature to the smart-wallet map `Vec[Map[key → sig]]`. */
+/**
+ * `SignerKey::Policy(address)` — a policy contract acting as a co-signer.
+ *
+ * When a signer's `SignerLimits` require a policy, the wallet's `__check_auth`
+ * looks for that policy in the signature map and invokes it. Omitting it does
+ * NOT fall back to the signer alone: the wallet rejects the entry outright.
+ * Verified on testnet — an ed25519-only map against a policy-governed wallet
+ * fails with `Error(Contract, #110)`, while the same payment carrying the policy
+ * entry reaches the policy and is judged on its merits.
+ */
+function policySignerKey(policyAddress: string): xdr.ScVal {
+  return xdr.ScVal.scvVec([
+    xdr.ScVal.scvSymbol("Policy"),
+    new Address(policyAddress).toScVal(),
+  ]);
+}
+
+/** `Signature::Policy` — a unit variant. The policy authorises by running, not
+ * by producing bytes, so there is nothing to carry. */
+function policySignature(): xdr.ScVal {
+  return xdr.ScVal.scvVec([xdr.ScVal.scvSymbol("Policy")]);
+}
+
+/**
+ * Read the resource type (contract) + action (function name) a decoded auth
+ * entry's root invocation authorizes, for a {@link CapabilityRequest}. Returns
+ * `undefined` when the root invocation isn't a contract call (nothing for a
+ * capability rule to match against) — checked entries are always contract
+ * calls in practice (x402-client only signs SEP-41 `transfer`), but a
+ * structural signer must not crash on an unexpected shape.
+ */
+function capabilityRequestFor(
+  entry: xdr.SorobanAuthorizationEntry,
+): { resourceType: string; action: string } | undefined {
+  const fn = entry.rootInvocation().function();
+  if (fn.switch().name !== "sorobanAuthorizedFunctionTypeContractFn") return undefined;
+  const call = fn.contractFn();
+  return {
+    resourceType: Address.fromScAddress(call.contractAddress()).toString(),
+    action: call.functionName().toString(),
+  };
+}
+
+/**
+ * Set the entry's signature to the smart-wallet map `Vec[Map[key → sig]]`.
+ *
+ * Soroban requires map keys in ScVal order. Both key variants are `scvVec`
+ * beginning with a symbol, so ordering is decided by that symbol first —
+ * `"Ed25519"` sorts before `"Policy"` (`E` < `P`) — and among policies by their
+ * contract-id bytes.
+ */
 function setSignatureMap(
   entry: xdr.SorobanAuthorizationEntry,
-  scKey: xdr.ScVal,
-  scSig: xdr.ScVal,
+  signerKey: xdr.ScVal,
+  signature: xdr.ScVal,
+  policyAddresses: readonly string[] = [],
 ): void {
+  const entries = [new xdr.ScMapEntry({ key: signerKey, val: signature })];
+
+  for (const policy of [...policyAddresses].sort(comparePolicyAddresses)) {
+    entries.push(new xdr.ScMapEntry({ key: policySignerKey(policy), val: policySignature() }));
+  }
+
   entry
     .credentials()
     .address()
-    .signature(xdr.ScVal.scvVec([xdr.ScVal.scvMap([new xdr.ScMapEntry({ key: scKey, val: scSig })])]));
+    .signature(xdr.ScVal.scvVec([xdr.ScVal.scvMap(entries)]));
+}
+
+/** Order two policy contract ids by their raw address bytes, as ScVal ordering does. */
+function comparePolicyAddresses(a: string, b: string): number {
+  const ab = new Address(a).toBuffer();
+  const bb = new Address(b).toBuffer();
+  for (let i = 0; i < Math.min(ab.length, bb.length); i++) {
+    const diff = (ab[i] ?? 0) - (bb[i] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return ab.length - bb.length;
 }
 
 // ── agent (ed25519) signer ─────────────────────────────────────────────────────
@@ -103,6 +212,29 @@ export interface SessionKeySignerConfig {
   address: string;
   /** The ed25519 session key secret (`S…`) attached to that wallet. */
   secretKey: string;
+  /**
+   * Policy contracts this key's `SignerLimits` require, which must appear in the
+   * signature map alongside the ed25519 entry.
+   *
+   * REQUIRED when the key is policy-governed. A policy-governed key that signs
+   * without them is rejected by the wallet before the policy is ever consulted
+   * (`Error(Contract, #110)` on testnet), which reads as a broken signer rather
+   * than a missing co-signer. Omit only for an unrestricted key.
+   */
+  policies?: readonly string[];
+  /**
+   * Audit hook fired for every signer action (`authorize` on success, `deny` on
+   * error). Pass a consumer-side sink (e.g. one that ships to an append-only log)
+   * to keep a tamper-evident record of who authorized or was denied which payment.
+   */
+  onSignerAction?: X402SignerActionHook;
+   * Client-side capability scoping (#224): restrict which resource
+   * type (contract) + action (function name) combinations this signer will
+   * sign, independent of the on-chain policy. Omit for no scoping (signs
+   * anything x402-client.ts hands it, as before). See x402-signer-capabilities.ts
+   * for what this does and does not guarantee.
+   */
+  capabilities?: readonly CapabilityRule[];
 }
 
 /**
@@ -117,14 +249,46 @@ export function createSessionKeySigner(config: SessionKeySignerConfig): SmartAcc
     throw new Error(`session-key signer address must be a contract (C…): got ${config.address}`);
   }
 
+  const policies = config.policies ?? [];
+  for (const policy of policies) {
+    if (!isContractAddress(policy)) {
+      throw new Error(`policy address must be a contract (C…): got ${policy}`);
+    }
+  }
+
+  const onAction = config.onSignerAction;
+  const fire = (
+    action: X402SignerAction,
+    outcome: "success" | "error",
+    networkPassphrase: string,
+    error?: unknown,
+  ) => onAction?.({ action, actor: config.address, outcome, networkPassphrase, error });
+  const capabilities = config.capabilities ?? [];
+  assertValidCapabilityRules(capabilities);
+
   return {
     address: config.address,
     async signAuthEntry(entryXdr, { networkPassphrase, expirationLedger }) {
+      try {
+        const entry = xdr.SorobanAuthorizationEntry.fromXDR(entryXdr, "base64");
+        assertEntryAddress(entry, config.address);
+        const payload = payloadHashForEntry(entry, networkPassphrase, expirationLedger);
+        const signature = keypair.sign(payload);
+        setSignatureMap(entry, ed25519SignerKey(rawPk), ed25519Signature(signature), policies);
+        const signed = entry.toXDR("base64");
+        await fire("authorize", "success", networkPassphrase);
+        return signed;
+      } catch (err) {
+        await fire("deny", "error", networkPassphrase, err);
+        throw err;
+      }
       const entry = xdr.SorobanAuthorizationEntry.fromXDR(entryXdr, "base64");
       assertEntryAddress(entry, config.address);
+      const request = capabilityRequestFor(entry);
+      if (request) assertCapability(capabilities, request);
       const payload = payloadHashForEntry(entry, networkPassphrase, expirationLedger);
       const signature = keypair.sign(payload);
-      setSignatureMap(entry, ed25519SignerKey(rawPk), ed25519Signature(signature));
+      setSignatureMap(entry, ed25519SignerKey(rawPk), ed25519Signature(signature), policies);
       return entry.toXDR("base64");
     },
   };
@@ -154,6 +318,17 @@ export interface PasskeyX402SignerConfig {
   address: string;
   /** The WebAuthn ceremony (host-wired; runs the passkey prompt). */
   webAuthn: WebAuthnAssertionSigner;
+  /** Policy contracts this signer's `SignerLimits` require — see
+   * {@link SessionKeySignerConfig.policies}. Same trap applies here. */
+  policies?: readonly string[];
+  /**
+   * Audit hook fired for every signer action (`authorize` on success, `deny` on
+   * error). See {@link SessionKeySignerConfig.onSignerAction}.
+   */
+  onSignerAction?: X402SignerActionHook;
+  /** Client-side capability scoping (#224) — see
+   * {@link SessionKeySignerConfig.capabilities}. Same semantics apply here. */
+  capabilities?: readonly CapabilityRule[];
 }
 
 /**
@@ -168,17 +343,48 @@ export function createPasskeyX402Signer(config: PasskeyX402SignerConfig): SmartA
   if (!isContractAddress(config.address)) {
     throw new Error(`passkey signer address must be a contract (C…): got ${config.address}`);
   }
+  const onAction = config.onSignerAction;
+  const fire = (
+    action: X402SignerAction,
+    outcome: "success" | "error",
+    networkPassphrase: string,
+    error?: unknown,
+  ) => onAction?.({ action, actor: config.address, outcome, networkPassphrase, error });
+  const capabilities = config.capabilities ?? [];
+  assertValidCapabilityRules(capabilities);
+
   return {
     address: config.address,
     async signAuthEntry(entryXdr, { networkPassphrase, expirationLedger }) {
+      try {
+        const entry = xdr.SorobanAuthorizationEntry.fromXDR(entryXdr, "base64");
+        assertEntryAddress(entry, config.address);
+        const payload = payloadHashForEntry(entry, networkPassphrase, expirationLedger);
+        const assertion = await config.webAuthn.sign(new Uint8Array(payload));
+        setSignatureMap(
+          entry,
+          secp256r1SignerKey(assertion.keyId),
+          secp256r1Signature(assertion),
+          config.policies ?? [],
+        );
+        const signed = entry.toXDR("base64");
+        await fire("authorize", "success", networkPassphrase);
+        return signed;
+      } catch (err) {
+        await fire("deny", "error", networkPassphrase, err);
+        throw err;
+      }
       const entry = xdr.SorobanAuthorizationEntry.fromXDR(entryXdr, "base64");
       assertEntryAddress(entry, config.address);
+      const request = capabilityRequestFor(entry);
+      if (request) assertCapability(capabilities, request);
       const payload = payloadHashForEntry(entry, networkPassphrase, expirationLedger);
       const assertion = await config.webAuthn.sign(new Uint8Array(payload));
       setSignatureMap(
         entry,
         secp256r1SignerKey(assertion.keyId),
         secp256r1Signature(assertion),
+        config.policies ?? [],
       );
       return entry.toXDR("base64");
     },

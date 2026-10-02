@@ -1,28 +1,49 @@
-// x402 client — the fetch wrapper + payment builder.
+// x402 client — the fetch wrapper + payment builder (smart-account path).
 //
 // Flow (proven in scripts/x402-spike/): request → 402 → decode requirements →
 // build SEP-41 transfer(from=C-address, to=payTo, amount) → sign the wallet auth
 // entry as V1 (via the injected signer) → retry with the `PAYMENT-SIGNATURE`
 // header → return the unlocked response + on-chain settlement.
 //
+// The PURE decision layer (decode / select / validate) lives in ./x402-guards so
+// payers that don't share this signing path can reuse it — see that file. It is
+// re-exported here so this module's public API is unchanged.
+//
 // Structural deps (rpc, an AssembledTransaction builder, fetch) keep this
 // unit-testable without a network. The signer is injected (ed25519 or passkey).
 
-import {
-  Address,
-  nativeToScVal,
-  rpc,
-  xdr,
-} from "@stellar/stellar-sdk";
+import { Address, nativeToScVal, rpc, xdr } from "@stellar/stellar-sdk";
 import { AssembledTransaction } from "@stellar/stellar-sdk/contract";
+import { assertAuthEntryInvocation, type ExpectedInvocation } from "./x402-auth-entry";
 import type { Network } from "./types";
 import {
+  createSignedFetch,
+  type FacilitatorRequestSigningConfig,
+} from "./x402-request-auth";
+import {
+  assertBudgetAttributes,
+  assertValidBudgetAttributeRules,
+  matchingBudgetRule,
+  type BudgetAttributeRequest,
+  type BudgetAttributeRule,
+  type BudgetAttributeTracker,
+} from "./x402-budget-attributes";
+import {
+  CAIP2_BY_NETWORK,
+  NETWORKS,
+  decodePaymentRequired,
+  decodeSettlementHeader,
+  extractRejectionReason,
+  parseAmount,
+  selectRequirements,
+  utf8ToBase64,
+} from "./x402-guards";
+import {
+  assertValidX402RpcUrl,
   DisallowedAssetError,
-  InvalidRequirementsError,
   MaxAmountExceededError,
   NoUsablePaymentOptionError,
   PaymentRejectedError,
-  type PaymentRequired,
   type PaymentRequirements,
   type SignedPayment,
   type SmartAccountX402Signer,
@@ -32,43 +53,8 @@ import {
   type X402Response,
 } from "./x402-types";
 
-/** Parse a requirement's `amount` (decimal string, base units) as a non-negative
- * i128. Throws a typed error rather than letting `BigInt(...)` throw a raw
- * SyntaxError on malformed server input. */
-function parseAmount(amount: string): bigint {
-  if (typeof amount !== "string" || !/^\d+$/.test(amount)) {
-    throw new InvalidRequirementsError(
-      `x402 requirement has a non-integer amount ${JSON.stringify(amount)}.`,
-    );
-  }
-  return BigInt(amount);
-}
-
-// Browser-safe base64 (this package targets bundlers/browsers; no Buffer/@types/node).
-function utf8ToBase64(s: string): string {
-  const bytes = new TextEncoder().encode(s);
-  let bin = "";
-  for (const b of bytes) bin += String.fromCharCode(b);
-  return btoa(bin);
-}
-function base64ToUtf8(b64: string): string {
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return new TextDecoder().decode(bytes);
-}
-
-/** CAIP-2 → the network passphrase + our Network label. */
-const NETWORKS: Record<string, { passphrase: string; network: Network }> = {
-  "stellar:testnet": {
-    passphrase: "Test SDF Network ; September 2015",
-    network: "testnet",
-  },
-  "stellar:pubnet": {
-    passphrase: "Public Global Stellar Network ; September 2015",
-    network: "mainnet",
-  },
-};
+// The pure guard layer is part of this module's published surface.
+export * from "./x402-guards";
 
 /** Minimal fetch surface (injectable for tests). */
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
@@ -87,12 +73,31 @@ export interface X402ClientDeps {
   fetchImpl?: FetchLike;
   /** Signature-expiration window in ledgers (default 12 ≈ 60s at 5s ledgers). */
   expirationLedgerOffset?: number;
+  /**
+   * Signed-request auth between this client and the facilitator (#226).
+   * When set, every outgoing facilitator request (the initial probe AND the
+   * paid retry) carries the `X-Vellar-*` signature headers from
+   * ./x402-request-auth, on top of whatever `fetchImpl` already does. Opt-in:
+   * a facilitator that does not verify these headers is unaffected either way.
+   */
+  requestSigning?: FacilitatorRequestSigningConfig;
+  /**
+   * Attribute-based scoping for the session key's budget (#225): merchant,
+   * category, and time-window rules checked BEFORE a payment is built or
+   * signed, on top of (never instead of) `maxAmount` and the on-chain
+   * spending-limit policy. Omit for no attribute scoping (the pre-#225
+   * behaviour — only `maxAmount` and the chain enforce the budget). See
+   * ./x402-budget-attributes.ts for what this does and does not guarantee.
+   */
+  budgetAttributes?: readonly BudgetAttributeRule[];
+  /** Running-spend accounting for `budgetAttributes` rules with a
+   * `periodMaxAmount`. Without it, only each rule's per-payment `maxAmount`
+   * is enforced — `periodMaxAmount` is silently not tracked. */
+  budgetAttributeTracker?: BudgetAttributeTracker;
+  /** Clock for time-window budget rules (defaults to `() => new Date()`);
+   * overridable for tests. */
+  now?: () => Date;
 }
-
-const CAIP2_BY_NETWORK: Record<Network, string> = {
-  testnet: "stellar:testnet",
-  mainnet: "stellar:pubnet",
-};
 
 // Estimated ledger close time (seconds). The facilitator fetches its own estimate
 // from Horizon (~5s on testnet/pubnet); we use the same constant so our derived
@@ -106,6 +111,13 @@ const EXPIRATION_SAFETY_MARGIN = 2;
 // Never sign an expiration less than this many ledgers out, even for a tiny
 // server timeout — below this the payment can't realistically round-trip.
 const MIN_EXPIRATION_LEDGERS = 3;
+/**
+ * Default ceiling on seller-requested signature lifetime (security audit V-7).
+ * `maxTimeoutSeconds` is attacker-controlled and previously had no upper bound
+ * here unless a caller passed `expirationLedgerOffset`. 300s / 5s = 60 ledgers,
+ * less the safety margin. See the scheme client for the measurement behind 300s.
+ */
+const DEFAULT_MAX_EXPIRATION_LEDGERS = 58;
 
 /**
  * Ledgers-from-now to set as the signature expiration. Derived from the server's
@@ -122,75 +134,53 @@ export function expirationOffsetFor(
 ): number {
   const windowLedgers = Math.ceil((maxTimeoutSeconds ?? 120) / ESTIMATED_LEDGER_SECONDS);
   let offset = windowLedgers - EXPIRATION_SAFETY_MARGIN;
-  if (ceiling !== undefined) offset = Math.min(offset, ceiling);
+  // An explicit ceiling still wins; absent one, fall back to the default bound
+  // rather than honouring whatever the seller asked for.
+  offset = Math.min(offset, ceiling ?? DEFAULT_MAX_EXPIRATION_LEDGERS);
   return Math.max(offset, MIN_EXPIRATION_LEDGERS);
 }
 
-/**
- * Pick the one payment option this client can satisfy, applying guards. Pure
- * (no network) — exported for direct testing. Filters by scheme/network, then
- * sponsored-fees, then allowedAssets (WHILE selecting, so a disallowed option
- * never shadows a later allowed one), then picks the cheapest allowed option and
- * enforces maxAmount.
- */
-export function selectRequirements(
-  decoded: PaymentRequired,
-  opts: X402PayOptions,
-  ourCaip2: string,
-): PaymentRequirements {
-  const options = decoded.accepts ?? [];
-  const onNetwork = options.filter((a) => a.scheme === "exact" && a.network === ourCaip2);
-  if (onNetwork.length === 0) {
-    throw new NoUsablePaymentOptionError(
-      `No exact/${ourCaip2} payment option offered. Server offered: ${options
-        .map((a) => `${a.scheme}/${a.network}`)
-        .join(", ") || "(none)"}`,
-    );
-  }
-  // The smart-account exact flow requires sponsored fees (the facilitator
-  // rebuilds + pays). Distinct message so a caller can tell this apart from a
-  // wrong-network/scheme miss.
-  const candidates = onNetwork.filter((a) => !(a.extra && a.extra.areFeesSponsored === false));
-  if (candidates.length === 0) {
-    throw new NoUsablePaymentOptionError(
-      "Payment option(s) do not sponsor fees (areFeesSponsored=false); the smart-account exact flow requires sponsored fees.",
-    );
-  }
-
-  const allowed = opts.allowedAssets
-    ? candidates.filter((a) => opts.allowedAssets!.includes(a.asset))
-    : candidates;
-  if (allowed.length === 0) {
-    // Every payable candidate was disallowed by allowedAssets.
-    throw new DisallowedAssetError(candidates[0]!.asset, opts.allowedAssets!);
-  }
-
-  // Prefer the cheapest allowed option (avoids overpaying when a server offers
-  // the same resource in multiple assets/amounts). parseAmount validates each,
-  // so a malformed amount throws a typed error rather than mis-sorting.
-  const usable = allowed.reduce((cheapest, a) =>
-    parseAmount(a.amount) < parseAmount(cheapest.amount) ? a : cheapest,
-  );
-
-  const required = parseAmount(usable.amount);
-  if (required > opts.maxAmount) {
-    throw new MaxAmountExceededError(required, opts.maxAmount, usable.asset);
-  }
-  return usable;
-}
-
 export function createX402Client(deps: X402ClientDeps): X402Client {
+  // Fail here, with the actionable error, not inside rpc.Server's URL parse.
+  assertValidX402RpcUrl(deps.rpcUrl);
+  // Fail on a malformed rule at construction, not mid-payment (#225 mirrors
+  // #224's assertValidCapabilityRules posture: a typo'd rule fails loudly
+  // before it can wrongly deny or wrongly admit).
+  const budgetAttributes = deps.budgetAttributes ?? [];
+  assertValidBudgetAttributeRules(budgetAttributes);
+  const now = deps.now ?? (() => new Date());
   const server = new rpc.Server(deps.rpcUrl);
-  const doFetch: FetchLike = deps.fetchImpl ?? ((url, init) => fetch(url, init));
+  const baseFetch: FetchLike = deps.fetchImpl ?? ((url, init) => fetch(url, init));
+  // Request signing wraps whatever fetch the caller already injected, so a
+  // test double or logging wrapper composes with it rather than being replaced.
+  const doFetch: FetchLike = deps.requestSigning
+    ? createSignedFetch(deps.requestSigning, baseFetch)
+    : baseFetch;
   // A hard ceiling on the derived expiration offset (undefined ⇒ no ceiling).
   const expirationCeiling = deps.expirationLedgerOffset;
   const ourCaip2 = CAIP2_BY_NETWORK[deps.network];
+
+  function budgetRequestFor(requirements: PaymentRequirements): BudgetAttributeRequest {
+    const category = requirements.extra?.category;
+    return {
+      merchant: requirements.payTo,
+      ...(typeof category === "string" ? { category } : {}),
+      amount: parseAmount(requirements.amount),
+      at: now(),
+    };
+  }
 
   async function buildSignedPayment(
     requirements: PaymentRequirements,
   ): Promise<{ header: string; amount: bigint }> {
     const net = NETWORKS[requirements.network];
     if (!net) throw new NoUsablePaymentOptionError(`Unknown network ${requirements.network}`);
+
+    // Attribute-scoped budget check (#225) — BEFORE simulation, so an
+    // out-of-budget payment never even round-trips to the RPC. Independent of
+    // (checked in addition to) maxAmount / allowedAssets in createPayment.
+    const budgetRequest = budgetRequestFor(requirements);
+    await assertBudgetAttributes(budgetAttributes, budgetRequest, deps.budgetAttributeTracker);
 
     // Build the SEP-41 transfer(from = C-address, to = payTo, amount).
     const tx = await AssembledTransaction.build({
@@ -212,9 +202,21 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
       latest.sequence + expirationOffsetFor(requirements.maxTimeoutSeconds, expirationCeiling);
 
     if (!tx.built) {
-      throw new Error("x402: failed to build the transfer transaction (simulation returned nothing).");
+      throw new Error(
+        "x402: failed to build the transfer transaction (simulation returned nothing).",
+      );
     }
     const built = tx.built;
+
+    // What we intend to authorise. `built` came back from the RPC's simulation,
+    // so its auth entries are untrusted input until compared against this.
+    const expected: ExpectedInvocation = {
+      contract: requirements.asset,
+      functionName: "transfer",
+      from: deps.signer.address,
+      to: requirements.payTo,
+      amount: parseAmount(requirements.amount),
+    };
 
     // Sign every wallet auth entry (V1) via the injected signer.
     const op = built.operations[0] as { auth?: xdr.SorobanAuthorizationEntry[] };
@@ -225,6 +227,12 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
       if (entry.credentials().switch().name !== "sorobanCredentialsAddress") continue;
       const addr = Address.fromScAddress(entry.credentials().address().address()).toString();
       if (addr !== deps.signer.address) continue;
+
+      // Security audit V-1. The credential address only establishes that the
+      // entry is ours to sign; this establishes WHAT it does. Predates the
+      // smart-account work — the classic path has always had this gap.
+      assertAuthEntryInvocation(entry, expected);
+
       const signedXdr = await deps.signer.signAuthEntry(entry.toXDR("base64"), {
         networkPassphrase: net.passphrase,
         expirationLedger,
@@ -307,46 +315,21 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
     }
 
     const settlement = readSettlement(paid, requirements, amount, deps.network);
+
+    // Record spend only now that the facilitator has actually accepted the
+    // payment — a request rejected above (over-budget on-chain, or any other
+    // 4xx) must not consume period budget it never actually spent.
+    if (deps.budgetAttributeTracker && budgetAttributes.length > 0) {
+      const rule = matchingBudgetRule(budgetAttributes, budgetRequestFor(requirements));
+      if (rule?.periodMaxAmount !== undefined) {
+        await deps.budgetAttributeTracker.record(rule, amount);
+      }
+    }
+
     return { response: paid, paid: true, settlement };
   }
 
   return { fetch: x402Fetch, createPayment };
-}
-
-// ── 402 decode / settlement read ───────────────────────────────────────────────
-
-/** Decode the 402's payment requirements. x402 v2 carries them in the
- * `PAYMENT-REQUIRED` header (base64 JSON); some servers also mirror them in the
- * body. Header wins. */
-export function decodePaymentRequired(res: Response): PaymentRequired {
-  const header =
-    res.headers.get("PAYMENT-REQUIRED") ?? res.headers.get("payment-required");
-  if (header) {
-    try {
-      return JSON.parse(base64ToUtf8(header)) as PaymentRequired;
-    } catch (err) {
-      throw new NoUsablePaymentOptionError(
-        `Malformed PAYMENT-REQUIRED header: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
-  throw new NoUsablePaymentOptionError(
-    "402 response carried no PAYMENT-REQUIRED header.",
-  );
-}
-
-function extractRejectionReason(res: Response): string | undefined {
-  const header =
-    res.headers.get("PAYMENT-REQUIRED") ?? res.headers.get("payment-required");
-  if (!header) return undefined;
-  try {
-    const decoded = JSON.parse(base64ToUtf8(header)) as {
-      error?: string;
-    };
-    return decoded.error;
-  } catch {
-    return undefined;
-  }
 }
 
 function readSettlement(
@@ -355,25 +338,13 @@ function readSettlement(
   amount: bigint,
   network: Network,
 ): X402Response["settlement"] {
-  const header =
-    res.headers.get("X-PAYMENT-RESPONSE") ??
-    res.headers.get("PAYMENT-RESPONSE") ??
-    res.headers.get("x-payment-response");
-  if (!header) return undefined;
-  try {
-    const decoded = JSON.parse(base64ToUtf8(header)) as {
-      transaction?: string;
-      payer?: string;
-    };
-    if (!decoded.transaction) return undefined;
-    return {
-      transaction: decoded.transaction,
-      payer: decoded.payer ?? requirements.payTo,
-      asset: requirements.asset,
-      amount,
-      network,
-    };
-  } catch {
-    return undefined;
-  }
+  const decoded = decodeSettlementHeader(res);
+  if (!decoded) return undefined;
+  return {
+    transaction: decoded.transaction,
+    payer: decoded.payer ?? requirements.payTo,
+    asset: requirements.asset,
+    amount,
+    network,
+  };
 }

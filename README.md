@@ -1,6 +1,6 @@
 # vellar-sdk
 
-![Vellar](assets/vellar-banner.jpg)
+<img width="5410" height="2088" alt="Full Logo White" src="https://github.com/user-attachments/assets/2647aab9-de65-4ba1-9ade-af8862351d4f" />
 
 **Passkey smart-wallet SDK for Stellar.** Add passkey login, a Soroban smart
 account, and fee-sponsored payments to your app — without handling private keys,
@@ -27,8 +27,12 @@ API reference, wallet methods, policies, and the security model.
 ## Install
 
 ```sh
-npm install vellar-sdk @stellar/stellar-sdk
+npm install vellar-sdk @stellar/stellar-sdk passkey-kit
 ```
+
+`@stellar/stellar-sdk` is a required peer; `passkey-kit` is the passkey engine
+you construct and pass in as `kit` (an optional peer of this package — the SDK
+never imports it itself).
 
 ## Quick start
 
@@ -58,8 +62,10 @@ const vellar = createVellarWallet({
     rpcUrl: TESTNET.rpcUrl,
     networkPassphrase: TESTNET.networkPassphrase,
   }),
-  // Point this at YOUR backend (see "Your backend" below). It holds the
-  // relayer/sponsor secrets — the SDK never sees them.
+  // Your backend (see "Your backend" below) — it holds the relayer/sponsor
+  // secrets, the SDK never sees them. For testnet prototyping you can point at
+  // the hosted gateway: https://vellar-backend.onrender.com (free instance,
+  // first request after idle takes 30-90s, occasionally ~2min, to wake).
   backend: createHttpWalletBackend("https://api.myapp.com"),
   isValidAddress: (a) =>
     StrKey.isValidEd25519PublicKey(a) || StrKey.isValidContract(a),
@@ -87,6 +93,64 @@ const { hash } = await vellar.pay({
 `pay()` simulates **before** the passkey prompt, so failures (e.g. insufficient
 balance) surface without asking the user to sign.
 
+## React
+
+React is optional. Install it in your app and import the binding from the
+separate `vellar-sdk/react` entry; the core package does not load React.
+
+```tsx
+import { createRoot } from "react-dom/client";
+import { PasskeyKit, SACClient } from "passkey-kit";
+import { StrKey } from "@stellar/stellar-sdk";
+import { createHttpWalletBackend, TESTNET, type VellarWalletConfig } from "vellar-sdk";
+import { VellarProvider, useWallet } from "vellar-sdk/react";
+
+const config: VellarWalletConfig = {
+  network: "testnet",
+  appName: "My App",
+  kit: new PasskeyKit({
+    rpcUrl: TESTNET.rpcUrl,
+    networkPassphrase: TESTNET.networkPassphrase,
+    walletWasmHash: TESTNET.walletWasmHash,
+  }),
+  sac: new SACClient({
+    rpcUrl: TESTNET.rpcUrl,
+    networkPassphrase: TESTNET.networkPassphrase,
+  }),
+  backend: createHttpWalletBackend("https://api.myapp.com"),
+  isValidAddress: (address) =>
+    StrKey.isValidEd25519PublicKey(address) || StrKey.isValidContract(address),
+};
+
+function WalletControls() {
+  const { session, create, connect, pay, policies, loading, error } = useWallet();
+  const run = (action: Promise<unknown>) => void action.catch(() => undefined);
+
+  return (
+    <section>
+      <p>{session?.accountId ?? "No wallet connected"}</p>
+      <button disabled={loading} onClick={() => run(create({ username: "alice" }))}>Create</button>
+      <button disabled={loading} onClick={() => run(connect())}>Connect</button>
+      <button disabled={loading || !session} onClick={() => run(pay({
+        to: "CDEST...",
+        amount: 5_0000000n,
+        token: { contractId: TESTNET.nativeTokenContractId, symbol: "XLM", decimals: 7 },
+      }))}>Pay</button>
+      {policies && <button disabled={loading} onClick={() => run(policies.listTemplates())}>Policies</button>}
+      {error instanceof Error && <p role="alert">{error.message}</p>}
+    </section>
+  );
+}
+
+createRoot(document.getElementById("root")!).render(
+  <VellarProvider config={config}><WalletControls /></VellarProvider>,
+);
+```
+
+The hook tracks session changes automatically and exposes action loading/errors.
+Create, connect, and pay retain the SDK's existing explicit passkey prompts; the
+binding never signs or approves on the user's behalf.
+
 ## Your backend
 
 Submission is fee-sponsored, which requires an OpenZeppelin Relayer API key and
@@ -94,16 +158,57 @@ a funded sponsor account. **These are secrets — they must live on your server,
 never in the browser.** So the SDK never submits directly: it hands signed
 transactions to your backend, which does the sponsored submit.
 
-`createHttpWalletBackend(apiUrl)` speaks to a gateway exposing three routes:
+`createHttpWalletBackend(apiUrl)` speaks to a gateway exposing these routes:
 
 | Route                  | Purpose                                        |
 | ---------------------- | ---------------------------------------------- |
 | `POST /wallet/create`  | Submit the deployment tx; store keyId→contract |
 | `POST /wallet/connect` | Resolve the smart-account for a known passkey  |
 | `POST /wallet/submit`  | Submit an already-signed transaction           |
+| `GET /wallet/transactions` | Read cursor-paginated account activity     |
 
 You run a backend implementing these (holding your relayer/sponsor creds). Your
 backend must also allow your app's origin via CORS.
+
+The HTTP client defaults to a 30-second per-request timeout. It retries
+idempotent activity reads at most twice with backoff; wallet creation, connect
+(which opens a server session), and transaction submission are never retried.
+Configure these settings or cancel individual requests with an `AbortSignal`:
+
+```ts
+const backend = createHttpWalletBackend("https://api.myapp.com", {
+  timeoutMs: 30_000,
+  maxRetries: 2,
+  retryDelayMs: 200,
+});
+```
+
+Read activity directly from that backend client. The cursor is opaque and can
+be passed back unchanged for the next page; an account with no history returns
+an empty `items` array.
+
+```ts
+let page = await backend.listActivity({
+  accountId: session.accountId,
+  sessionId: session.serverSessionId!,
+  network: session.network,
+  limit: 20,
+});
+
+for (const item of page.items) {
+  console.log(item.type, item.counterparty, item.amount, item.token, item.transactionHash, item.timestamp);
+}
+
+if (page.hasMore && page.nextCursor) {
+  page = await backend.listActivity({
+    accountId: session.accountId,
+    sessionId: session.serverSessionId!,
+    network: session.network,
+    limit: 20,
+    cursor: page.nextCursor,
+  });
+}
+```
 
 ## API
 
@@ -129,6 +234,100 @@ Returns a `VellarWallet`:
 | `TESTNET`                      | Testnet config: `rpcUrl`, `networkPassphrase`, `walletWasmHash`, `nativeTokenContractId` |
 | `MAINNET` / `mainnetConfig()`  | Mainnet config — see [Mainnet](#mainnet) (two values you must supply)                    |
 | `WalletApiError`               | Thrown by the HTTP backend on non-2xx responses (has `status`, `code`)                   |
+| `WalletApiTimeoutError`        | Thrown when a backend request exceeds `timeoutMs`                                        |
+| `CircuitOpenError`             | Thrown by the circuit breaker when the facilitator is down — see [Circuit breaking](#circuit-breaking) |
+| `isReachable(rpcUrl)`          | Ping an RPC endpoint for reachability (from `vellar-sdk/rpc`) — see [Health check](#health-check) |
+
+### Circuit breaking
+
+`createVellarWallet` wraps every call it makes to the vellar-facilitator backend
+(wallet deploy submission, reconnect lookup, and payment submission) in a
+[circuit breaker](https://en.wikipedia.org/wiki/Circuit_breaker_design_pattern)
+so a downstream outage can never turn every consumer call into a hang or a slow
+failure.
+
+It starts **closed** and simply passes calls through. After `failureThreshold`
+consecutive failures it **opens**: every further call fails immediately (no
+network hop) with a typed `CircuitOpenError` until a cooldown elapses, at which
+point it moves to **half-open** and lets a limited number of trial calls through
+to probe the downstream. A success closes it again; a failure reopens it.
+
+```ts
+import { createVellarWallet, CircuitOpenError } from "vellar-sdk";
+
+const vellar = createVellarWallet({
+  /* …config… */
+  circuitBreaker: {
+    failureThreshold: 5,   // consecutive failures before opening (default 5)
+    openDurationMs: 30_000, // how long it stays open before probing (default 30s)
+    halfOpenMaxCalls: 1,    // trial calls to let through in half-open (default 1)
+  },
+});
+
+try {
+  await vellar.pay({ to, amount, token });
+} catch (err) {
+  if (err instanceof CircuitOpenError) {
+    // The facilitator is down — surface a fast, clear error to the user instead
+    // of blocking indefinitely.
+  }
+}
+```
+
+Pass `circuitBreaker: null` to disable it entirely. The underlying
+`createCircuitBreaker` and `CircuitOpenError` are exported for advanced use.
+
+### Health check
+
+Confirm an RPC endpoint is reachable before performing wallet operations. Import
+`isReachable` from the `vellar-sdk/rpc` subpath (it pulls in
+`@stellar/stellar-sdk`, so it is not re-exported from the root):
+
+```ts
+import { isReachable } from "vellar-sdk/rpc";
+
+const health = await isReachable(config.rpcUrl, { timeoutMs: 3000 });
+if (!health.reachable) {
+  return showOffline(health.error); // typed: { reachable: false, error }
+}
+// { reachable: true, latencyMs } — safe to start the wallet flow
+```
+
+`isReachable` never throws — it resolves to a typed
+`{ reachable: true, latencyMs } | { reachable: false, error }` result, timing
+out after `timeoutMs` (default 5000ms) so a hung endpoint can't block you.
+
+### Session lifecycle
+
+A session persists across reloads (keyId resumption) and can hold long-lived
+resources, so a consumer that mounts and unmounts the wallet — a React
+component, a mobile screen, an extension's background worker — should release
+it on teardown rather than leaving dangling timers.
+
+The session store (`createSessionStore`) exposes a `dispose()` method for this.
+It clears any internal timers/listeners — including the optional background
+refresh polling — and is safe to call more than once or after disconnection:
+
+```ts
+import { createSessionStore, createMemoryStorageAdapter } from "vellar-sdk";
+
+const store = createSessionStore(createMemoryStorageAdapter(), {
+  // Optional: while connected, touch() runs every 60s to keep lastActiveAt fresh.
+  refreshIntervalMs: 60_000,
+});
+await store.getState().start(session);
+
+// In your unmount / shutdown handler:
+function onUnmount() {
+  await store.getState().end();    // clear persisted state (optional)
+  store.getState().dispose();      // stop timers, release listeners
+}
+```
+
+`dispose()` is purely a teardown of the store's internal long-lived resources;
+it does **not** clear persisted state (pair it with `end()` when you want the
+session gone entirely).
+
 
 ### Mainnet
 
@@ -183,6 +382,40 @@ Your gateway must expose the policy routes (`/policies/templates`,
 funded by **your** sponsor account, server-side.
 
 → Full guide: [Policies on docs.vellar.xyz](https://docs.vellar.xyz/docs/policies).
+
+### Agent keys
+
+Mint scoped **agent session keys** — *give your agent a budget, not your keys.*
+An agent key is a real on-chain signer restricted to specific tokens, each
+requiring one or more **policy contracts** to co-sign inside the wallet's
+`__check_auth`. Stack a spending-limit policy (how much) with a verified-only
+policy (which contracts) and the chain enforces both — a compromised agent
+holding the key cannot exceed the budget or pay through unverified code.
+
+```ts
+import { Keypair } from "@stellar/stellar-sdk";
+
+const agentKey = Keypair.random(); // YOU hold the secret; the SDK never sees it
+
+const { hash, expiresAt } = await vellar.agents.mint({
+  publicKey: agentKey.publicKey(),
+  grants: [{ token: usdcSac, policies: [spendingLimitId, verifiedOnlyId] }],
+  expiresAt: new Date(Date.now() + 7 * 864e5), // optional on-chain expiry
+});
+
+// hand the agent its secret + the wallet address; it pays via wallet.x402
+// under the on-chain budget — no passkey, no admin keys.
+
+await vellar.agents.revoke(agentKey.publicKey()); // remote kill (passkey-signed)
+```
+
+`mint`/`revoke` are wallet-admin actions, so they need an `agentKeys` runtime
+in the config wired to your kit (`addEd25519`/`remove` → passkey sign →
+submit) — the only WebAuthn prompt. Without it these throw a clear error;
+everything else on the wallet still works. Grants must name at least one
+policy (an unrestricted grant is deliberately not mintable here).
+
+→ Full guide: [Agent keys on docs.vellar.xyz](https://docs.vellar.xyz/docs/agent-keys).
 
 ### x402
 
@@ -244,6 +477,103 @@ for a client without the wallet handle.
 > so a policy-governed payment needs a facilitator configured with a higher
 > ceiling (self-hosted, or a hosted one that allows it).
 
+#### Security: signed requests to the facilitator
+
+The payment payload itself is already signed (the smart-wallet auth entry).
+That proves the **payment** is authentic; it says nothing about the **HTTP
+request** that carries it. Pass `requestSigning` in `x402` config to also
+sign every outgoing facilitator request with HMAC-SHA256 over a canonical
+string (method, path, timestamp, nonce, body), using a shared secret
+provisioned out of band with your facilitator operator:
+
+```ts
+const vellar = createVellarWallet({
+  x402: {
+    signer: createSessionKeySigner({ address: walletCAddress, secretKey: sessionKeySecret }),
+    simulationSourceAccount: aFundedGAccount,
+    requestSigning: { keyId: "your-key-id", secret: process.env.VELLAR_FACILITATOR_SECRET! },
+  },
+});
+```
+
+This is **opt-in** and additive — a facilitator that doesn't verify the
+`X-Vellar-*` headers is unaffected either way, and it does not replace TLS.
+`vellar-sdk/x402-request-auth` also exports `verifyFacilitatorRequest` so a
+facilitator implemented in TypeScript can share the exact same canonical-string
+logic rather than reimplementing it and risking drift. See the module's
+doc comments for what this does and does not cover (it authenticates the
+*request*, not the on-chain payment, which the auth-entry signature already
+covers, and not the facilitator's response).
+
+#### Capability scoping for signers
+
+A session key or passkey signer will sign **any** auth entry addressed to its
+wallet once `x402-client.ts` has confirmed it matches the payment being made.
+Two callers sharing one session key (a multi-tenant agent process, or a signer
+reused across unrelated call sites) have no narrower guard than "everything
+this wallet can do." Pass `capabilities` to either signer to add one:
+
+```ts
+import { createSessionKeySigner } from "vellar-sdk";
+
+const signer = createSessionKeySigner({
+  address: walletCAddress,
+  secretKey: sessionKeySecret,
+  // This key will only ever sign a `transfer` call on `usdcSac` — anything
+  // else throws CapabilityDeniedError before a signature is produced.
+  capabilities: [{ resourceType: usdcSac, action: "transfer" }],
+});
+```
+
+Rules match on resource (contract) and action (function name); either field
+accepts `"*"` for a wildcard. An empty/omitted `capabilities` array is fully
+backward compatible — the signer signs anything it always did. This is a
+**client-side** guard, checked in this process before signing — it narrows
+what the SDK will attempt, but the on-chain `SignerLimits`/Policy mechanism
+(see [Agent keys](#agent-keys)) is still the only check a compromised host
+process can't bypass. See `src/x402-signer-capabilities.ts`'s doc comments for
+the full scope of what this does and does not guarantee.
+
+#### Attribute-based session key budgets
+
+`maxAmount` and the on-chain spending-limit policy bound a session key's
+*total* spend, but neither knows about *who* it's paying. Pass
+`budgetAttributes` in `x402` config to scope the budget by merchant, category,
+and/or time window, checked before a payment is even built:
+
+```ts
+const vellar = createVellarWallet({
+  x402: {
+    signer: createSessionKeySigner({ address: walletCAddress, secretKey: sessionKeySecret }),
+    simulationSourceAccount: aFundedGAccount,
+    budgetAttributes: [
+      // Up to 5 USDC per payment to this merchant, any time.
+      { merchant: knownMerchantAddress, maxAmount: 50_000_000n },
+      // Groceries only, business hours UTC, capped at 20 USDC total per period.
+      {
+        merchant: "*",
+        category: "groceries",
+        maxAmount: 20_000_000n,
+        periodMaxAmount: 200_000_000n,
+        window: { startHourUtc: 9, endHourUtc: 17 },
+      },
+    ],
+  },
+});
+```
+
+`category` is read from the server's `PAYMENT-REQUIRED` response
+(`extra.category`) — this SDK doesn't define categories, your
+facilitator/resource server does. `periodMaxAmount` needs a
+`budgetAttributeTracker` to accumulate spend across calls; the SDK supplies an
+in-memory one automatically when you set `periodMaxAmount` without providing
+your own (process-lifetime only — bring your own tracker for anything that
+must persist or be shared). A request matching no rule, or exceeding the
+matching rule's ceiling, throws `BudgetAttributeDeniedError` before signing.
+Like capability scoping, this is a **client-side** narrowing on top of (never
+instead of) the on-chain policy — see `src/x402-budget-attributes.ts`'s doc
+comments for the full scope.
+
 ### Advanced
 
 The facade is the paved road. For custom flows the package also exports the
@@ -253,6 +583,58 @@ signers (`createSessionKeySigner`, `createPasskeyX402Signer`), the
 `WalletConnector` interface, balances helpers (`vellar-sdk/balances`), and
 RPC-backed readers (`vellar-sdk/rpc`, imported separately so
 `@stellar/stellar-sdk` stays out of bundles that don't read balances).
+
+#### Session key rotation on re-authentication
+
+`createPasskeyKitConnector` accepts an optional `sessionKeyRotation` runtime:
+when set, every successful `connectWallet` (re-authentication) mints a fresh
+agent session key and revokes whichever key rotation last minted for that
+wallet, so a stale key from a previous session doesn't stay valid indefinitely.
+
+```ts
+import { createPasskeyKitConnector } from "vellar-sdk";
+
+const connector = createPasskeyKitConnector({
+  kit,
+  backend,
+  network: "testnet",
+  appName: "Vellar",
+  sessionKeyRotation: {
+    async mint() {
+      // Wire to the same passkey-signed admin plumbing wallet.agents.mint uses.
+      const key = Keypair.random();
+      await vellar.agents.mint({ publicKey: key.publicKey(), grants: [...] });
+      return { publicKey: key.publicKey() };
+    },
+    async revoke(publicKey) {
+      await vellar.agents.revoke(publicKey);
+    },
+  },
+  onDebugLog: (event, details) => console.debug(`[vellar] ${event}`, details),
+});
+```
+
+Rotation is best-effort and never blocks re-authentication: a mint or revoke
+failure is reported to `onDebugLog` (default: a no-op — bring your own logger)
+rather than thrown, and mint always runs before revoke so a revoke failure
+never leaves the wallet with no valid session key. Omit `sessionKeyRotation`
+for the pre-existing behaviour (no rotation).
+## API stability
+
+Exports fall into two groups:
+
+| Group | Import | Guarantee |
+| --- | --- | --- |
+| **Stable v1** | `import { createVellarWallet, TESTNET, … } from "vellar-sdk"` | Breaking changes only in major semver releases (until `2.0`). |
+| **Experimental** | `import { experimental } from "vellar-sdk"` then `experimental.createX402Client`, etc. | May change in any release — x402, agentic payments, and related helpers. |
+
+The stable v1 surface covers the wallet facade, config, backend client, balances,
+payments, policies, agent keys, session store, and transaction status helpers.
+Experimental symbols are also re-exported flat at the package root for backward
+compatibility; treat those flat imports as unstable.
+
+The canonical export lists live in `src/export-surface.ts` and are checked by
+`src/index.exports.test.ts`.
 
 ## License
 

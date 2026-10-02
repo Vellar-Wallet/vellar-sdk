@@ -1,0 +1,241 @@
+# `upto` — Metered Payments
+
+A second payment scheme alongside `exact`: the buyer authorizes a **spending
+ceiling** with one signature, and the facilitator settles for the **actual
+metered amount** — usage-based pricing without a signature per unit consumed.
+
+> **Status: experimental.** This is a Vellar-specific extension of x402 v2,
+> not yet part of the finalized spec. The wire shape may change before
+> upstream settles on one — see [x402-foundation/x402 #3134](https://github.com/x402-foundation/x402/pull/3134),
+> which proposes standardizing an `upto` scheme for Stellar and is open,
+> alongside a competing proposal. Don't build against this expecting the wire
+> format to be stable yet.
+
+## Why this exists
+
+`exact` needs the price known and signed before the resource is served — fine
+for a flat-rate API call, wrong for anything metered: tokens generated,
+seconds of compute, rows returned. `upto` lets a seller charge for what was
+actually used, capped by what the buyer agreed to risk.
+
+## How it's enforced
+
+The buyer signs one authorization: `(token, from, to, max_amount, expiration,
+nonce)` — notably **not** the actual amount. At settlement, the facilitator
+supplies the metered `actual_amount`, and a Soroban contract checks
+`actual <= max` **on-ledger** before it moves anything. The facilitator
+cannot settle more than the ceiling the buyer signed, because the chain
+refuses the transaction if it tries — this isn't a promise the facilitator
+makes, it's a bound the contract enforces regardless of what the facilitator
+does.
+
+### For sellers
+
+To accept metered payments, register the `upto` scheme on your resource server:
+
+```ts
+import { UptoStellarScheme } from "@x402/stellar/upto/server";
+
+server.register("stellar:testnet",
+  new UptoStellarScheme({
+    contractId: "CCZL7CTRS6GWEYXDYD54DZM3OUHQW2S2A4KSU75SH275P3SFZLL4YQAN"
+  })
+);
+```
+
+Declare the route's `amount` as the **ceiling** — the maximum the buyer
+authorizes, not what you charge:
+
+```ts
+amount: "1000000",  // buyer authorizes up to 1.0 USDC
+```
+
+After serving the resource, supply the actual metered amount in
+`extra.actualAmount`:
+
+```ts
+extra: { actualAmount: "250000" }  // buyer pays 0.25 USDC
+```
+
+**Omit `actualAmount` and the facilitator settles the full ceiling** — a silent
+overcharge, not an error.
+
+`wallet.x402` cannot pay `upto` yet. Sellers accepting only `upto` cannot be
+paid by SDK buyers today. Advertise both schemes until `upto` wallet support
+lands.
+
+## Using it
+
+`GET /supported` now advertises both schemes for `stellar:testnet`:
+
+```json
+{
+  "kinds": [
+    { "scheme": "exact", "network": "stellar:testnet", "extra": { "areFeesSponsored": true } },
+    {
+      "scheme": "upto",
+      "network": "stellar:testnet",
+      "extra": {
+        "uptoContract": "CCZL7CTRS6GWEYXDYD54DZM3OUHQW2S2A4KSU75SH275P3SFZLL4YQAN",
+        "areFeesSponsored": true
+      }
+    }
+  ]
+}
+```
+
+`/verify` and `/settle` accept `scheme: "upto"` payloads the same way they
+accept `exact` ones. Two things worth knowing if you're integrating by hand:
+the settlement hook is refused (no arbitrary post-settle callback), and
+`/verify` simulates at the ceiling, not the actual, since the actual isn't
+decided yet.
+
+### The wire shape
+
+`payload.payload.transaction` is a **base64-encoded, unsigned Soroban
+transaction envelope** that invokes the deployed contract's `settle`
+function — "unsigned" at the envelope level; what actually carries the
+buyer's authorization is the Soroban auth entries attached to that one
+operation, which **are** signed. The facilitator never relays this envelope
+as-is: it rebuilds the transaction from its own sponsor account (so the
+buyer holds no XLM and pays no fee) and swaps in the metered `actual_amount`
+before submitting.
+
+This is the actual request body `POST /verify` and `POST /settle` both take
+— matching what `examples/upto-buyer.mjs` constructs. `paymentPayload.accepted`
+is the same object as the top-level `paymentRequirements` (omitted a second
+time below for brevity):
+
+```json
+{
+  "x402Version": 2,
+  "paymentPayload": {
+    "x402Version": 2,
+    "accepted": { "...": "same object as paymentRequirements below" },
+    "payload": { "transaction": "AAAAAgAAAAC1I3O2CN...(base64, unsigned envelope)" }
+  },
+  "paymentRequirements": {
+    "scheme": "upto",
+    "network": "stellar:testnet",
+    "asset": "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
+    "amount": "1000000",
+    "payTo": "GDEST...",
+    "maxTimeoutSeconds": 120,
+    "extra": { "actualAmount": "400000" }
+  }
+}
+```
+
+**The metered actual lives in `requirements.extra.actualAmount`** (a string,
+atomic units) — set by the seller/facilitator at settlement time, not
+something the buyer ever signs. It's the one field that's easy to miss: the
+buyer's signed authorization deliberately excludes it (that's the whole
+point — the signature covers the ceiling, not the eventual charge), and if
+you omit it entirely the facilitator settles for the full ceiling rather
+than a metered amount.
+
+**The settle response's `amount` is the actual settled amount, not the
+ceiling** — distinct from `paymentRequirements.amount`, which stays the
+ceiling throughout:
+
+| Field | Meaning | Example above |
+| --- | --- | --- |
+| `paymentRequirements.amount` | The **ceiling** the buyer authorized (`max_amount`) | `"1000000"` |
+| `SettleResponse.amount` | The **actual** amount settled (`actual_amount`, ≤ ceiling, enforced on-ledger) | `"400000"` |
+
+A settle response looks like `{ "success": true, "transaction": "<hash>",
+"payer": "G...", "amount": "400000" }` — reconcile against
+`paymentRequirements.amount`, not the other way around, if you need to
+confirm how much of the ceiling was actually used.
+
+### Contract argument order
+
+For anyone building the invocation by hand, the deployed contract's `settle`
+takes exactly eight arguments, in this order — get this wrong and it fails
+before any signature is even checked:
+
+```
+(token, from, to, max_amount, expiration_ledger, nonce, actual_amount, hook)
+```
+
+**`hook` must be `None`/void.** The facilitator refuses anything else
+(`invalid_upto_stellar_hook_not_supported`) — it's a deliberate settlement
+hook, not a defended one, because nothing legitimate needs it and refusing
+is cheaper than sandboxing an arbitrary post-settle callback aimed at the
+sponsor.
+
+**Not yet in `vellar-sdk`.** `wallet.x402.fetch()` speaks `exact` only right
+now. To pay with `upto` today, build the authorization by hand — the same way
+[the smart-account buyer example](./x402.md) does for `exact`, because the
+official x402 client doesn't support this scheme either.
+
+**End-to-end client:** `examples/upto-buyer.mjs` in the facilitator repo signs
+the ceiling authorization and drives `/verify` + `/settle` directly.
+
+```sh
+cd examples
+FACILITATOR_URL=http://localhost:4100 UPTO_CONTRACT=C... \
+PAYER_SECRET=S... PAYTO=G... ASSET=C... SIM_SOURCE_ACCOUNT=G... \
+MAX=1000000 ACTUAL=400000 node upto-buyer.mjs
+```
+
+`SIM_SOURCE_ACCOUNT` must be a funded account that **is not** the payer —
+same reason as the `exact` smart-account flow: simulating from the payer
+yields source-account credentials the scheme rejects.
+
+## Deployed contract
+
+Published so it can be verified against its source without trusting this
+page — every value below is independently checkable.
+
+| | |
+| --- | --- |
+| Contract ID (testnet) | `CCZL7CTRS6GWEYXDYD54DZM3OUHQW2S2A4KSU75SH275P3SFZLL4YQAN` |
+| Wasm hash (on-chain) | `92365d9e5effe046a1db5b959bd2357672aef3f4b2137653c8095a0764d1f6c8` |
+| Source | `contracts/upto-vellar/` in the [facilitator repo](https://github.com/Vellar-Wallet/vellar-facilitator) — Vellar's own implementation (MIT), written from the x402 `upto` scheme specification, with the design brief committed before the implementation |
+| Deployed | 2026-09-09, from the facilitator repo's own sponsor account |
+| First settlement | `be33bb71b0a2c74c465bf0243c45e081bc7c5b66a337e2d8a5c0bbb82f54ede6`, ledger 4587956, 0.01 USDC settled against a 0.05 USDC ceiling |
+
+The on-chain wasm hash is the sha256 of the wasm, so anyone can rebuild and
+compare:
+
+```sh
+cd contracts/upto-vellar
+stellar contract build
+shasum -a 256 target/wasm32v1-none/release/x402_upto_vellar.wasm
+# → 92365d9e5effe046a1db5b959bd2357672aef3f4b2137653c8095a0764d1f6c8
+```
+
+Built with rustc 1.96.0 and stellar-cli 26.1.0, targeting `wasm32v1-none`.
+
+Full deployment record, including the fetch-and-compare steps against the
+live contract and the first on-chain settlement's transaction hash:
+[`docs/upto-deployment.md`](https://github.com/Vellar-Wallet/vellar-facilitator/blob/main/docs/upto-deployment.md)
+in the facilitator repo.
+
+## Watch it settle
+
+[explorer.vellar.xyz](https://explorer.vellar.xyz) is a public transaction
+explorer — a separately built and operated service, not this facilitator
+describing itself — that classifies real settlements straight off the
+Stellar ledger. It shows `upto` settlements correctly today, verified rather
+than assumed: three settlements against the hosted facilitator each appear on
+[the feed](https://explorer.vellar.xyz) with `scheme: upto`,
+`settled by: vellar`, and the metered actual amount displayed, not the
+signed ceiling — `be72877332bbd7f8d38511cccf00620fb20869cfedbc7530588ca856ac646d9a`
+(ledger 4252896, 0.0555 USDC of a 0.15 ceiling), `f558307e…`
+(0.0312 of 0.08), and `12f0fa5c…` (0.0417 of 0.12); full tx hashes and the
+Horizon-confirmed record in the facilitator repo's
+[`docs/upto-deployment.md`](https://github.com/Vellar-Wallet/vellar-facilitator/blob/main/docs/upto-deployment.md).
+The explorer classifies x402 payments directly from Stellar ledger data. See
+[The Explorer](./reference/explorer.md) for current figures and how attribution
+works.
+
+One thing worth knowing rather than discovering: the first settlement
+attempted through this path didn't show up at all when this was verified —
+not lag, a genuine gap in the explorer's classifier, which only recognized
+`exact`-scheme's direct-transfer shape and never looked at an `upto`
+settlement's contract invocation. Fixed in that repo (it now reads the
+actual amount from the token's own emitted transfer event, not from the
+envelope's signed-ceiling or facilitator-supplied args) — the three
+settlements above are the proof the fix holds, not the discovery of the bug.

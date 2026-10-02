@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createX402Facade } from "./x402-facade";
 import { X402NotConfiguredError, type SmartAccountX402Signer } from "./x402-types";
 
-const C_ADDRESS = "CC5ZSTLTYKPNIFDSJ4233RVZPALGHHDBRTXGIN6Z3AJCWU57VR5ITXXR";
+const C_ADDRESS = "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4";
 
 const signer: SmartAccountX402Signer = {
   address: C_ADDRESS,

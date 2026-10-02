@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PolicyDefinition } from "./types";
-import { createPolicyClient } from "./policy-client";
+import { createPolicyClient, PolicyListFilterError } from "./policy-client";
 import { PolicyApiError } from "./policy-types";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -123,5 +123,101 @@ describe("createPolicyClient", () => {
     });
     await expect(client.listTemplates()).rejects.toBeInstanceOf(PolicyApiError);
     await expect(client.listTemplates()).rejects.toMatchObject({ status: 0 });
+  });
+
+  it("listPolicies() passes status and date filters as query params", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      jsonResponse([{ id: "p1", status: "generated", createdAt: "2026-01-01T00:00:00Z" }]),
+    );
+    const client = createPolicyClient({
+      apiUrl: "https://api.test",
+      network: "testnet",
+      fetch: fetchMock,
+    });
+
+    await client.listPolicies({
+      status: "active",
+      createdAfter: "2026-01-01T00:00:00Z",
+      createdBefore: "2026-12-31T23:59:59Z",
+    });
+
+    expect(fetchMock.mock.calls[0]![0]).toBe(
+      "https://api.test/policies?status=active&created_after=2026-01-01T00%3A00%3A00Z&created_before=2026-12-31T23%3A59%3A59Z",
+    );
+  });
+
+  it("listPolicies() rejects malformed createdAfter", () => {
+    const client = createPolicyClient({
+      apiUrl: "https://api.test",
+      network: "testnet",
+      fetch: vi.fn(),
+    });
+    expect(() => client.listPolicies({ createdAfter: "not-a-date" })).toThrow(
+      PolicyListFilterError,
+    );
+  });
+
+  it("listPolicies() rejects malformed createdBefore", () => {
+    const client = createPolicyClient({
+      apiUrl: "https://api.test",
+      network: "testnet",
+      fetch: vi.fn(),
+    });
+    expect(() => client.listPolicies({ createdBefore: "also-bad" })).toThrow(
+      PolicyListFilterError,
+    );
+  });
+
+  it("listPolicies() accepts each status filter independently", async () => {
+    for (const status of ["active", "draft", "revoked"] as const) {
+      const fetchMock = vi.fn<typeof fetch>(async () => jsonResponse([]));
+      const client = createPolicyClient({
+        apiUrl: "https://api.test",
+        network: "testnet",
+        fetch: fetchMock,
+      });
+      await client.listPolicies({ status });
+      expect(String(fetchMock.mock.calls[0]![0])).toContain(`status=${status}`);
+    }
+  });
+});
+
+describe("V-10 (RA-11-E) — retryable and terminal failures are distinguishable", () => {
+  // /policies/deploy has two failure modes with OPPOSITE correct responses:
+  //   503 attach_unconfirmed — chain pending, record NOT stamped -> RETRY
+  //   422 attach_mismatch    — a lie,        record NOT stamped -> DO NOT RETRY
+  // Both used to surface as an identical PolicyApiError.
+  const err = (status: number) => new PolicyApiError("x", status);
+
+  it("marks 503 attach_unconfirmed retryable", () => {
+    expect(err(503).retryable).toBe(true);
+  });
+
+  it("marks 422 attach_mismatch TERMINAL — retrying repeats the lie", () => {
+    expect(err(422).retryable).toBe(false);
+  });
+
+  it("treats a transport failure as retryable — nothing was decided", () => {
+    expect(err(0).retryable).toBe(true);
+  });
+
+  it("treats ordinary 4xx as terminal", () => {
+    for (const s of [400, 401, 403, 404]) expect(err(s).retryable).toBe(false);
+  });
+
+  it("excepts 408 and 429 — those say 'not now', not 'not ever'", () => {
+    expect(err(408).retryable).toBe(true);
+    expect(err(429).retryable).toBe(true);
+  });
+
+  it("treats other 5xx as retryable", () => {
+    for (const s of [500, 502, 504]) expect(err(s).retryable).toBe(true);
+  });
+
+  it("still carries status and errors, so existing callers are unaffected", () => {
+    const e = new PolicyApiError("boom", 422, ["bad"]);
+    expect(e.status).toBe(422);
+    expect(e.errors).toEqual(["bad"]);
+    expect(e.name).toBe("PolicyApiError");
   });
 });
