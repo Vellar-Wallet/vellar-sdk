@@ -53,7 +53,9 @@ Be aware while the SDK is pre-`1.0`:
 
 - **The policy contract is unaudited for mainnet.** A mainnet facilitator is
   deployed, but the spending-limit policy contract has not had a mainnet
-  security audit. The facilitator review is complete; the policy contract is
-  separate work. Every tool defaults to testnet.
+  security audit. The facilitator's own pre-mainnet review has most findings
+  closed, with a small number still open and named rather than hidden
+  (`docs/security-audit.md` in the facilitator repo); the policy contract is
+  separate, unaudited work. Every tool defaults to testnet.
 - You are responsible for securing your own backend (the submission surface) —
   rate limiting, auth, and abuse protection are your app's concern.

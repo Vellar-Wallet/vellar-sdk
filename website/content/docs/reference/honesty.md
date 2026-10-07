@@ -115,16 +115,22 @@ concerns.
 
 A mainnet facilitator is deployed and advertises `stellar:pubnet` in
 `/supported`, alongside a separate testnet deployment. The docs, the CLI and the
-MCP payer all default to testnet.
+MCP payer all default to testnet. What's live today is an initial, limited set
+of real settlements (11 settlements, 3.10 USDC total, Sept 17–21, 2026,
+team-funded test wallet), not a production launch.
 
-One pre-mainnet gate is still open: **the spending-limit policy contract has not
-had a mainnet security audit.** The facilitator review is complete; the policy
-contract is separate work and is not covered by it.
+Two things are still open before a full mainnet launch: **the spending-limit
+policy contract has not had a mainnet security audit**, and the facilitator's
+own pre-mainnet review has most findings closed with a small number still open
+and named rather than hidden (`docs/security-audit.md` in the facilitator
+repo) — the policy contract is separate, unaudited work and is not covered by
+that review.
 
-So the honest position is that mainnet settlement is possible today, while the
-on-chain component that bounds an agent's spending has not been audited for
-mainnet use. Treat a policy-governed mainnet payment as unaudited, and size any
-real-money exposure accordingly.
+So the honest position is that mainnet settlement is possible and has
+happened at small scale today, while the on-chain component that bounds an
+agent's spending has not been audited for mainnet use, and a small number of
+named facilitator findings remain open. Treat a policy-governed mainnet
+payment as unaudited, and size any real-money exposure accordingly.
 
 The hosted instances also still have no persistent disk, so the catalog resets
 on restart on both networks.

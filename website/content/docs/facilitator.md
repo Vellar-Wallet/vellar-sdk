@@ -13,13 +13,20 @@ verify it, submits it on-chain, and sponsors the network fee.
 
 > **Status: pre-production.** Open for anyone to build against, hosted on
 > Railway and running continuously. Two independent deployments exist — testnet
-> and mainnet — and everything in these docs defaults to **testnet**. See
-> [Deployments](#deployments) for both base URLs and the kill switch.
+> and mainnet — and everything in these docs defaults to **testnet**. What's
+> live on mainnet today is an initial, limited set of real settlements, not a
+> production launch. See [Deployments](#deployments) for both base URLs and
+> the kill switch.
 >
-> The catalog does not survive a service restart (see
-> [Limits](#limits-and-operational-caveats)), and the spending-limit policy
-> contract has not had a mainnet security audit. The facilitator review is
-> complete; the policy contract is separate work. Source:
+> The hosted catalog is durable (libSQL/Turso, survives a service restart); a
+> self-hosted instance with no database configured falls back to in-memory and
+> loses its catalog on restart instead (see
+> [Limits](#limits-and-operational-caveats)). The spending-limit policy
+> contract has not had a mainnet security audit, and the facilitator's own
+> pre-mainnet review has most findings closed with a small number still open
+> and named rather than hidden
+> (`docs/security-audit.md` in the facilitator repo) — the policy contract is
+> separate, unaudited work. Source:
 > [Vellar-Wallet/vellar-facilitator](https://github.com/Vellar-Wallet/vellar-facilitator).
 
 ## Bring your own payment asset

@@ -250,11 +250,13 @@ Two issues are filed, one of which has attracted a community fix.
 
 ## What is not yet done
 
-- **No mainnet settled hash exists, and none is claimed.** Every hash on this
-  page is Stellar testnet. A mainnet facilitator is now deployed and advertises
-  `stellar:pubnet`, but nothing on this page was settled through it.
-- The e2e suite is unrun on pubnet, so the conformance result above is a
-  testnet measurement only.
+- **No conformance-suite hash on mainnet exists yet, and none is claimed
+  here.** Every hash on this page is Stellar testnet; this page's e2e suite
+  is unrun on pubnet, so the conformance result above is a testnet
+  measurement only. Separately, an initial, limited set of real `exact`-scheme
+  payments has settled on mainnet outside this suite (11 settlements, 3.10
+  USDC, Sept 17–21, 2026 — `docs/mainnet-evidence.md` in the facilitator
+  repo); those hashes are real but are not part of this conformance run.
 - The spending-limit policy contract has not had a mainnet security audit.
 
 ## When it fails

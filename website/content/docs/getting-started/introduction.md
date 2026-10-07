@@ -91,11 +91,15 @@ one object with `create`, `connect`, and `pay`.
 
 > ⚠️ **Testnet by default; mainnet exists.** Every tool here defaults to the
 > testnet facilitator, and every example in these docs spends test USDC. A
-> separate mainnet deployment is live and moves real funds.
+> separate mainnet deployment is live; an initial, limited set of real
+> settlements has moved real funds on it.
 >
-> One pre-mainnet gate is still open: the spending-limit policy contract has not
-> had a mainnet security audit. The facilitator review is complete; the policy
-> contract is separate work.
+> Two things are still open before a full mainnet launch: the spending-limit
+> policy contract has not had a mainnet security audit, and the facilitator's
+> own pre-mainnet review has most findings closed with a small number still
+> open and named rather than hidden (`docs/security-audit.md` in the
+> facilitator repo). What's live today is an initial, limited set of real
+> settlements on mainnet, not a production launch.
 >
 > APIs may change before 1.0.
 
