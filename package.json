@@ -111,8 +111,8 @@
     "verify:merged": "node scripts/verify-merged.mjs"
   },
   "peerDependencies": {
-    "@stellar/stellar-sdk": "^16.0.0",
-    "passkey-kit": ">=0.13.0 <0.17.0"
+    "@stellar/stellar-sdk": "^17.2.1",
+    "passkey-kit": "^0.19.1"
   },
   "peerDependenciesMeta": {
     "passkey-kit": {
@@ -124,14 +124,15 @@
     "fast-uri": "3.1.7"
   },
   "dependencies": {
+    "@x402/stellar": "2.16.0",
     "zustand": "^5.0.0"
   },
   "devDependencies": {
-    "@stellar/stellar-sdk": "^16.0.1",
-    "passkey-kit": "^0.16.5",
+    "@stellar/stellar-sdk": "^17.2.1",
+    "passkey-kit": "^0.19.1",
     "tsup": "^8.5.1",
     "typescript": "^5.9.2",
-    "vitest": "^3.2.0"
+    "vitest": "^5.0.3"
   },
   "publishConfig": {
     "access": "public"

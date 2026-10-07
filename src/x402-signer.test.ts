@@ -68,23 +68,39 @@ describe("createSessionKeySigner", () => {
 
     const signed = xdr.SorobanAuthorizationEntry.fromXDR(signedXdr, "base64");
     // Credentials stay V1 (NOT upgraded to V2).
-    expect(signed.credentials().switch().name).toBe("sorobanCredentialsAddress");
-    const creds = signed.credentials().address();
-    expect(creds.signatureExpirationLedger()).toBe(1000);
+    expect(signed.credentials.type).toBe("sorobanCredentialsAddress");
+    if (signed.credentials.type !== "sorobanCredentialsAddress") {
+      throw new Error("unreachable: asserted above");
+    }
+    const creds = signed.credentials.address;
+    expect(creds.signatureExpirationLedger).toBe(1000);
 
     // Signature is Vec[ Map[ SignerKey.Ed25519 -> Signature.Ed25519 ] ].
-    const sigVal = creds.signature();
-    expect(sigVal.switch().name).toBe("scvVec");
-    const map = sigVal.vec()![0]!.map()!;
+    const sigVal = creds.signature;
+    expect(sigVal.type).toBe("scvVec");
+    if (sigVal.type !== "scvVec") throw new Error("unreachable: asserted above");
+    const mapVal = sigVal.vec![0]!;
+    if (mapVal.type !== "scvMap") throw new Error("expected scvMap");
+    const map = mapVal.map!;
     expect(map).toHaveLength(1);
-    const key = map[0]!.key();
-    const val = map[0]!.val();
+    const key = map[0]!.key;
+    const val = map[0]!.val;
     // SignerKey.Ed25519(pubkey)
-    expect(key.vec()![0]!.sym().toString()).toBe("Ed25519");
-    expect(new Uint8Array(key.vec()![1]!.bytes())).toEqual(new Uint8Array(kp.rawPublicKey()));
+    if (key.type !== "scvVec") throw new Error("expected scvVec key");
+    const keySym = key.vec![0]!;
+    if (keySym.type !== "scvSymbol") throw new Error("expected scvSymbol");
+    expect(keySym.sym.toString()).toBe("Ed25519");
+    const keyBytes = key.vec![1]!;
+    if (keyBytes.type !== "scvBytes") throw new Error("expected scvBytes");
+    expect(new Uint8Array(keyBytes.bytes.value)).toEqual(new Uint8Array(kp.rawPublicKey()));
     // Signature.Ed25519(sig) — 64 bytes, and it verifies against the payload.
-    expect(val.vec()![0]!.sym().toString()).toBe("Ed25519");
-    expect(val.vec()![1]!.bytes()).toHaveLength(64);
+    if (val.type !== "scvVec") throw new Error("expected scvVec val");
+    const valSym = val.vec![0]!;
+    if (valSym.type !== "scvSymbol") throw new Error("expected scvSymbol");
+    expect(valSym.sym.toString()).toBe("Ed25519");
+    const valBytes = val.vec![1]!;
+    if (valBytes.type !== "scvBytes") throw new Error("expected scvBytes");
+    expect(valBytes.bytes.value).toHaveLength(64);
   });
 
   it("refuses to sign an entry whose credential address is a different wallet", async () => {
@@ -103,10 +119,13 @@ describe("createSessionKeySigner", () => {
     const kp = Keypair.random();
     const signer = createSessionKeySigner({ address: C_ADDRESS, secretKey: kp.secret() });
     const v1 = makeV1AuthEntry(C_ADDRESS);
+    if (v1.credentials.type !== "sorobanCredentialsAddress") {
+      throw new Error("makeV1AuthEntry must produce sorobanCredentialsAddress");
+    }
     // Upgrade to V2 and confirm the signer refuses it.
     const v2 = new xdr.SorobanAuthorizationEntry({
-      credentials: xdr.SorobanCredentials.sorobanCredentialsAddressV2(v1.credentials().address()),
-      rootInvocation: v1.rootInvocation(),
+      credentials: xdr.SorobanCredentials.sorobanCredentialsAddressV2(v1.credentials.address),
+      rootInvocation: v1.rootInvocation,
     });
     await expect(
       signer.signAuthEntry(v2.toXDR("base64"), {
@@ -147,16 +166,34 @@ describe("createPasskeyX402Signer", () => {
     expect(receivedHash!).toHaveLength(32);
 
     const signed = xdr.SorobanAuthorizationEntry.fromXDR(signedXdr, "base64");
-    expect(signed.credentials().switch().name).toBe("sorobanCredentialsAddress");
-    const map = signed.credentials().address().signature().vec()![0]!.map()!;
-    const key = map[0]!.key();
-    const val = map[0]!.val();
-    expect(key.vec()![0]!.sym().toString()).toBe("Secp256r1");
-    expect(new Uint8Array(key.vec()![1]!.bytes())).toEqual(keyId);
+    expect(signed.credentials.type).toBe("sorobanCredentialsAddress");
+    if (signed.credentials.type !== "sorobanCredentialsAddress") {
+      throw new Error("unreachable: asserted above");
+    }
+    const sigVec = signed.credentials.address.signature;
+    if (sigVec.type !== "scvVec") throw new Error("expected scvVec");
+    const map = sigVec.vec![0]!;
+    if (map.type !== "scvMap") throw new Error("expected scvMap");
+    const key = map.map![0]!.key;
+    const val = map.map![0]!.val;
+    if (key.type !== "scvVec") throw new Error("expected scvVec key");
+    const keySym = key.vec![0]!;
+    if (keySym.type !== "scvSymbol") throw new Error("expected scvSymbol");
+    expect(keySym.sym.toString()).toBe("Secp256r1");
+    const keyBytes = key.vec![1]!;
+    if (keyBytes.type !== "scvBytes") throw new Error("expected scvBytes");
+    expect(new Uint8Array(keyBytes.bytes.value)).toEqual(keyId);
     // Signature.Secp256r1(struct{authenticator_data, client_data_json, signature})
-    expect(val.vec()![0]!.sym().toString()).toBe("Secp256r1");
-    const struct = val.vec()![1]!.map()!;
-    const fields = struct.map((e) => e.key().sym().toString()).sort();
+    if (val.type !== "scvVec") throw new Error("expected scvVec val");
+    const valSym = val.vec![0]!;
+    if (valSym.type !== "scvSymbol") throw new Error("expected scvSymbol");
+    expect(valSym.sym.toString()).toBe("Secp256r1");
+    const structVal = val.vec![1]!;
+    if (structVal.type !== "scvMap") throw new Error("expected scvMap struct");
+    const fields = structVal.map!.map((e) => {
+      if (e.key.type !== "scvSymbol") throw new Error("expected scvSymbol field key");
+      return e.key.sym.toString();
+    }).sort();
     expect(fields).toEqual(["authenticator_data", "client_data_json", "signature"]);
   });
 });

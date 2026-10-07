@@ -75,21 +75,35 @@ function secp256r1Signature(a: WebAuthnAssertion): xdr.ScVal {
 
 // ── shared V1 core ─────────────────────────────────────────────────────────────
 
-/** Set the credential's expiration + compute the payload hash the signer signs. */
+/**
+ * Set the credential's expiration (returning a fresh entry, since XDR values are
+ * immutable) and compute the payload hash the signer signs.
+ */
 function payloadHashForEntry(
   entry: xdr.SorobanAuthorizationEntry,
   networkPassphrase: string,
   expirationLedger: number,
-) {
-  const creds = entry.credentials();
-  if (creds.switch().name !== "sorobanCredentialsAddress") {
-    throw new Error(
-      `x402 signer expects V1 sorobanCredentialsAddress, got ${creds.switch().name}`,
-    );
+): { entryWithExpiration: xdr.SorobanAuthorizationEntry; payload: Uint8Array } {
+  const creds = entry.credentials;
+  if (creds.type !== "sorobanCredentialsAddress") {
+    throw new Error(`x402 signer expects V1 sorobanCredentialsAddress, got ${creds.type}`);
   }
-  creds.address().signatureExpirationLedger(expirationLedger);
-  const preimage = buildAuthorizationEntryPreimage(entry, expirationLedger, networkPassphrase);
-  return hash(preimage.toXDR());
+  const addressCreds = new xdr.SorobanAddressCredentials({
+    address: creds.address.address,
+    nonce: creds.address.nonce,
+    signatureExpirationLedger: expirationLedger,
+    signature: creds.address.signature,
+  });
+  const entryWithExpiration = new xdr.SorobanAuthorizationEntry({
+    credentials: xdr.SorobanCredentials.sorobanCredentialsAddress(addressCreds),
+    rootInvocation: entry.rootInvocation,
+  });
+  const preimage = buildAuthorizationEntryPreimage(
+    entryWithExpiration,
+    expirationLedger,
+    networkPassphrase,
+  );
+  return { entryWithExpiration, payload: hash(preimage.toXDR()) };
 }
 
 /**
@@ -123,22 +137,32 @@ function policySignature(): xdr.ScVal {
  * `"Ed25519"` sorts before `"Policy"` (`E` < `P`) — and among policies by their
  * contract-id bytes.
  */
-function setSignatureMap(
+function withSignatureMap(
   entry: xdr.SorobanAuthorizationEntry,
   signerKey: xdr.ScVal,
   signature: xdr.ScVal,
   policyAddresses: readonly string[] = [],
-): void {
+): xdr.SorobanAuthorizationEntry {
   const entries = [new xdr.ScMapEntry({ key: signerKey, val: signature })];
 
   for (const policy of [...policyAddresses].sort(comparePolicyAddresses)) {
     entries.push(new xdr.ScMapEntry({ key: policySignerKey(policy), val: policySignature() }));
   }
 
-  entry
-    .credentials()
-    .address()
-    .signature(xdr.ScVal.scvVec([xdr.ScVal.scvMap(entries)]));
+  const creds = entry.credentials;
+  if (creds.type !== "sorobanCredentialsAddress") {
+    throw new Error(`x402 signer expects V1 sorobanCredentialsAddress, got ${creds.type}`);
+  }
+  const addressCreds = new xdr.SorobanAddressCredentials({
+    address: creds.address.address,
+    nonce: creds.address.nonce,
+    signatureExpirationLedger: creds.address.signatureExpirationLedger,
+    signature: xdr.ScVal.scvVec([xdr.ScVal.scvMap(entries)]),
+  });
+  return new xdr.SorobanAuthorizationEntry({
+    credentials: xdr.SorobanCredentials.sorobanCredentialsAddress(addressCreds),
+    rootInvocation: entry.rootInvocation,
+  });
 }
 
 /** Order two policy contract ids by their raw address bytes, as ScVal ordering does. */
@@ -195,10 +219,19 @@ export function createSessionKeySigner(config: SessionKeySignerConfig): SmartAcc
     async signAuthEntry(entryXdr, { networkPassphrase, expirationLedger }) {
       const entry = xdr.SorobanAuthorizationEntry.fromXDR(entryXdr, "base64");
       assertEntryAddress(entry, config.address);
-      const payload = payloadHashForEntry(entry, networkPassphrase, expirationLedger);
+      const { entryWithExpiration, payload } = payloadHashForEntry(
+        entry,
+        networkPassphrase,
+        expirationLedger,
+      );
       const signature = keypair.sign(payload);
-      setSignatureMap(entry, ed25519SignerKey(rawPk), ed25519Signature(signature), policies);
-      return entry.toXDR("base64");
+      const signedEntry = withSignatureMap(
+        entryWithExpiration,
+        ed25519SignerKey(rawPk),
+        ed25519Signature(signature),
+        policies,
+      );
+      return signedEntry.toXDR("base64");
     },
   };
 }
@@ -249,15 +282,19 @@ export function createPasskeyX402Signer(config: PasskeyX402SignerConfig): SmartA
     async signAuthEntry(entryXdr, { networkPassphrase, expirationLedger }) {
       const entry = xdr.SorobanAuthorizationEntry.fromXDR(entryXdr, "base64");
       assertEntryAddress(entry, config.address);
-      const payload = payloadHashForEntry(entry, networkPassphrase, expirationLedger);
-      const assertion = await config.webAuthn.sign(new Uint8Array(payload));
-      setSignatureMap(
+      const { entryWithExpiration, payload } = payloadHashForEntry(
         entry,
+        networkPassphrase,
+        expirationLedger,
+      );
+      const assertion = await config.webAuthn.sign(new Uint8Array(payload));
+      const signedEntry = withSignatureMap(
+        entryWithExpiration,
         secp256r1SignerKey(assertion.keyId),
         secp256r1Signature(assertion),
         config.policies ?? [],
       );
-      return entry.toXDR("base64");
+      return signedEntry.toXDR("base64");
     },
   };
 }
@@ -275,13 +312,11 @@ function isContractAddress(address: string): boolean {
  * message before touching the address.
  */
 function assertEntryAddress(entry: xdr.SorobanAuthorizationEntry, expected: string): void {
-  const creds = entry.credentials();
-  if (creds.switch().name !== "sorobanCredentialsAddress") {
-    throw new Error(
-      `x402 signer expects V1 sorobanCredentialsAddress, got ${creds.switch().name}`,
-    );
+  const creds = entry.credentials;
+  if (creds.type !== "sorobanCredentialsAddress") {
+    throw new Error(`x402 signer expects V1 sorobanCredentialsAddress, got ${creds.type}`);
   }
-  const entryAddr = Address.fromScAddress(creds.address().address()).toString();
+  const entryAddr = Address.fromScAddress(creds.address.address).toString();
   if (entryAddr !== expected) {
     throw new Error(
       `auth entry credential address ${entryAddr} does not match signer address ${expected}`,

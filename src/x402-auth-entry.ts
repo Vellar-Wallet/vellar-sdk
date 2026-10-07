@@ -81,26 +81,26 @@ export function assertAuthEntryInvocation(
   entry: xdr.SorobanAuthorizationEntry,
   expected: ExpectedInvocation,
 ): void {
-  const root = entry.rootInvocation();
+  const root = entry.rootInvocation;
 
-  const fn = root.function();
-  if (fn.switch().name !== "sorobanAuthorizedFunctionTypeContractFn") {
-    throw new AuthEntryMismatchError("function type", "a contract call", fn.switch().name);
+  const fn = root.function;
+  if (fn.type !== "sorobanAuthorizedFunctionTypeContractFn") {
+    throw new AuthEntryMismatchError("function type", "a contract call", fn.type);
   }
 
-  const call = fn.contractFn();
+  const call = fn.contractFn;
 
-  const contract = Address.fromScAddress(call.contractAddress()).toString();
+  const contract = Address.fromScAddress(call.contractAddress).toString();
   if (contract !== expected.contract) {
     throw new AuthEntryMismatchError("contract", expected.contract, contract);
   }
 
-  const name = call.functionName().toString();
+  const name = call.functionName.toString();
   if (name !== expected.functionName) {
     throw new AuthEntryMismatchError("function", expected.functionName, name);
   }
 
-  const args = call.args();
+  const args = call.args;
   if (args.length !== 3) {
     throw new AuthEntryMismatchError("argument count", "3", String(args.length));
   }
@@ -126,7 +126,7 @@ export function assertAuthEntryInvocation(
     throw new AuthEntryMismatchError("amount", expected.amount.toString(), amount.toString());
   }
 
-  const subs = root.subInvocations();
+  const subs = root.subInvocations;
   if (subs.length !== 0) {
     throw new AuthEntryMismatchError(
       "sub-invocations",

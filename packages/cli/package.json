@@ -31,9 +31,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@stellar/stellar-sdk": "^16.0.1",
+    "@stellar/stellar-sdk": "^17.2.1",
     "@x402/core": "2.22.0",
-    "@x402/stellar": "2.22.0",
+    "@x402/stellar": "^2.16.0",
     "commander": "^12.0.0",
     "vellar-sdk": "^0.6.2"
   },
@@ -41,6 +41,6 @@
     "@types/node": "^22.0.0",
     "tsup": "^8.5.1",
     "typescript": "^5.9.2",
-    "vitest": "^3.2.0"
+    "vitest": "^5.0.3"
   }
 }

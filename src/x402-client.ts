@@ -161,8 +161,8 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
     let signed = 0;
     for (let i = 0; i < auth.length; i++) {
       const entry = auth[i]!;
-      if (entry.credentials().switch().name !== "sorobanCredentialsAddress") continue;
-      const addr = Address.fromScAddress(entry.credentials().address().address()).toString();
+      if (entry.credentials.type !== "sorobanCredentialsAddress") continue;
+      const addr = Address.fromScAddress(entry.credentials.address.address).toString();
       if (addr !== deps.signer.address) continue;
 
       // Security audit V-1. The credential address only establishes that the

@@ -41,11 +41,29 @@ function unsignedEntry(): string {
 /** The decoded `Vec[Map[key → sig]]` signature the signer produced. */
 function signatureMapOf(signedXdr: string): xdr.ScMapEntry[] {
   const entry = xdr.SorobanAuthorizationEntry.fromXDR(signedXdr, "base64");
-  const sig = entry.credentials().address().signature();
-  return sig.vec()![0]!.map()!;
+  const creds = entry.credentials;
+  if (creds.type !== "sorobanCredentialsAddress") {
+    throw new Error(`expected sorobanCredentialsAddress, got ${creds.type}`);
+  }
+  const sig = creds.address.signature;
+  if (sig.type !== "scvVec") throw new Error("expected scvVec");
+  const inner = sig.vec![0]!;
+  if (inner.type !== "scvMap") throw new Error("expected scvMap");
+  return inner.map!;
 }
 
-const variantOf = (v: xdr.ScVal) => v.vec()![0]!.sym().toString();
+function variantOf(v: xdr.ScVal): string {
+  if (v.type !== "scvVec") throw new Error("expected scvVec");
+  const sym = v.vec![0]!;
+  if (sym.type !== "scvSymbol") throw new Error("expected scvSymbol");
+  return sym.sym.toString();
+}
+
+/** The address carried in a `Vec[Symbol("Policy"), Address]` policy signer key. */
+function policyAddressOf(key: xdr.ScVal): string {
+  if (key.type !== "scvVec") throw new Error("expected scvVec");
+  return Address.fromScVal(key.vec![1]!).toString();
+}
 
 async function sign(policies?: readonly string[]) {
   const signer = createSessionKeySigner({
@@ -65,37 +83,37 @@ describe("policy co-signers in the signature map", () => {
   it("emits ed25519 only when no policies are configured", async () => {
     const entries = await sign();
     expect(entries).toHaveLength(1);
-    expect(variantOf(entries[0]!.key())).toBe("Ed25519");
+    expect(variantOf(entries[0]!.key)).toBe("Ed25519");
   });
 
   it("adds a Policy entry alongside the ed25519 signature", async () => {
     const entries = await sign([POLICY_A]);
     expect(entries).toHaveLength(2);
-    expect(entries.map((e) => variantOf(e.key()))).toEqual(["Ed25519", "Policy"]);
+    expect(entries.map((e) => variantOf(e.key))).toEqual(["Ed25519", "Policy"]);
   });
 
   it("carries the policy's address in the key and a unit Policy signature", async () => {
     const entries = await sign([POLICY_A]);
     const policyEntry = entries[1]!;
-    const addr = Address.fromScVal(policyEntry.key().vec()![1]!).toString();
+    const addr = policyAddressOf(policyEntry.key);
     expect(addr).toBe(POLICY_A);
     // The policy authorises by running, not by producing bytes.
-    expect(policyEntry.val().vec()).toHaveLength(1);
-    expect(variantOf(policyEntry.val())).toBe("Policy");
+    if (policyEntry.val.type !== "scvVec") throw new Error("expected scvVec");
+    expect(policyEntry.val.vec).toHaveLength(1);
+    expect(variantOf(policyEntry.val)).toBe("Policy");
   });
 
   it("orders Ed25519 before Policy, as ScVal ordering requires", async () => {
     // Soroban rejects an unsorted map. "Ed25519" < "Policy" on the leading symbol.
     const entries = await sign([POLICY_A]);
-    expect(variantOf(entries[0]!.key())).toBe("Ed25519");
-    expect(variantOf(entries[1]!.key())).toBe("Policy");
+    expect(variantOf(entries[0]!.key)).toBe("Ed25519");
+    expect(variantOf(entries[1]!.key)).toBe("Policy");
   });
 
   it("orders multiple policies deterministically by address bytes", async () => {
     const forward = await sign([POLICY_A, POLICY_B]);
     const reversed = await sign([POLICY_B, POLICY_A]);
-    const addrs = (es: xdr.ScMapEntry[]) =>
-      es.slice(1).map((e) => Address.fromScVal(e.key().vec()![1]!).toString());
+    const addrs = (es: xdr.ScMapEntry[]) => es.slice(1).map((e) => policyAddressOf(e.key));
 
     // Configuration order must not change the emitted map.
     expect(addrs(forward)).toEqual(addrs(reversed));

@@ -186,8 +186,8 @@ export function createSmartAccountScheme(deps: SmartAccountSchemeDeps): SchemeCl
       let signed = 0;
       for (let i = 0; i < auth.length; i++) {
         const entry = auth[i]!;
-        if (entry.credentials().switch().name !== "sorobanCredentialsAddress") continue;
-        const addr = Address.fromScAddress(entry.credentials().address().address()).toString();
+        if (entry.credentials.type !== "sorobanCredentialsAddress") continue;
+        const addr = Address.fromScAddress(entry.credentials.address.address).toString();
         if (addr !== deps.signer.address) continue;
 
         // The credential address only says "this is mine to sign". This says

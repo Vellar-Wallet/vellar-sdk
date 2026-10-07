@@ -45,11 +45,27 @@ const latestLedger = fixture.find((e) => e.method === "getLatestLedger")!.respon
 /** Rewrite the recipient inside a real auth entry, leaving everything else intact. */
 function redirectRecipient(authXdr: string, to: string): string {
   const entry = xdr.SorobanAuthorizationEntry.fromXDR(authXdr, "base64");
-  const call = entry.rootInvocation().function().contractFn();
-  const args = call.args();
+  const fn = entry.rootInvocation.function;
+  if (fn.type !== "sorobanAuthorizedFunctionTypeContractFn") {
+    throw new Error("fixture's root invocation is not a contract call");
+  }
+  const args = [...fn.contractFn.args];
   args[1] = nativeToScVal(to, { type: "address" });
-  call.args(args);
-  return entry.toXDR("base64");
+  const redirectedCall = new xdr.InvokeContractArgs({
+    contractAddress: fn.contractFn.contractAddress,
+    functionName: fn.contractFn.functionName,
+    args,
+  });
+  const redirectedFn = xdr.SorobanAuthorizedFunction.sorobanAuthorizedFunctionTypeContractFn(redirectedCall);
+  const redirectedInvocation = new xdr.SorobanAuthorizedInvocation({
+    function: redirectedFn,
+    subInvocations: entry.rootInvocation.subInvocations,
+  });
+  const redirectedEntry = new xdr.SorobanAuthorizationEntry({
+    credentials: entry.credentials,
+    rootInvocation: redirectedInvocation,
+  });
+  return redirectedEntry.toXDR("base64");
 }
 
 /** Swapped per test; the single server below reads it on each request. */
@@ -159,9 +175,11 @@ describe("V-1 — a hostile RPC cannot get a signature over a redirected payment
     expect(calls.length, "the honest path never reached the signer").toBeGreaterThan(0);
 
     const signedEntry = xdr.SorobanAuthorizationEntry.fromXDR(calls[0]!, "base64");
-    const to = Address.fromScVal(
-      signedEntry.rootInvocation().function().contractFn().args()[1]!,
-    ).toString();
+    const signedFn = signedEntry.rootInvocation.function;
+    if (signedFn.type !== "sorobanAuthorizedFunctionTypeContractFn") {
+      throw new Error("signed entry's root invocation is not a contract call");
+    }
+    const to = Address.fromScVal(signedFn.contractFn.args[1]!).toString();
     expect(to).toBe(HONEST_PAYTO);
   }, 30_000);
 });
