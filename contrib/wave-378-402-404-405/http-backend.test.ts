@@ -20,7 +20,7 @@ describe("http-backend tests (#404)", () => {
     });
 
     expect(result).toEqual({ sessionId: "sess-123" });
-    expect(mockFetch).toHaveBeenCalledWith("https://gateway.example.com/wallet/create", {
+    expect(mockFetch).toHaveBeenCalledWith("https://gateway.example.com/wallet/create", expect.objectContaining({
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -29,7 +29,7 @@ describe("http-backend tests (#404)", () => {
         network: "testnet",
         signedTx: "AAAA...",
       }),
-    });
+    }));
   });
 
   it("throws WalletApiError when wallet creation fails", async () => {

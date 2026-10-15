@@ -135,8 +135,100 @@ Returns a `VellarWallet`:
 | `TESTNET`                      | Testnet config: `rpcUrl`, `networkPassphrase`, `walletWasmHash`, `nativeTokenContractId` |
 | `MAINNET` / `mainnetConfig()`  | Mainnet config — see [Mainnet](#mainnet) (two values you must supply)                    |
 | `WalletApiError`               | Thrown by the HTTP backend on non-2xx responses (has `status`, `code`)                   |
+| `WalletApiTimeoutError`        | Thrown when an HTTP backend request exceeds its configured timeout                      |
 | `CircuitOpenError`             | Thrown by the circuit breaker when the facilitator is down — see [Circuit breaking](#circuit-breaking) |
 | `isReachable(rpcUrl)`          | Ping an RPC endpoint for reachability (from `vellar-sdk/rpc`) — see [Health check](#health-check) |
+
+### Wallet activity
+
+`createHttpWalletBackend()` exposes `listActivity()` for the gateway's cursor-paginated
+transaction history. It returns normalized `entries` rather than the raw gateway
+response. The current server session id is sent as a bearer header and never put
+in the URL:
+
+```ts
+const backend = createHttpWalletBackend("https://api.myapp.com");
+const session = await vellar.connect();
+if (!session.serverSessionId) throw new Error("No server session is available");
+
+const page = await backend.listActivity({
+  accountId: session.accountId,
+  network: session.network,
+  bearerSessionId: session.serverSessionId,
+  limit: 20,
+});
+
+for (const entry of page.entries) {
+  console.log(entry.type, entry.txHash, entry.timestamp, entry.amount, entry.token);
+}
+if (page.hasMore && page.nextCursor) {
+  const older = await backend.listActivity({
+    accountId: session.accountId,
+    network: session.network,
+    bearerSessionId: session.serverSessionId,
+    limit: 20,
+    after: page.nextCursor,
+  });
+}
+```
+
+Each entry has `type`, `txHash`, and an ISO timestamp. `counterparty`, `amount`,
+and `token` are present when the recorded activity includes those details. An
+account with no activity returns `{ entries: [], hasMore: false }`.
+
+### Optional React binding
+
+React consumers can import the provider and hook from `vellar-sdk/react`; React
+is an optional peer and is not included in the core entry. The hook does not
+connect or sign automatically. Call `create()`, `connect()`, or `pay()` from an
+explicit user action so passkey prompts remain visible and user-approved.
+
+```tsx
+import { VellarProvider, useWallet } from "vellar-sdk/react";
+
+function WalletControls() {
+  const { session, connect, loading, error, policies } = useWallet();
+  return (
+    <section>
+      <button disabled={loading} onClick={() => void connect()}>
+        {session ? session.accountId : "Connect wallet"}
+      </button>
+      {error instanceof Error && <p role="alert">{error.message}</p>}
+      <button onClick={() => void policies.listTemplates()}>Load policies</button>
+    </section>
+  );
+}
+
+export function App() {
+  return (
+    <VellarProvider config={walletConfig}>
+      <WalletControls />
+    </VellarProvider>
+  );
+}
+```
+
+The provider accepts the same `VellarWalletConfig` as `createVellarWallet()`.
+`useWallet()` exposes `session`, `create`, `connect`, `pay`, `policies`,
+`loading`, and `error`; session updates rerender consumers.
+
+### HTTP request controls
+
+The HTTP backend defaults to a 10-second per-request timeout and retries safe
+reads twice with backoff. Wallet creation and signed transaction submission are
+never retried. Configure the behavior and cancel an individual request with an
+`AbortSignal`:
+
+```ts
+const backend = createHttpWalletBackend("https://api.myapp.com", {
+  timeoutMs: 8_000,
+  maxRetries: 1,
+});
+
+const controller = new AbortController();
+const lookup = backend.lookupContractId({ keyId, network, signal: controller.signal });
+controller.abort();
+```
 
 ### Circuit breaking
 

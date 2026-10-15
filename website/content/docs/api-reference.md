@@ -77,6 +77,83 @@ These forward to your server, which holds the relayer/sponsor credentials and
 submits to the network. See [Installation](./getting-started/installation.md) and
 [How It Works](./getting-started/how-it-works.md).
 
+## Wallet activity
+
+`createHttpWalletBackend()` also provides cursor-paginated transaction history
+through the gateway's `GET /wallet/transactions` route. The current server
+session id is required as a bearer capability and is sent in the authorization
+header, never in the URL.
+
+```ts
+const backend = createHttpWalletBackend(apiUrl);
+const session = await wallet.connect();
+if (!session.serverSessionId) throw new Error("No server session is available");
+
+const page = await backend.listActivity({
+  accountId: session.accountId,
+  network: session.network,
+  bearerSessionId: session.serverSessionId,
+  limit: 20,
+});
+
+// Continue with the opaque cursor; do not parse or construct it.
+const olderPage = page.nextCursor
+  ? await backend.listActivity({
+      accountId: session.accountId,
+      network: session.network,
+      bearerSessionId: session.serverSessionId,
+      limit: 20,
+      after: page.nextCursor,
+    })
+  : undefined;
+```
+
+Each normalized entry includes `type`, `txHash`, and an ISO `timestamp`.
+`counterparty`, `amount`, and `token` are optional when the recorded event has
+those details. Empty history resolves to `{ entries: [], hasMore: false }`.
+
+## React binding
+
+React is an optional peer dependency and the binding is available from the
+separate `vellar-sdk/react` entry, not the package root:
+
+```tsx
+import { VellarProvider, useWallet } from "vellar-sdk/react";
+
+function ConnectButton() {
+  const { session, connect, loading, error } = useWallet();
+  return (
+    <>
+      <button disabled={loading} onClick={() => void connect()}>
+        {session ? session.accountId : "Connect"}
+      </button>
+      {error instanceof Error && <p role="alert">{error.message}</p>}
+    </>
+  );
+}
+
+export function App() {
+  return (
+    <VellarProvider config={walletConfig}>
+      <ConnectButton />
+    </VellarProvider>
+  );
+}
+```
+
+`VellarProvider` takes the same configuration as `createVellarWallet()`.
+`useWallet()` exposes `session`, `create`, `connect`, `pay`, `policies`,
+`loading`, and `error`. It never invokes passkey actions automatically; the app
+calls them from explicit user interactions.
+
+## HTTP request controls
+
+`createHttpWalletBackend()` uses a 10-second request timeout and retries
+idempotent reads twice by default. It does not retry wallet creation or signed
+transaction submission. Configure `timeoutMs` and `maxRetries` in its options;
+each backend method accepts an optional `signal` for cancellation. A timed-out
+request rejects with `WalletApiTimeoutError`.
+
 ## Returns
 
 A [`VellarWallet`](./wallet-methods.md) handle.

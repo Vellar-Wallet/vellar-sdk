@@ -8,6 +8,7 @@ export const STABLE_V1_EXPORTS = [
   "MainnetConfigError",
   "createHttpWalletBackend",
   "WalletApiError",
+  "WalletApiTimeoutError",
   "createBalanceService",
   "fetchBalancesBatch",
   "formatTokenAmount",
@@ -21,6 +22,13 @@ export const STABLE_V1_EXPORTS = [
   "createSessionStore",
   "waitForTransaction",
   "PolicyListFilterError",
+] as const;
+
+/** Runtime facade names re-exported from their stable/experimental barrels. */
+export const FACADE_EXPORTS = [
+  "createPolicyFacade",
+  "PolicyNotDeployableError",
+  "createX402Facade",
 ] as const;
 
 /** Canonical experimental export names — keep in sync with README and index.ts. */

@@ -145,6 +145,8 @@ export interface PayInput {
 export interface VellarWallet {
   /** The current session, or null before create/connect. */
   readonly session: WalletSession | null;
+  /** Subscribe to session updates. Returns an unsubscribe function. */
+  subscribe(listener: (session: WalletSession | null) => void): () => void;
   /** Register a passkey and create the smart account. Prompts WebAuthn. */
   create(input?: { username?: string }): Promise<WalletSession>;
   /** Reconnect with an existing passkey. Prompts WebAuthn (or resumes silently
@@ -220,6 +222,11 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
   });
 
   let session: WalletSession | null = null;
+  const sessionListeners = new Set<(session: WalletSession | null) => void>();
+
+  function notifySessionListeners(): void {
+    for (const listener of sessionListeners) listener(session);
+  }
 
   // Validate at construction so a missing/malformed RPC URL fails here, next to
   // the config that caused it — not later inside wallet.x402.fetch(). (The
@@ -289,6 +296,10 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
     get session() {
       return session;
     },
+    subscribe(listener) {
+      sessionListeners.add(listener);
+      return () => sessionListeners.delete(listener);
+    },
     get agents(): AgentsFacade {
       return agents;
     },
@@ -315,11 +326,13 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
         network: config.network,
         username: input?.username,
       });
+      notifySessionListeners();
       return session;
     },
 
     async connect() {
       session = await connector.connectWallet(config.network);
+      notifySessionListeners();
       return session;
     },
 

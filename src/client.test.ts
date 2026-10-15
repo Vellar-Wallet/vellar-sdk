@@ -85,11 +85,14 @@ describe("createVellarWallet", () => {
 
   it("connect() restores the session via the backend lookup", async () => {
     const { wallet, kit } = build();
+    const listener = vi.fn();
+    wallet.subscribe(listener);
     const session = await wallet.connect();
 
     expect(kit.connectWallet).toHaveBeenCalledOnce();
     expect(session.accountId).toBe("CWALLET");
     expect(wallet.session).toBe(session);
+    expect(listener).toHaveBeenCalledWith(session);
   });
 
   it("pay() before connect throws WalletNotReadyError", async () => {
