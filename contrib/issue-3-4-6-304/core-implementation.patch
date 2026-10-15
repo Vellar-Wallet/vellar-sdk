@@ -1,0 +1,2004 @@
+diff --git a/README.md b/README.md
+index 803d680..80a02c3 100644
+--- a/README.md
++++ b/README.md
+@@ -135,9 +135,101 @@ Returns a `VellarWallet`:
+ | `TESTNET`                      | Testnet config: `rpcUrl`, `networkPassphrase`, `walletWasmHash`, `nativeTokenContractId` |
+ | `MAINNET` / `mainnetConfig()`  | Mainnet config — see [Mainnet](#mainnet) (two values you must supply)                    |
+ | `WalletApiError`               | Thrown by the HTTP backend on non-2xx responses (has `status`, `code`)                   |
++| `WalletApiTimeoutError`        | Thrown when an HTTP backend request exceeds its configured timeout                      |
+ | `CircuitOpenError`             | Thrown by the circuit breaker when the facilitator is down — see [Circuit breaking](#circuit-breaking) |
+ | `isReachable(rpcUrl)`          | Ping an RPC endpoint for reachability (from `vellar-sdk/rpc`) — see [Health check](#health-check) |
+ 
++### Wallet activity
++
++`createHttpWalletBackend()` exposes `listActivity()` for the gateway's cursor-paginated
++transaction history. It returns normalized `entries` rather than the raw gateway
++response. The current server session id is sent as a bearer header and never put
++in the URL:
++
++```ts
++const backend = createHttpWalletBackend("https://api.myapp.com");
++const session = await vellar.connect();
++if (!session.serverSessionId) throw new Error("No server session is available");
++
++const page = await backend.listActivity({
++  accountId: session.accountId,
++  network: session.network,
++  bearerSessionId: session.serverSessionId,
++  limit: 20,
++});
++
++for (const entry of page.entries) {
++  console.log(entry.type, entry.txHash, entry.timestamp, entry.amount, entry.token);
++}
++if (page.hasMore && page.nextCursor) {
++  const older = await backend.listActivity({
++    accountId: session.accountId,
++    network: session.network,
++    bearerSessionId: session.serverSessionId,
++    limit: 20,
++    after: page.nextCursor,
++  });
++}
++```
++
++Each entry has `type`, `txHash`, and an ISO timestamp. `counterparty`, `amount`,
++and `token` are present when the recorded activity includes those details. An
++account with no activity returns `{ entries: [], hasMore: false }`.
++
++### Optional React binding
++
++React consumers can import the provider and hook from `vellar-sdk/react`; React
++is an optional peer and is not included in the core entry. The hook does not
++connect or sign automatically. Call `create()`, `connect()`, or `pay()` from an
++explicit user action so passkey prompts remain visible and user-approved.
++
++```tsx
++import { VellarProvider, useWallet } from "vellar-sdk/react";
++
++function WalletControls() {
++  const { session, connect, loading, error, policies } = useWallet();
++  return (
++    <section>
++      <button disabled={loading} onClick={() => void connect()}>
++        {session ? session.accountId : "Connect wallet"}
++      </button>
++      {error instanceof Error && <p role="alert">{error.message}</p>}
++      <button onClick={() => void policies.listTemplates()}>Load policies</button>
++    </section>
++  );
++}
++
++export function App() {
++  return (
++    <VellarProvider config={walletConfig}>
++      <WalletControls />
++    </VellarProvider>
++  );
++}
++```
++
++The provider accepts the same `VellarWalletConfig` as `createVellarWallet()`.
++`useWallet()` exposes `session`, `create`, `connect`, `pay`, `policies`,
++`loading`, and `error`; session updates rerender consumers.
++
++### HTTP request controls
++
++The HTTP backend defaults to a 10-second per-request timeout and retries safe
++reads twice with backoff. Wallet creation and signed transaction submission are
++never retried. Configure the behavior and cancel an individual request with an
++`AbortSignal`:
++
++```ts
++const backend = createHttpWalletBackend("https://api.myapp.com", {
++  timeoutMs: 8_000,
++  maxRetries: 1,
++});
++
++const controller = new AbortController();
++const lookup = backend.lookupContractId({ keyId, network, signal: controller.signal });
++controller.abort();
++```
++
+ ### Circuit breaking
+ 
+ `createVellarWallet` wraps every call it makes to the vellar-facilitator backend
+diff --git a/contrib/http-backend-tests.test.ts b/contrib/http-backend-tests.test.ts
+index 07c586f..7fd4a2c 100644
+--- a/contrib/http-backend-tests.test.ts
++++ b/contrib/http-backend-tests.test.ts
+@@ -1,5 +1,9 @@
+ import { describe, it, expect, vi } from "vitest";
+-import { createHttpWalletBackend, WalletApiError } from "../src/http-backend";
++import {
++  createHttpWalletBackend,
++  WalletApiError,
++  WalletApiTimeoutError,
++} from "../src/http-backend";
+ 
+ // Direct unit tests for src/http-backend.ts — the SDK's network boundary to the
+ // consumer's own gateway. It is exercised indirectly today via
+@@ -117,7 +121,7 @@ describe("http-backend: documented endpoints post the expected shape", () => {
+     });
+ 
+     expect(result).toEqual({ sessionId: "sess-123" });
+-    expect(fetchImpl).toHaveBeenCalledWith(`${apiUrl}/wallet/create`, {
++    expect(fetchImpl).toHaveBeenCalledWith(`${apiUrl}/wallet/create`, expect.objectContaining({
+       method: "POST",
+       headers: { "content-type": "application/json" },
+       body: JSON.stringify({
+@@ -126,7 +130,7 @@ describe("http-backend: documented endpoints post the expected shape", () => {
+         network: "testnet",
+         signedTx: "AAAA...",
+       }),
+-    });
++    }));
+   });
+ 
+   it("POSTs /wallet/connect with keyId and network, and returns undefined on 404", async () => {
+@@ -136,11 +140,11 @@ describe("http-backend: documented endpoints post the expected shape", () => {
+     const result = await backend.lookupContractId({ keyId: "key-2", network: "mainnet" });
+ 
+     expect(result).toBeUndefined();
+-    expect(fetchImpl).toHaveBeenCalledWith(`${apiUrl}/wallet/connect`, {
++    expect(fetchImpl).toHaveBeenCalledWith(`${apiUrl}/wallet/connect`, expect.objectContaining({
+       method: "POST",
+       headers: { "content-type": "application/json" },
+       body: JSON.stringify({ keyId: "key-2", network: "mainnet" }),
+-    });
++    }));
+   });
+ 
+   it("POSTs /wallet/connect and returns the contract lookup on success", async () => {
+@@ -159,10 +163,210 @@ describe("http-backend: documented endpoints post the expected shape", () => {
+     const result = await backend.submitTransaction({ signedXdr: "AAAA...", network: "testnet" });
+ 
+     expect(result).toEqual({ hash: "txhash123456" });
+-    expect(fetchImpl).toHaveBeenCalledWith(`${apiUrl}/wallet/submit`, {
++    expect(fetchImpl).toHaveBeenCalledWith(`${apiUrl}/wallet/submit`, expect.objectContaining({
+       method: "POST",
+       headers: { "content-type": "application/json" },
+       body: JSON.stringify({ signedXdr: "AAAA...", network: "testnet" }),
++    }));
++  });
++});
++
++describe("http-backend: timeout, abort, and retries", () => {
++  it("rejects a slow response with a typed timeout error", async () => {
++    const fetchImpl = vi.fn((_url: RequestInfo | URL, init?: RequestInit) =>
++      new Promise<Response>((_resolve, reject) => {
++        init?.signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
++      }),
++    );
++    const backend = createHttpWalletBackend(apiUrl, {
++      fetchImpl: fetchImpl as typeof fetch,
++      timeoutMs: 5,
++      maxRetries: 0,
++    });
++
++    await expect(
++      backend.submitTransaction({ signedXdr: "AAAA", network: "testnet" }),
++    ).rejects.toBeInstanceOf(WalletApiTimeoutError);
++  });
++
++  it("times out while reading a response body that never completes", async () => {
++    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue({
++      ok: true,
++      status: 200,
++      json: () => new Promise<never>(() => {}),
++    } as unknown as Response);
++    const backend = createHttpWalletBackend(apiUrl, {
++      fetchImpl,
++      timeoutMs: 5,
++      maxRetries: 0,
++    });
++
++    await expect(
++      backend.submitTransaction({ signedXdr: "AAAA", network: "testnet" }),
++    ).rejects.toBeInstanceOf(WalletApiTimeoutError);
++  });
++
++  it("cancels an in-flight request when its signal aborts", async () => {
++    const fetchImpl = vi.fn((_url: RequestInfo | URL, init?: RequestInit) =>
++      new Promise<Response>((_resolve, reject) => {
++        init?.signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
++      }),
++    );
++    const backend = createHttpWalletBackend(apiUrl, {
++      fetchImpl: fetchImpl as typeof fetch,
++      timeoutMs: 1_000,
++    });
++    const controller = new AbortController();
++    const request = backend.submitTransaction({
++      signedXdr: "AAAA",
++      network: "testnet",
++      signal: controller.signal,
+     });
++
++    controller.abort();
++
++    await expect(request).rejects.toMatchObject({ name: "AbortError" });
++    expect(fetchImpl).toHaveBeenCalledTimes(1);
++  });
++
++  it("retries an idempotent lookup and returns the successful response", async () => {
++    const fetchImpl = vi
++      .fn<typeof fetch>()
++      .mockResolvedValueOnce(jsonResponse(503, { error: "busy" }, false))
++      .mockResolvedValueOnce(jsonResponse(200, { contractId: "C1", sessionId: "s1" }));
++    const backend = createHttpWalletBackend(apiUrl, {
++      fetchImpl,
++      maxRetries: 1,
++      retryBaseDelayMs: 0,
++    });
++
++    await expect(
++      backend.lookupContractId({ keyId: "key-1", network: "testnet" }),
++    ).resolves.toEqual({ contractId: "C1", sessionId: "s1" });
++    expect(fetchImpl).toHaveBeenCalledTimes(2);
++  });
++
++  it("never retries a transaction submission", async () => {
++    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(503, { error: "busy" }, false));
++    const backend = createHttpWalletBackend(apiUrl, {
++      fetchImpl,
++      maxRetries: 3,
++      retryBaseDelayMs: 0,
++    });
++
++    await expect(
++      backend.submitTransaction({ signedXdr: "AAAA", network: "testnet" }),
++    ).rejects.toBeInstanceOf(WalletApiError);
++    expect(fetchImpl).toHaveBeenCalledTimes(1);
++  });
++
++  it("never retries wallet creation", async () => {
++    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(503, { error: "busy" }, false));
++    const backend = createHttpWalletBackend(apiUrl, {
++      fetchImpl,
++      maxRetries: 3,
++      retryBaseDelayMs: 0,
++    });
++
++    await expect(
++      backend.submitWalletCreation({
++        keyId: "key-1",
++        contractId: "CCONTRACT",
++        network: "testnet",
++        signedTx: "AAAA",
++      }),
++    ).rejects.toBeInstanceOf(WalletApiError);
++    expect(fetchImpl).toHaveBeenCalledTimes(1);
++  });
++});
++
++describe("http-backend: paginated wallet activity", () => {
++  it("maps populated history and follows the next-page cursor", async () => {
++    const fetchImpl = vi
++      .fn<typeof fetch>()
++      .mockResolvedValueOnce(
++        jsonResponse(200, {
++          transactions: [
++            {
++              type: "payment",
++              counterparty: "GDESTINATION",
++              amount: "12.5000000",
++              token: { symbol: "XLM", contractId: "CXLM", decimals: 7, ignored: true },
++              txHash: "hash-1",
++              at: "2026-10-15T10:00:00.000Z",
++              ignored: "upstream-only",
++            },
++          ],
++          hasMore: true,
++          nextCursor: "opaque cursor/+",
++        }),
++      )
++      .mockResolvedValueOnce(
++        jsonResponse(200, {
++          transactions: [{ txHash: "hash-2", at: "2026-10-14T10:00:00.000Z" }],
++          hasMore: false,
++          nextCursor: null,
++        }),
++      );
++    const backend = createHttpWalletBackend(apiUrl, fetchImpl);
++    const request = {
++      accountId: "CCONTRACT",
++      network: "testnet" as const,
++      bearerSessionId: "session-secret",
++      limit: 1,
++    };
++
++    const first = await backend.listActivity(request);
++    expect(first).toEqual({
++      entries: [
++        {
++          type: "payment",
++          counterparty: "GDESTINATION",
++          amount: "12.5000000",
++          token: { symbol: "XLM", contractId: "CXLM", decimals: 7 },
++          txHash: "hash-1",
++          timestamp: "2026-10-15T10:00:00.000Z",
++        },
++      ],
++      hasMore: true,
++      nextCursor: "opaque cursor/+",
++    });
++    const second = await backend.listActivity({ ...request, after: first.nextCursor });
++
++    expect(second).toEqual({
++      entries: [
++        {
++          type: "tx.submitted",
++          txHash: "hash-2",
++          timestamp: "2026-10-14T10:00:00.000Z",
++        },
++      ],
++      hasMore: false,
++      nextCursor: undefined,
++    });
++    const [firstUrl, firstInit] = fetchImpl.mock.calls[0] as [string, RequestInit];
++    const [secondUrl, secondInit] = fetchImpl.mock.calls[1] as [string, RequestInit];
++    expect(new URL(firstUrl).pathname).toBe("/wallet/transactions");
++    expect(new URL(firstUrl).searchParams.get("contractId")).toBe("CCONTRACT");
++    expect(new URL(firstUrl).searchParams.get("limit")).toBe("1");
++    expect(new URL(secondUrl).searchParams.get("after")).toBe("opaque cursor/+");
++    expect(firstInit.headers).toEqual({ authorization: "Bearer session-secret" });
++    expect(secondInit.headers).toEqual({ authorization: "Bearer session-secret" });
++    expect(firstUrl).not.toContain("session-secret");
++  });
++
++  it("returns an empty page when the account has no activity", async () => {
++    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
++      jsonResponse(200, { transactions: [], hasMore: false, nextCursor: null }),
++    );
++    const backend = createHttpWalletBackend(apiUrl, fetchImpl);
++
++    await expect(
++      backend.listActivity({
++        accountId: "CCONTRACT",
++        network: "testnet",
++        bearerSessionId: "session-secret",
++      }),
++    ).resolves.toEqual({ entries: [], hasMore: false, nextCursor: undefined });
+   });
+ });
+diff --git a/contrib/wave-378-402-404-405/http-backend.test.ts b/contrib/wave-378-402-404-405/http-backend.test.ts
+index 3ea8605..32d87a7 100644
+--- a/contrib/wave-378-402-404-405/http-backend.test.ts
++++ b/contrib/wave-378-402-404-405/http-backend.test.ts
+@@ -20,7 +20,7 @@ describe("http-backend tests (#404)", () => {
+     });
+ 
+     expect(result).toEqual({ sessionId: "sess-123" });
+-    expect(mockFetch).toHaveBeenCalledWith("https://gateway.example.com/wallet/create", {
++    expect(mockFetch).toHaveBeenCalledWith("https://gateway.example.com/wallet/create", expect.objectContaining({
+       method: "POST",
+       headers: { "content-type": "application/json" },
+       body: JSON.stringify({
+@@ -29,7 +29,7 @@ describe("http-backend tests (#404)", () => {
+         network: "testnet",
+         signedTx: "AAAA...",
+       }),
+-    });
++    }));
+   });
+ 
+   it("throws WalletApiError when wallet creation fails", async () => {
+diff --git a/package-lock.json b/package-lock.json
+index 7e370ef..5a8da49 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -16,18 +16,27 @@
+       },
+       "devDependencies": {
+         "@stellar/stellar-sdk": "^16.0.1",
++        "@types/react": "^19.0.0",
++        "@types/react-dom": "^19.0.0",
++        "jsdom": "^26.0.0",
+         "passkey-kit": "^0.16.5",
++        "react": "^19.0.0",
++        "react-dom": "^19.0.0",
+         "tsup": "^8.5.1",
+         "typescript": "^5.9.2",
+         "vitest": "^3.2.0"
+       },
+       "peerDependencies": {
+         "@stellar/stellar-sdk": "^16.0.0",
+-        "passkey-kit": ">=0.13.0 <0.17.0"
++        "passkey-kit": ">=0.13.0 <0.17.0",
++        "react": "^18.0.0 || ^19.0.0"
+       },
+       "peerDependenciesMeta": {
+         "passkey-kit": {
+           "optional": true
++        },
++        "react": {
++          "optional": true
+         }
+       }
+     },
+@@ -48,6 +57,135 @@
+       "dev": true,
+       "license": "MIT"
+     },
++    "node_modules/@asamuzakjp/css-color": {
++      "version": "3.2.0",
++      "resolved": "https://registry.npmjs.org/@asamuzakjp/css-color/-/css-color-3.2.0.tgz",
++      "integrity": "sha512-K1A6z8tS3XsmCMM86xoWdn7Fkdn9m6RSVtocUrJYIwZnFVkng/PvkEoWtOWmP+Scc6saYWHWZYbndEEXxl24jw==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "@csstools/css-calc": "^2.1.3",
++        "@csstools/css-color-parser": "^3.0.9",
++        "@csstools/css-parser-algorithms": "^3.0.4",
++        "@csstools/css-tokenizer": "^3.0.3",
++        "lru-cache": "^10.4.3"
++      }
++    },
++    "node_modules/@csstools/color-helpers": {
++      "version": "5.1.0",
++      "resolved": "https://registry.npmjs.org/@csstools/color-helpers/-/color-helpers-5.1.0.tgz",
++      "integrity": "sha512-S11EXWJyy0Mz5SYvRmY8nJYTFFd1LCNV+7cXyAgQtOOuzb4EsgfqDufL+9esx72/eLhsRdGZwaldu/h+E4t4BA==",
++      "dev": true,
++      "funding": [
++        {
++          "type": "github",
++          "url": "https://github.com/sponsors/csstools"
++        },
++        {
++          "type": "opencollective",
++          "url": "https://opencollective.com/csstools"
++        }
++      ],
++      "license": "MIT-0",
++      "engines": {
++        "node": ">=18"
++      }
++    },
++    "node_modules/@csstools/css-calc": {
++      "version": "2.1.4",
++      "resolved": "https://registry.npmjs.org/@csstools/css-calc/-/css-calc-2.1.4.tgz",
++      "integrity": "sha512-3N8oaj+0juUw/1H3YwmDDJXCgTB1gKU6Hc/bB502u9zR0q2vd786XJH9QfrKIEgFlZmhZiq6epXl4rHqhzsIgQ==",
++      "dev": true,
++      "funding": [
++        {
++          "type": "github",
++          "url": "https://github.com/sponsors/csstools"
++        },
++        {
++          "type": "opencollective",
++          "url": "https://opencollective.com/csstools"
++        }
++      ],
++      "license": "MIT",
++      "engines": {
++        "node": ">=18"
++      },
++      "peerDependencies": {
++        "@csstools/css-parser-algorithms": "^3.0.5",
++        "@csstools/css-tokenizer": "^3.0.4"
++      }
++    },
++    "node_modules/@csstools/css-color-parser": {
++      "version": "3.1.0",
++      "resolved": "https://registry.npmjs.org/@csstools/css-color-parser/-/css-color-parser-3.1.0.tgz",
++      "integrity": "sha512-nbtKwh3a6xNVIp/VRuXV64yTKnb1IjTAEEh3irzS+HkKjAOYLTGNb9pmVNntZ8iVBHcWDA2Dof0QtPgFI1BaTA==",
++      "dev": true,
++      "funding": [
++        {
++          "type": "github",
++          "url": "https://github.com/sponsors/csstools"
++        },
++        {
++          "type": "opencollective",
++          "url": "https://opencollective.com/csstools"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "@csstools/color-helpers": "^5.1.0",
++        "@csstools/css-calc": "^2.1.4"
++      },
++      "engines": {
++        "node": ">=18"
++      },
++      "peerDependencies": {
++        "@csstools/css-parser-algorithms": "^3.0.5",
++        "@csstools/css-tokenizer": "^3.0.4"
++      }
++    },
++    "node_modules/@csstools/css-parser-algorithms": {
++      "version": "3.0.5",
++      "resolved": "https://registry.npmjs.org/@csstools/css-parser-algorithms/-/css-parser-algorithms-3.0.5.tgz",
++      "integrity": "sha512-DaDeUkXZKjdGhgYaHNJTV9pV7Y9B3b644jCLs9Upc3VeNGg6LWARAT6O+Q+/COo+2gg/bM5rhpMAtf70WqfBdQ==",
++      "dev": true,
++      "funding": [
++        {
++          "type": "github",
++          "url": "https://github.com/sponsors/csstools"
++        },
++        {
++          "type": "opencollective",
++          "url": "https://opencollective.com/csstools"
++        }
++      ],
++      "license": "MIT",
++      "engines": {
++        "node": ">=18"
++      },
++      "peerDependencies": {
++        "@csstools/css-tokenizer": "^3.0.4"
++      }
++    },
++    "node_modules/@csstools/css-tokenizer": {
++      "version": "3.0.4",
++      "resolved": "https://registry.npmjs.org/@csstools/css-tokenizer/-/css-tokenizer-3.0.4.tgz",
++      "integrity": "sha512-Vd/9EVDiu6PPJt9yAh6roZP6El1xHrdvIVGjyBsHR0RYwNHgL7FJPyIIW4fANJNG6FtyZfvlRPpFI4ZM/lubvw==",
++      "dev": true,
++      "funding": [
++        {
++          "type": "github",
++          "url": "https://github.com/sponsors/csstools"
++        },
++        {
++          "type": "opencollective",
++          "url": "https://opencollective.com/csstools"
++        }
++      ],
++      "license": "MIT",
++      "engines": {
++        "node": ">=18"
++      }
++    },
+     "node_modules/@esbuild/aix-ppc64": {
+       "version": "0.27.7",
+       "resolved": "https://registry.npmjs.org/@esbuild/aix-ppc64/-/aix-ppc64-0.27.7.tgz",
+@@ -1225,6 +1363,26 @@
+         "undici-types": "~6.21.0"
+       }
+     },
++    "node_modules/@types/react": {
++      "version": "19.3.0",
++      "resolved": "https://registry.npmjs.org/@types/react/-/react-19.3.0.tgz",
++      "integrity": "sha512-N0rFCuH9YoxG9/m61l9MfpJKfmLOVU0em7ipIz6TRgSSkvReLB9vL85GB+yr8Bs5leqpvg96JSwF4ZS1s4viQg==",
++      "devOptional": true,
++      "license": "MIT",
++      "dependencies": {
++        "csstype": "^3.2.2"
++      }
++    },
++    "node_modules/@types/react-dom": {
++      "version": "19.3.0",
++      "resolved": "https://registry.npmjs.org/@types/react-dom/-/react-dom-19.3.0.tgz",
++      "integrity": "sha512-ZI7bU42mZXXKHn/qNLEw2IrbiINU7X5+vfgdixBHkCNpYWXjKgfQ/P+uyGb5CjOLB9UcnTeg3rylQtV2hym44Q==",
++      "dev": true,
++      "license": "MIT",
++      "peerDependencies": {
++        "@types/react": "^19.3.0"
++      }
++    },
+     "node_modules/@vitest/expect": {
+       "version": "3.2.7",
+       "resolved": "https://registry.npmjs.org/@vitest/expect/-/expect-3.2.7.tgz",
+@@ -1866,6 +2024,41 @@
+         "node": ">= 8"
+       }
+     },
++    "node_modules/cssstyle": {
++      "version": "4.6.0",
++      "resolved": "https://registry.npmjs.org/cssstyle/-/cssstyle-4.6.0.tgz",
++      "integrity": "sha512-2z+rWdzbbSZv6/rhtvzvqeZQHrBaqgogqt85sqFNbabZOuFbCVFb8kPeEtZjiKkbrm395irpNKiYeFeLiQnFPg==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "@asamuzakjp/css-color": "^3.2.0",
++        "rrweb-cssom": "^0.8.0"
++      },
++      "engines": {
++        "node": ">=18"
++      }
++    },
++    "node_modules/csstype": {
++      "version": "3.2.3",
++      "resolved": "https://registry.npmjs.org/csstype/-/csstype-3.2.3.tgz",
++      "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
++      "devOptional": true,
++      "license": "MIT"
++    },
++    "node_modules/data-urls": {
++      "version": "5.0.0",
++      "resolved": "https://registry.npmjs.org/data-urls/-/data-urls-5.0.0.tgz",
++      "integrity": "sha512-ZYP5VBHshaDAiVZxjbRVcFJpc+4xGgT0bK3vzy1HLN8jTO975HEbuYzZJcHoQEY5K1a0z8YayJkyVETa08eNTg==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "whatwg-mimetype": "^4.0.0",
++        "whatwg-url": "^14.0.0"
++      },
++      "engines": {
++        "node": ">=18"
++      }
++    },
+     "node_modules/debug": {
+       "version": "4.4.3",
+       "resolved": "https://registry.npmjs.org/debug/-/debug-4.4.3.tgz",
+@@ -1883,6 +2076,13 @@
+         }
+       }
+     },
++    "node_modules/decimal.js": {
++      "version": "10.6.0",
++      "resolved": "https://registry.npmjs.org/decimal.js/-/decimal.js-10.6.0.tgz",
++      "integrity": "sha512-YpgQiITW3JXGntzdUmyUR1V812Hn8T1YVXhCu+wO3OpS4eU9l4YdD3qjyiKdV6mvV29zapkMeD390UVEf2lkUg==",
++      "dev": true,
++      "license": "MIT"
++    },
+     "node_modules/deep-eql": {
+       "version": "5.0.2",
+       "resolved": "https://registry.npmjs.org/deep-eql/-/deep-eql-5.0.2.tgz",
+@@ -1958,6 +2158,19 @@
+         "node": ">= 0.8"
+       }
+     },
++    "node_modules/entities": {
++      "version": "6.0.1",
++      "resolved": "https://registry.npmjs.org/entities/-/entities-6.0.1.tgz",
++      "integrity": "sha512-aN97NXWF6AWBTahfVOIrB/NShkzi5H7F9r1s9mD3cDj4Ko5f2qhhVoYMibXF7GlLveb/D2ioWay8lxI97Ven3g==",
++      "dev": true,
++      "license": "BSD-2-Clause",
++      "engines": {
++        "node": ">=0.12"
++      },
++      "funding": {
++        "url": "https://github.com/fb55/entities?sponsor=1"
++      }
++    },
+     "node_modules/es-define-property": {
+       "version": "1.0.1",
+       "resolved": "https://registry.npmjs.org/es-define-property/-/es-define-property-1.0.1.tgz",
+@@ -2465,6 +2678,19 @@
+         "node": ">=16.9.0"
+       }
+     },
++    "node_modules/html-encoding-sniffer": {
++      "version": "4.0.0",
++      "resolved": "https://registry.npmjs.org/html-encoding-sniffer/-/html-encoding-sniffer-4.0.0.tgz",
++      "integrity": "sha512-Y22oTqIU4uuPgEemfz7NDJz6OeKf12Lsu+QC+s3BVpda64lTiMYCyGwg5ki4vFxkMwQdeZDl2adZoqUgdFuTgQ==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "whatwg-encoding": "^3.1.1"
++      },
++      "engines": {
++        "node": ">=18"
++      }
++    },
+     "node_modules/http-errors": {
+       "version": "2.0.1",
+       "resolved": "https://registry.npmjs.org/http-errors/-/http-errors-2.0.1.tgz",
+@@ -2485,6 +2711,30 @@
+         "url": "https://opencollective.com/express"
+       }
+     },
++    "node_modules/http-proxy-agent": {
++      "version": "7.0.2",
++      "resolved": "https://registry.npmjs.org/http-proxy-agent/-/http-proxy-agent-7.0.2.tgz",
++      "integrity": "sha512-T1gkAiYYDWYx3V5Bmyu7HcfcvL7mUrTWiM6yOfa3PIphViJ/gFPbvidQ+veqSOHci/PxBcDabeUNCzpOODJZig==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "agent-base": "^7.1.0",
++        "debug": "^4.3.4"
++      },
++      "engines": {
++        "node": ">= 14"
++      }
++    },
++    "node_modules/http-proxy-agent/node_modules/agent-base": {
++      "version": "7.1.4",
++      "resolved": "https://registry.npmjs.org/agent-base/-/agent-base-7.1.4.tgz",
++      "integrity": "sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">= 14"
++      }
++    },
+     "node_modules/https-proxy-agent": {
+       "version": "5.0.1",
+       "resolved": "https://registry.npmjs.org/https-proxy-agent/-/https-proxy-agent-5.0.1.tgz",
+@@ -2571,6 +2821,13 @@
+         "url": "https://github.com/sponsors/ljharb"
+       }
+     },
++    "node_modules/is-potential-custom-element-name": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/is-potential-custom-element-name/-/is-potential-custom-element-name-1.0.1.tgz",
++      "integrity": "sha512-bCYeRA2rVibKZd+s2625gGnGF/t7DSqDs4dP7CrLA1m7jKWz6pps0LpYLJN8Q64HtmPKJ1hrN3nzPNKFEKOUiQ==",
++      "dev": true,
++      "license": "MIT"
++    },
+     "node_modules/is-promise": {
+       "version": "4.0.0",
+       "resolved": "https://registry.npmjs.org/is-promise/-/is-promise-4.0.0.tgz",
+@@ -2644,6 +2901,70 @@
+       "dev": true,
+       "license": "MIT"
+     },
++    "node_modules/jsdom": {
++      "version": "26.1.0",
++      "resolved": "https://registry.npmjs.org/jsdom/-/jsdom-26.1.0.tgz",
++      "integrity": "sha512-Cvc9WUhxSMEo4McES3P7oK3QaXldCfNWp7pl2NNeiIFlCoLr3kfq9kb1fxftiwk1FLV7CvpvDfonxtzUDeSOPg==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "cssstyle": "^4.2.1",
++        "data-urls": "^5.0.0",
++        "decimal.js": "^10.5.0",
++        "html-encoding-sniffer": "^4.0.0",
++        "http-proxy-agent": "^7.0.2",
++        "https-proxy-agent": "^7.0.6",
++        "is-potential-custom-element-name": "^1.0.1",
++        "nwsapi": "^2.2.16",
++        "parse5": "^7.2.1",
++        "rrweb-cssom": "^0.8.0",
++        "saxes": "^6.0.0",
++        "symbol-tree": "^3.2.4",
++        "tough-cookie": "^5.1.1",
++        "w3c-xmlserializer": "^5.0.0",
++        "webidl-conversions": "^7.0.0",
++        "whatwg-encoding": "^3.1.1",
++        "whatwg-mimetype": "^4.0.0",
++        "whatwg-url": "^14.1.1",
++        "ws": "^8.18.0",
++        "xml-name-validator": "^5.0.0"
++      },
++      "engines": {
++        "node": ">=18"
++      },
++      "peerDependencies": {
++        "canvas": "^3.0.0"
++      },
++      "peerDependenciesMeta": {
++        "canvas": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/jsdom/node_modules/agent-base": {
++      "version": "7.1.4",
++      "resolved": "https://registry.npmjs.org/agent-base/-/agent-base-7.1.4.tgz",
++      "integrity": "sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">= 14"
++      }
++    },
++    "node_modules/jsdom/node_modules/https-proxy-agent": {
++      "version": "7.0.6",
++      "resolved": "https://registry.npmjs.org/https-proxy-agent/-/https-proxy-agent-7.0.6.tgz",
++      "integrity": "sha512-vK9P5/iUfdl95AI+JVyUuIcVtd4ofvtrOr3HNtM2yxC9bnMbEdp3x01OhQNnjb8IJYi38VlTE3mBXwcfvywuSw==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "agent-base": "^7.1.2",
++        "debug": "4"
++      },
++      "engines": {
++        "node": ">= 14"
++      }
++    },
+     "node_modules/json-schema-traverse": {
+       "version": "1.0.0",
+       "resolved": "https://registry.npmjs.org/json-schema-traverse/-/json-schema-traverse-1.0.0.tgz",
+@@ -2693,6 +3014,13 @@
+       "dev": true,
+       "license": "MIT"
+     },
++    "node_modules/lru-cache": {
++      "version": "10.4.3",
++      "resolved": "https://registry.npmjs.org/lru-cache/-/lru-cache-10.4.3.tgz",
++      "integrity": "sha512-JNAzZcXrCt42VGLuYz0zfAzDfAvJWW6AfYlDBQyDV5DClI2m5sAmK+OIO7s59XfsRsWHp02jAJrRadPRGTt6SQ==",
++      "dev": true,
++      "license": "ISC"
++    },
+     "node_modules/magic-string": {
+       "version": "0.30.21",
+       "resolved": "https://registry.npmjs.org/magic-string/-/magic-string-0.30.21.tgz",
+@@ -2817,6 +3145,13 @@
+         "node": ">= 0.6"
+       }
+     },
++    "node_modules/nwsapi": {
++      "version": "2.2.28",
++      "resolved": "https://registry.npmjs.org/nwsapi/-/nwsapi-2.2.28.tgz",
++      "integrity": "sha512-IlVB7OS7qrOsVYlpnFIkETjMwT9jwvmocJmmM+GZU/PAB3uGi9Ezd7vcWhWBUnSc0ya4ppmQITOyP1ez9gg8cg==",
++      "dev": true,
++      "license": "MIT"
++    },
+     "node_modules/object-assign": {
+       "version": "4.1.1",
+       "resolved": "https://registry.npmjs.org/object-assign/-/object-assign-4.1.1.tgz",
+@@ -2859,6 +3194,19 @@
+         "wrappy": "1"
+       }
+     },
++    "node_modules/parse5": {
++      "version": "7.3.0",
++      "resolved": "https://registry.npmjs.org/parse5/-/parse5-7.3.0.tgz",
++      "integrity": "sha512-IInvU7fabl34qmi9gY8XOVxhYyMyuH2xUNpb2q8/Y+7552KlejkRvqvD19nMoUW/uQGGbqNpA6Tufu5FL5BZgw==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "entities": "^6.0.0"
++      },
++      "funding": {
++        "url": "https://github.com/inikulin/parse5?sponsor=1"
++      }
++    },
+     "node_modules/parseurl": {
+       "version": "1.3.3",
+       "resolved": "https://registry.npmjs.org/parseurl/-/parseurl-1.3.3.tgz",
+@@ -3096,6 +3444,16 @@
+         "node": ">=10"
+       }
+     },
++    "node_modules/punycode": {
++      "version": "2.3.1",
++      "resolved": "https://registry.npmjs.org/punycode/-/punycode-2.3.1.tgz",
++      "integrity": "sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">=6"
++      }
++    },
+     "node_modules/qs": {
+       "version": "6.15.3",
+       "resolved": "https://registry.npmjs.org/qs/-/qs-6.15.3.tgz",
+@@ -3150,6 +3508,29 @@
+         "node": ">= 0.10"
+       }
+     },
++    "node_modules/react": {
++      "version": "19.3.1",
++      "resolved": "https://registry.npmjs.org/react/-/react-19.3.1.tgz",
++      "integrity": "sha512-QNhWdt7nrgVWWQG58QuGsAR3jv3Hbe4mb4vz7w2csnHavciZJgda1CPNaldF6eVxv90ud3jUXpKlHL69gO38yw==",
++      "devOptional": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">=0.10.0"
++      }
++    },
++    "node_modules/react-dom": {
++      "version": "19.3.1",
++      "resolved": "https://registry.npmjs.org/react-dom/-/react-dom-19.3.1.tgz",
++      "integrity": "sha512-Y0bARz53lhEC1NMCASs0/j+faB/zqt3R8hpvg1e8+61ZVJ4UL0UdC4cBbXfZMcIuhrfgeILTLe+ZeBCavQPtKQ==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "scheduler": "^0.28.0"
++      },
++      "peerDependencies": {
++        "react": "^19.3.1"
++      }
++    },
+     "node_modules/readdirp": {
+       "version": "4.1.2",
+       "resolved": "https://registry.npmjs.org/readdirp/-/readdirp-4.1.2.tgz",
+@@ -3244,6 +3625,13 @@
+         "node": ">= 18"
+       }
+     },
++    "node_modules/rrweb-cssom": {
++      "version": "0.8.0",
++      "resolved": "https://registry.npmjs.org/rrweb-cssom/-/rrweb-cssom-0.8.0.tgz",
++      "integrity": "sha512-guoltQEx+9aMf2gDZ0s62EcV8lsXR+0w8915TC3ITdn2YueuNjdAYh/levpU9nFaoChh9RUS5ZdQMrKfVEN9tw==",
++      "dev": true,
++      "license": "MIT"
++    },
+     "node_modules/sac-sdk": {
+       "version": "0.4.4",
+       "resolved": "https://registry.npmjs.org/sac-sdk/-/sac-sdk-0.4.4.tgz",
+@@ -3286,6 +3674,26 @@
+       "integrity": "sha512-YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg==",
+       "license": "MIT"
+     },
++    "node_modules/saxes": {
++      "version": "6.0.0",
++      "resolved": "https://registry.npmjs.org/saxes/-/saxes-6.0.0.tgz",
++      "integrity": "sha512-xAg7SOnEhrm5zI3puOOKyy1OMcMlIJZYNJY7xLBwSze0UjhPLnWfj2GF2EpT0jmzaJKIWKHLsaSSajf35bcYnA==",
++      "dev": true,
++      "license": "ISC",
++      "dependencies": {
++        "xmlchars": "^2.2.0"
++      },
++      "engines": {
++        "node": ">=v12.22.7"
++      }
++    },
++    "node_modules/scheduler": {
++      "version": "0.28.0",
++      "resolved": "https://registry.npmjs.org/scheduler/-/scheduler-0.28.0.tgz",
++      "integrity": "sha512-juorfCmIkIw8tT+p5BXSm6PJjQF/ycEYmKyzURCIt/RaZIhL+PulbQ9Yu2z1HdOJDdqDTlxA1+xKBmHXJsczAw==",
++      "dev": true,
++      "license": "MIT"
++    },
+     "node_modules/send": {
+       "version": "1.2.1",
+       "resolved": "https://registry.npmjs.org/send/-/send-1.2.1.tgz",
+@@ -3602,6 +4010,13 @@
+         "node": ">= 6"
+       }
+     },
++    "node_modules/symbol-tree": {
++      "version": "3.2.4",
++      "resolved": "https://registry.npmjs.org/symbol-tree/-/symbol-tree-3.2.4.tgz",
++      "integrity": "sha512-9QNk5KwDF+Bvz+PyObkmSYjI5ksVUYtjW7AU22r2NKcfLJcXp96hkDWU3+XndOsUb+AQ9QhfzfCT2O+CNWT5Tw==",
++      "dev": true,
++      "license": "MIT"
++    },
+     "node_modules/thenify": {
+       "version": "3.3.1",
+       "resolved": "https://registry.npmjs.org/thenify/-/thenify-3.3.1.tgz",
+@@ -3686,6 +4101,26 @@
+         "node": ">=14.0.0"
+       }
+     },
++    "node_modules/tldts": {
++      "version": "6.1.86",
++      "resolved": "https://registry.npmjs.org/tldts/-/tldts-6.1.86.tgz",
++      "integrity": "sha512-WMi/OQ2axVTf/ykqCQgXiIct+mSQDFdH2fkwhPwgEwvJ1kSzZRiinb0zF2Xb8u4+OqPChmyI6MEu4EezNJz+FQ==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "tldts-core": "^6.1.86"
++      },
++      "bin": {
++        "tldts": "bin/cli.js"
++      }
++    },
++    "node_modules/tldts-core": {
++      "version": "6.1.86",
++      "resolved": "https://registry.npmjs.org/tldts-core/-/tldts-core-6.1.86.tgz",
++      "integrity": "sha512-Je6p7pkk+KMzMv2XXKmAE3McmolOQFdxkKw0R8EYNr7sELW46JqnNeTX8ybPiQgvg1ymCoF8LXs5fzFaZvJPTA==",
++      "dev": true,
++      "license": "MIT"
++    },
+     "node_modules/to-buffer": {
+       "version": "1.2.2",
+       "resolved": "https://registry.npmjs.org/to-buffer/-/to-buffer-1.2.2.tgz",
+@@ -3717,6 +4152,32 @@
+       "dev": true,
+       "license": "MIT"
+     },
++    "node_modules/tough-cookie": {
++      "version": "5.1.2",
++      "resolved": "https://registry.npmjs.org/tough-cookie/-/tough-cookie-5.1.2.tgz",
++      "integrity": "sha512-FVDYdxtnj0G6Qm/DhNPSb8Ju59ULcup3tuJxkFb5K8Bv2pUXILbf0xZWU8PX8Ov19OXljbUyveOFwRMwkXzO+A==",
++      "dev": true,
++      "license": "BSD-3-Clause",
++      "dependencies": {
++        "tldts": "^6.1.32"
++      },
++      "engines": {
++        "node": ">=16"
++      }
++    },
++    "node_modules/tr46": {
++      "version": "5.1.1",
++      "resolved": "https://registry.npmjs.org/tr46/-/tr46-5.1.1.tgz",
++      "integrity": "sha512-hdF5ZgjTqgAntKkklYw0R03MG2x/bSzTtkxmIRw/sTNV8YXsCJ1tfLAX23lhxhHJlEf3CRCOCGGWw3vI3GaSPw==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "punycode": "^2.3.1"
++      },
++      "engines": {
++        "node": ">=18"
++      }
++    },
+     "node_modules/tree-kill": {
+       "version": "1.2.2",
+       "resolved": "https://registry.npmjs.org/tree-kill/-/tree-kill-1.2.2.tgz",
+@@ -4106,6 +4567,80 @@
+         }
+       }
+     },
++    "node_modules/w3c-xmlserializer": {
++      "version": "5.0.0",
++      "resolved": "https://registry.npmjs.org/w3c-xmlserializer/-/w3c-xmlserializer-5.0.0.tgz",
++      "integrity": "sha512-o8qghlI8NZHU1lLPrpi2+Uq7abh4GGPpYANlalzWxyWteJOCsr/P+oPBA49TOLu5FTZO4d3F9MnWJfiMo4BkmA==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "xml-name-validator": "^5.0.0"
++      },
++      "engines": {
++        "node": ">=18"
++      }
++    },
++    "node_modules/webidl-conversions": {
++      "version": "7.0.0",
++      "resolved": "https://registry.npmjs.org/webidl-conversions/-/webidl-conversions-7.0.0.tgz",
++      "integrity": "sha512-VwddBukDzu71offAQR975unBIGqfKZpM+8ZX6ySk8nYhVoo5CYaZyzt3YBvYtRtO+aoGlqxPg/B87NGVZ/fu6g==",
++      "dev": true,
++      "license": "BSD-2-Clause",
++      "engines": {
++        "node": ">=12"
++      }
++    },
++    "node_modules/whatwg-encoding": {
++      "version": "3.1.1",
++      "resolved": "https://registry.npmjs.org/whatwg-encoding/-/whatwg-encoding-3.1.1.tgz",
++      "integrity": "sha512-6qN4hJdMwfYBtE3YBTTHhoeuUrDBPZmbQaxWAqSALV/MeEnR5z1xd8UKud2RAkFoPkmB+hli1TZSnyi84xz1vQ==",
++      "deprecated": "Use @exodus/bytes instead for a more spec-conformant and faster implementation",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "iconv-lite": "0.6.3"
++      },
++      "engines": {
++        "node": ">=18"
++      }
++    },
++    "node_modules/whatwg-encoding/node_modules/iconv-lite": {
++      "version": "0.6.3",
++      "resolved": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.6.3.tgz",
++      "integrity": "sha512-4fCk79wshMdzMp2rH06qWrJE4iolqLhCUH+OiuIgU++RB0+94NlDL81atO7GX55uUKueo0txHNtvEyI6D7WdMw==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "safer-buffer": ">= 2.1.2 < 3.0.0"
++      },
++      "engines": {
++        "node": ">=0.10.0"
++      }
++    },
++    "node_modules/whatwg-mimetype": {
++      "version": "4.0.0",
++      "resolved": "https://registry.npmjs.org/whatwg-mimetype/-/whatwg-mimetype-4.0.0.tgz",
++      "integrity": "sha512-QaKxh0eNIi2mE9p2vEdzfagOKHCcj1pJ56EEHGQOVxp8r9/iszLUUV7v89x9O1p/T+NlTM5W7jW6+cz4Fq1YVg==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">=18"
++      }
++    },
++    "node_modules/whatwg-url": {
++      "version": "14.2.0",
++      "resolved": "https://registry.npmjs.org/whatwg-url/-/whatwg-url-14.2.0.tgz",
++      "integrity": "sha512-De72GdQZzNTUBBChsXueQUnPKDkg/5A5zp7pFDuQAj5UFoENpiACU0wlCvzpAGnTkj++ihpKwKyYewn/XNUbKw==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "tr46": "^5.1.0",
++        "webidl-conversions": "^7.0.0"
++      },
++      "engines": {
++        "node": ">=18"
++      }
++    },
+     "node_modules/which": {
+       "version": "2.0.2",
+       "resolved": "https://registry.npmjs.org/which/-/which-2.0.2.tgz",
+@@ -4166,6 +4701,45 @@
+       "integrity": "sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==",
+       "license": "ISC"
+     },
++    "node_modules/ws": {
++      "version": "8.22.0",
++      "resolved": "https://registry.npmjs.org/ws/-/ws-8.22.0.tgz",
++      "integrity": "sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">=10.0.0"
++      },
++      "peerDependencies": {
++        "bufferutil": "^4.0.1",
++        "utf-8-validate": ">=5.0.2"
++      },
++      "peerDependenciesMeta": {
++        "bufferutil": {
++          "optional": true
++        },
++        "utf-8-validate": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/xml-name-validator": {
++      "version": "5.0.0",
++      "resolved": "https://registry.npmjs.org/xml-name-validator/-/xml-name-validator-5.0.0.tgz",
++      "integrity": "sha512-EvGK8EJ3DhaHfbRlETOWAS5pO9MZITeauHKJyb8wyajUfQUenkIg2MvLDTZ4T/TgIcm3HU0TFBgWWboAZ30UHg==",
++      "dev": true,
++      "license": "Apache-2.0",
++      "engines": {
++        "node": ">=18"
++      }
++    },
++    "node_modules/xmlchars": {
++      "version": "2.2.0",
++      "resolved": "https://registry.npmjs.org/xmlchars/-/xmlchars-2.2.0.tgz",
++      "integrity": "sha512-JZnDKK8B0RCDw84FNdDAIpZK+JuJw+s7Lz8nksI7SIuU3UXJJslUthsi+uWBUYOwPFwW7W7PRLRfUKpxjtjFCw==",
++      "dev": true,
++      "license": "MIT"
++    },
+     "node_modules/zod": {
+       "version": "3.25.76",
+       "resolved": "https://registry.npmjs.org/zod/-/zod-3.25.76.tgz",
+diff --git a/package.json b/package.json
+index a07a0a2..dddda13 100644
+--- a/package.json
++++ b/package.json
+@@ -34,6 +34,17 @@
+         "default": "./dist/index.cjs"
+       }
+     },
++    "./react": {
++      "source": "./src/react.tsx",
++      "import": {
++        "types": "./dist/react.d.ts",
++        "default": "./dist/react.js"
++      },
++      "require": {
++        "types": "./dist/react.d.cts",
++        "default": "./dist/react.cjs"
++      }
++    },
+     "./balances": {
+       "source": "./src/balances.ts",
+       "import": {
+@@ -124,11 +135,15 @@
+   },
+   "peerDependencies": {
+     "@stellar/stellar-sdk": "^16.0.0",
+-    "passkey-kit": ">=0.13.0 <0.17.0"
++    "passkey-kit": ">=0.13.0 <0.17.0",
++    "react": "^18.0.0 || ^19.0.0"
+   },
+   "peerDependenciesMeta": {
+     "passkey-kit": {
+       "optional": true
++    },
++    "react": {
++      "optional": true
+     }
+   },
+   "//overrides": "fast-uri: closes 4 high-severity advisories (host confusion via IDN and percent-encoded scheme; SSRF via malformed IPv6 and repeated percent-decoding), all fixed in 3.1.6. Pinned inside ajv's declared ^3.0.1 rather than an open >= range, which npm resolves to 4.x — a major bump ajv@8 never declared support for.",
+@@ -140,7 +155,12 @@
+   },
+   "devDependencies": {
+     "@stellar/stellar-sdk": "^16.0.1",
++    "@types/react": "^19.0.0",
++    "@types/react-dom": "^19.0.0",
++    "jsdom": "^26.0.0",
+     "passkey-kit": "^0.16.5",
++    "react": "^19.0.0",
++    "react-dom": "^19.0.0",
+     "tsup": "^8.5.1",
+     "typescript": "^5.9.2",
+     "vitest": "^3.2.0"
+diff --git a/src/client.test.ts b/src/client.test.ts
+index c6b65cb..c5ecd28 100644
+--- a/src/client.test.ts
++++ b/src/client.test.ts
+@@ -85,11 +85,14 @@ describe("createVellarWallet", () => {
+ 
+   it("connect() restores the session via the backend lookup", async () => {
+     const { wallet, kit } = build();
++    const listener = vi.fn();
++    wallet.subscribe(listener);
+     const session = await wallet.connect();
+ 
+     expect(kit.connectWallet).toHaveBeenCalledOnce();
+     expect(session.accountId).toBe("CWALLET");
+     expect(wallet.session).toBe(session);
++    expect(listener).toHaveBeenCalledWith(session);
+   });
+ 
+   it("pay() before connect throws WalletNotReadyError", async () => {
+diff --git a/src/client.ts b/src/client.ts
+index 6c8374a..b8d9455 100644
+--- a/src/client.ts
++++ b/src/client.ts
+@@ -145,6 +145,8 @@ export interface PayInput {
+ export interface VellarWallet {
+   /** The current session, or null before create/connect. */
+   readonly session: WalletSession | null;
++  /** Subscribe to session updates. Returns an unsubscribe function. */
++  subscribe(listener: (session: WalletSession | null) => void): () => void;
+   /** Register a passkey and create the smart account. Prompts WebAuthn. */
+   create(input?: { username?: string }): Promise<WalletSession>;
+   /** Reconnect with an existing passkey. Prompts WebAuthn (or resumes silently
+@@ -220,6 +222,11 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
+   });
+ 
+   let session: WalletSession | null = null;
++  const sessionListeners = new Set<(session: WalletSession | null) => void>();
++
++  function notifySessionListeners(): void {
++    for (const listener of sessionListeners) listener(session);
++  }
+ 
+   // Validate at construction so a missing/malformed RPC URL fails here, next to
+   // the config that caused it — not later inside wallet.x402.fetch(). (The
+@@ -289,6 +296,10 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
+     get session() {
+       return session;
+     },
++    subscribe(listener) {
++      sessionListeners.add(listener);
++      return () => sessionListeners.delete(listener);
++    },
+     get agents(): AgentsFacade {
+       return agents;
+     },
+@@ -315,11 +326,13 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
+         network: config.network,
+         username: input?.username,
+       });
++      notifySessionListeners();
+       return session;
+     },
+ 
+     async connect() {
+       session = await connector.connectWallet(config.network);
++      notifySessionListeners();
+       return session;
+     },
+ 
+diff --git a/src/export-surface.ts b/src/export-surface.ts
+index 0ea7132..72ef268 100644
+--- a/src/export-surface.ts
++++ b/src/export-surface.ts
+@@ -8,6 +8,7 @@ export const STABLE_V1_EXPORTS = [
+   "MainnetConfigError",
+   "createHttpWalletBackend",
+   "WalletApiError",
++  "WalletApiTimeoutError",
+   "createBalanceService",
+   "fetchBalancesBatch",
+   "formatTokenAmount",
+@@ -23,6 +24,13 @@ export const STABLE_V1_EXPORTS = [
+   "PolicyListFilterError",
+ ] as const;
+ 
++/** Runtime facade names re-exported from their stable/experimental barrels. */
++export const FACADE_EXPORTS = [
++  "createPolicyFacade",
++  "PolicyNotDeployableError",
++  "createX402Facade",
++] as const;
++
+ /** Canonical experimental export names — keep in sync with README and index.ts. */
+ export const EXPERIMENTAL_EXPORTS = [
+   "createSessionKeySigner",
+diff --git a/src/http-backend.ts b/src/http-backend.ts
+index 4a7e01c..407cff7 100644
+--- a/src/http-backend.ts
++++ b/src/http-backend.ts
+@@ -19,6 +19,34 @@ export class WalletApiError extends Error {
+   }
+ }
+ 
++export class WalletApiTimeoutError extends Error {
++  readonly timeoutMs: number;
++
++  constructor(timeoutMs: number) {
++    super(`Wallet API request timed out after ${timeoutMs}ms`);
++    this.name = "WalletApiTimeoutError";
++    this.timeoutMs = timeoutMs;
++  }
++}
++
++export interface HttpWalletBackendOptions {
++  /** Optional fetch implementation; defaults to the global fetch. */
++  fetchImpl?: typeof fetch;
++  /** Per-request timeout in milliseconds. Defaults to 10 seconds. */
++  timeoutMs?: number;
++  /** Retries after the initial attempt for safe reads. Defaults to 2. */
++  maxRetries?: number;
++  /** Initial retry delay in milliseconds. Defaults to 200. */
++  retryBaseDelayMs?: number;
++  /** Maximum retry delay in milliseconds. Defaults to 2000. */
++  retryMaxDelayMs?: number;
++}
++
++interface RequestOptions {
++  signal?: AbortSignal;
++  retryable?: boolean;
++}
++
+ async function toApiError(res: Response): Promise<WalletApiError> {
+   let payload: { error?: string; message?: string } | undefined;
+   try {
+@@ -41,15 +69,106 @@ export interface HttpWalletBackend {
+     contractId: string;
+     network: Network;
+     signedTx: unknown;
++    signal?: AbortSignal;
+   }): Promise<{ sessionId: string }>;
+   lookupContractId(input: {
+     keyId: string;
+     network: Network;
++    signal?: AbortSignal;
+   }): Promise<{ contractId: string; sessionId: string } | undefined>;
+   submitTransaction(input: {
+     signedXdr: string;
+     network: Network;
++    signal?: AbortSignal;
+   }): Promise<{ hash: string }>;
++  listActivity(input: {
++    accountId: string;
++    network: Network;
++    bearerSessionId: string;
++    limit?: number;
++    after?: string;
++    signal?: AbortSignal;
++  }): Promise<WalletActivityPage>;
++}
++
++export interface WalletActivityToken {
++  symbol?: string;
++  contractId?: string;
++  decimals?: number;
++}
++
++export interface WalletActivityEntry {
++  type: string;
++  counterparty?: string;
++  /** Exact decimal or base-unit representation supplied by the gateway. */
++  amount?: string;
++  token?: WalletActivityToken;
++  txHash: string;
++  timestamp: string;
++}
++
++export interface WalletActivityPage {
++  entries: WalletActivityEntry[];
++  hasMore: boolean;
++  nextCursor?: string;
++}
++
++function isRecord(value: unknown): value is Record<string, unknown> {
++  return typeof value === "object" && value !== null && !Array.isArray(value);
++}
++
++function mapActivityEntry(value: unknown): WalletActivityEntry {
++  if (!isRecord(value)) throw new Error("Wallet API returned an invalid activity entry");
++  const txHash = value.txHash;
++  const timestamp = value.at ?? value.timestamp;
++  if (typeof txHash !== "string" || typeof timestamp !== "string") {
++    throw new Error("Wallet API activity entries require txHash and timestamp");
++  }
++
++  const result: WalletActivityEntry = {
++    type: typeof value.type === "string" ? value.type : "tx.submitted",
++    txHash,
++    timestamp,
++  };
++  if (typeof value.counterparty === "string") result.counterparty = value.counterparty;
++  if (typeof value.amount === "string") result.amount = value.amount;
++
++  const token = value.token ?? value.asset;
++  if (typeof token === "string") {
++    result.token = { symbol: token };
++  } else if (isRecord(token)) {
++    const mapped: WalletActivityToken = {};
++    if (typeof token.symbol === "string") mapped.symbol = token.symbol;
++    if (typeof token.contractId === "string") mapped.contractId = token.contractId;
++    if (typeof token.decimals === "number" && Number.isInteger(token.decimals) && token.decimals >= 0) {
++      mapped.decimals = token.decimals;
++    }
++    if (Object.keys(mapped).length > 0) result.token = mapped;
++  }
++  return result;
++}
++
++const RETRYABLE_STATUSES = new Set([408, 429, 502, 503, 504]);
++
++function abortReason(signal: AbortSignal): unknown {
++  return signal.reason ?? new DOMException("The operation was aborted", "AbortError");
++}
++
++async function waitBeforeRetry(delayMs: number, signal?: AbortSignal): Promise<void> {
++  if (signal?.aborted) throw abortReason(signal);
++  await new Promise<void>((resolve, reject) => {
++    const timer = setTimeout(() => {
++      signal?.removeEventListener("abort", onAbort);
++      resolve();
++    }, delayMs);
++    const onAbort = () => {
++      clearTimeout(timer);
++      signal?.removeEventListener("abort", onAbort);
++      reject(abortReason(signal as AbortSignal));
++    };
++    signal?.addEventListener("abort", onAbort, { once: true });
++    if (signal?.aborted) onAbort();
++  });
+ }
+ 
+ /**
+@@ -62,40 +181,179 @@ export interface HttpWalletBackend {
+  */
+ export function createHttpWalletBackend(
+   apiUrl: string,
+-  fetchImpl: typeof fetch = globalThis.fetch.bind(globalThis),
++  fetchImplOrOptions: typeof fetch | HttpWalletBackendOptions = globalThis.fetch.bind(globalThis),
++  legacyOptions: Omit<HttpWalletBackendOptions, "fetchImpl"> = {},
+ ): HttpWalletBackend {
+   const base = apiUrl.replace(/\/+$/, "");
++  const options: HttpWalletBackendOptions =
++    typeof fetchImplOrOptions === "function"
++      ? { ...legacyOptions, fetchImpl: fetchImplOrOptions }
++      : fetchImplOrOptions;
++  const fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
++  const timeoutMs = options.timeoutMs ?? 10_000;
++  const maxRetries = options.maxRetries ?? 2;
++  const retryBaseDelayMs = options.retryBaseDelayMs ?? 200;
++  const retryMaxDelayMs = options.retryMaxDelayMs ?? 2_000;
+ 
+-  const post = (path: string, body: unknown): Promise<Response> =>
+-    fetchImpl(`${base}${path}`, {
+-      method: "POST",
+-      headers: { "content-type": "application/json" },
+-      body: JSON.stringify(body),
++  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
++    throw new RangeError(`timeoutMs must be a positive number, got ${timeoutMs}`);
++  }
++  if (!Number.isInteger(maxRetries) || maxRetries < 0) {
++    throw new RangeError(`maxRetries must be a non-negative integer, got ${maxRetries}`);
++  }
++  if (!Number.isFinite(retryBaseDelayMs) || retryBaseDelayMs < 0) {
++    throw new RangeError(`retryBaseDelayMs must be a non-negative number, got ${retryBaseDelayMs}`);
++  }
++  if (!Number.isFinite(retryMaxDelayMs) || retryMaxDelayMs < 0) {
++    throw new RangeError(`retryMaxDelayMs must be a non-negative number, got ${retryMaxDelayMs}`);
++  }
++
++  async function withTimeout<T>(
++    operation: (signal: AbortSignal) => Promise<T>,
++    signal?: AbortSignal,
++  ): Promise<T> {
++    if (signal?.aborted) throw abortReason(signal);
++    const controller = new AbortController();
++    let timer: ReturnType<typeof setTimeout> | undefined;
++    let onAbort: (() => void) | undefined;
++    const timeoutPromise = new Promise<never>((_resolve, reject) => {
++      timer = setTimeout(() => {
++        reject(new WalletApiTimeoutError(timeoutMs));
++        controller.abort();
++      }, timeoutMs);
+     });
++    const abortPromise = signal
++      ? new Promise<never>((_resolve, reject) => {
++          onAbort = () => {
++            reject(abortReason(signal));
++            controller.abort(signal.reason);
++          };
++          signal.addEventListener("abort", onAbort, { once: true });
++          if (signal.aborted) onAbort();
++        })
++      : undefined;
++
++    try {
++      return await Promise.race([
++          operation(controller.signal),
++        timeoutPromise,
++        ...(abortPromise ? [abortPromise] : []),
++      ]);
++    } finally {
++      if (timer !== undefined) clearTimeout(timer);
++      if (signal && onAbort) signal.removeEventListener("abort", onAbort);
++    }
++  }
++
++  async function send<T>(
++    url: string,
++    init: RequestInit,
++    requestOptions: RequestOptions,
++    readResponse: (response: Response) => Promise<T>,
++  ): Promise<T> {
++    const attempts = requestOptions.retryable ? maxRetries + 1 : 1;
++    return withTimeout(async (signal) => {
++      for (let attempt = 0; ; attempt++) {
++        let response: Response;
++        try {
++          response = await fetchImpl(url, { ...init, signal });
++        } catch (error) {
++          if (signal.aborted || !requestOptions.retryable || attempt + 1 >= attempts) throw error;
++          const delayMs = Math.min(retryBaseDelayMs * 2 ** attempt, retryMaxDelayMs);
++          await waitBeforeRetry(delayMs, signal);
++          continue;
++        }
++
++        if (requestOptions.retryable && RETRYABLE_STATUSES.has(response.status) && attempt + 1 < attempts) {
++          const delayMs = Math.min(retryBaseDelayMs * 2 ** attempt, retryMaxDelayMs);
++          await waitBeforeRetry(delayMs, signal);
++          continue;
++        }
++        return readResponse(response);
++      }
++    }, requestOptions.signal);
++  }
++
++  const post = <T>(
++    path: string,
++    body: unknown,
++    requestOptions: RequestOptions,
++    readResponse: (response: Response) => Promise<T>,
++  ) =>
++    send<T>(
++      `${base}${path}`,
++      {
++        method: "POST",
++        headers: { "content-type": "application/json" },
++        body: JSON.stringify(body),
++      },
++      requestOptions,
++      readResponse,
++    );
+ 
+   return {
+-    async submitWalletCreation({ keyId, contractId, network, signedTx }) {
+-      const res = await post("/wallet/create", {
+-        keyId,
+-        contractId,
+-        network,
+-        signedTx: defaultSignedToXdr(signedTx),
+-      });
+-      if (!res.ok) throw await toApiError(res);
+-      return (await res.json()) as { sessionId: string };
++    submitWalletCreation({ keyId, contractId, network, signedTx, signal }) {
++      return post(
++        "/wallet/create",
++        { keyId, contractId, network, signedTx: defaultSignedToXdr(signedTx) },
++        { signal },
++        async (res) => {
++          if (!res.ok) throw await toApiError(res);
++          return (await res.json()) as { sessionId: string };
++        },
++      );
+     },
+ 
+-    async lookupContractId({ keyId, network }) {
+-      const res = await post("/wallet/connect", { keyId, network });
+-      if (res.status === 404) return undefined;
+-      if (!res.ok) throw await toApiError(res);
+-      return (await res.json()) as { contractId: string; sessionId: string };
++    lookupContractId({ keyId, network, signal }) {
++      return post(
++        "/wallet/connect",
++        { keyId, network },
++        { signal, retryable: true },
++        async (res) => {
++          if (res.status === 404) return undefined;
++          if (!res.ok) throw await toApiError(res);
++          return (await res.json()) as { contractId: string; sessionId: string };
++        },
++      );
+     },
+ 
+-    async submitTransaction({ signedXdr, network }) {
+-      const res = await post("/wallet/submit", { signedXdr, network });
+-      if (!res.ok) throw await toApiError(res);
+-      return (await res.json()) as { hash: string };
++    submitTransaction({ signedXdr, network, signal }) {
++      return post(
++        "/wallet/submit",
++        { signedXdr, network },
++        { signal },
++        async (res) => {
++          if (!res.ok) throw await toApiError(res);
++          return (await res.json()) as { hash: string };
++        },
++      );
++    },
++
++    listActivity({ accountId, network, bearerSessionId, limit = 20, after, signal }) {
++      if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
++        throw new RangeError(`limit must be an integer between 1 and 100, got ${limit}`);
++      }
++      if (!bearerSessionId) throw new TypeError("bearerSessionId is required to read wallet activity");
++
++      const query = new URLSearchParams({ contractId: accountId, network, limit: String(limit) });
++      if (after) query.set("after", after);
++      return send(
++        `${base}/wallet/transactions?${query.toString()}`,
++        { method: "GET", headers: { authorization: `Bearer ${bearerSessionId}` } },
++        { signal, retryable: true },
++        async (res) => {
++          if (!res.ok) throw await toApiError(res);
++          const payload: unknown = await res.json();
++          if (!isRecord(payload) || !Array.isArray(payload.transactions)) {
++            throw new Error("Wallet API returned an invalid activity page");
++          }
++          return {
++            entries: payload.transactions.map(mapActivityEntry),
++            hasMore: payload.hasMore === true,
++            nextCursor: typeof payload.nextCursor === "string" ? payload.nextCursor : undefined,
++          };
++        },
++      );
+     },
+   };
+ }
+diff --git a/src/index.exports.test.ts b/src/index.exports.test.ts
+index 987a6b2..de5c3de 100644
+--- a/src/index.exports.test.ts
++++ b/src/index.exports.test.ts
+@@ -1,7 +1,15 @@
+-import { describe, expect, it } from "vitest";
++import { describe, expect, it, vi } from "vitest";
++
++vi.mock("./x402-signer", () => ({
++  createSessionKeySigner: vi.fn(),
++  createPasskeyX402Signer: vi.fn(),
++}));
++
+ import * as root from "./index";
+ import * as experimental from "./experimental-exports";
+-import { EXPERIMENTAL_EXPORTS, STABLE_V1_EXPORTS } from "./export-surface";
++import * as policyFacade from "./policy-facade";
++import * as x402Facade from "./x402-facade";
++import { EXPERIMENTAL_EXPORTS, FACADE_EXPORTS, STABLE_V1_EXPORTS } from "./export-surface";
+ 
+ describe("public export surface", () => {
+   it("exposes every documented stable v1 export at the package root", () => {
+@@ -16,4 +24,13 @@ describe("public export surface", () => {
+       expect(root.experimental).toHaveProperty(name);
+     }
+   });
++
++  it("matches the consolidated runtime facade export list", () => {
++    const facadeModuleNames = new Set([...Object.keys(policyFacade), ...Object.keys(x402Facade)]);
++    const rootFacadeNames = Object.keys(root)
++      .filter((name) => facadeModuleNames.has(name))
++      .sort();
++
++    expect(rootFacadeNames).toEqual([...FACADE_EXPORTS].sort());
++  });
+ });
+diff --git a/src/index.ts b/src/index.ts
+index ce16d9b..a13c4d6 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -17,7 +17,6 @@ export * from "./payments";
+ export * from "./payments-client";
+ export * from "./policy-types";
+ export * from "./policy-client";
+-export * from "./policy-facade";
+ export * from "./agents-facade";
+ export * from "./x402-types";
+ export * from "./x402-auth-entry";
+@@ -25,7 +24,6 @@ export * from "./x402-signer";
+ export * from "./x402-signer-capabilities";
+ export * from "./x402-budget-attributes";
+ export * from "./x402-client";
+-export * from "./x402-facade";
+ export * from "./x402-request-auth";
+ export * from "./session";
+ export * from "./tx-status";
+diff --git a/src/react.test.tsx b/src/react.test.tsx
+new file mode 100644
+index 0000000..c45a8cf
+--- /dev/null
++++ b/src/react.test.tsx
+@@ -0,0 +1,112 @@
++// @vitest-environment jsdom
++
++import { act } from "react";
++import { createRoot, type Root } from "react-dom/client";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++import type { VellarWalletConfig } from "./client";
++import { useWallet, VellarProvider } from "./react";
++
++let root: Root | undefined;
++let container: HTMLDivElement | undefined;
++
++beforeEach(() => {
++  Object.defineProperty(navigator, "credentials", { value: {}, configurable: true });
++  (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
++});
++
++afterEach(() => {
++  if (root) act(() => root?.unmount());
++  container?.remove();
++  root = undefined;
++  container = undefined;
++});
++
++function config(lookup: () => Promise<{ contractId: string; sessionId: string } | undefined> = async () => ({
++  contractId: "CWALLET",
++  sessionId: "server-session",
++})): VellarWalletConfig {
++  return {
++    network: "testnet",
++    appName: "React test",
++    kit: {
++      createWallet: vi.fn(async () => ({ keyIdBase64: "key", contractId: "CWALLET", signedTx: "xdr" })),
++      connectWallet: vi.fn(async (options?: { getContractId?: (keyId: string) => Promise<string | undefined> }) => {
++        await options?.getContractId?.("key");
++        return { keyIdBase64: "key", contractId: "CWALLET" };
++      }),
++      sign: vi.fn(async (transaction) => transaction),
++    },
++    backend: {
++      submitWalletCreation: vi.fn(async () => ({ sessionId: "server-session" })),
++      lookupContractId: vi.fn(lookup),
++      submitTransaction: vi.fn(async () => ({ hash: "tx-hash" })),
++    },
++    sac: { getSACClient: () => ({ transfer: async () => "transfer-xdr" }) } as never,
++    isValidAddress: () => true,
++    apiUrl: "https://api.example.test",
++  };
++}
++
++function mount(walletConfig: VellarWalletConfig): HTMLDivElement {
++  container = document.createElement("div");
++  document.body.append(container);
++  root = createRoot(container);
++  act(() => {
++    root?.render(
++      <VellarProvider config={walletConfig}>
++        <WalletProbe />
++      </VellarProvider>,
++    );
++  });
++  return container;
++}
++
++function WalletProbe() {
++  const wallet = useWallet();
++  return (
++    <>
++      <output id="session">{wallet.session?.accountId ?? "disconnected"}</output>
++      <output id="actions">
++        {typeof wallet.create}:{typeof wallet.connect}:{typeof wallet.pay}:{String(Boolean(wallet.policies))}
++      </output>
++      <output id="loading">{String(wallet.loading)}</output>
++      <output id="error">{wallet.error instanceof Error ? wallet.error.message : ""}</output>
++      <button id="connect" onClick={() => void wallet.connect().catch(() => {})}>Connect</button>
++    </>
++  );
++}
++
++describe("optional React binding", () => {
++  it("exposes the session, actions, and policies surface", () => {
++    const view = mount(config());
++
++    expect(view.querySelector("#session")?.textContent).toBe("disconnected");
++    expect(view.querySelector("#actions")?.textContent).toBe("function:function:function:true");
++  });
++
++  it("updates consumers when connect establishes a session", async () => {
++    const view = mount(config());
++
++    await act(async () => {
++      view.querySelector<HTMLButtonElement>("#connect")?.click();
++      await new Promise((resolve) => setTimeout(resolve, 0));
++    });
++
++    expect(view.querySelector("#session")?.textContent).toBe("CWALLET");
++    expect(view.querySelector("#loading")?.textContent).toBe("false");
++  });
++
++  it("surfaces action failures through the hook error state", async () => {
++    const view = mount(config(async () => {
++      throw new Error("gateway unavailable");
++    }));
++
++    await act(async () => {
++      view.querySelector<HTMLButtonElement>("#connect")?.click();
++      await new Promise((resolve) => setTimeout(resolve, 0));
++    });
++
++    expect(view.querySelector("#error")?.textContent).toBe("gateway unavailable");
++    expect(view.querySelector("#session")?.textContent).toBe("disconnected");
++  });
++});
+\ No newline at end of file
+diff --git a/src/react.tsx b/src/react.tsx
+new file mode 100644
+index 0000000..8641f44
+--- /dev/null
++++ b/src/react.tsx
+@@ -0,0 +1,74 @@
++import {
++  createContext,
++  useContext,
++  useRef,
++  useState,
++  useSyncExternalStore,
++  type ReactNode,
++} from "react";
++import { createVellarWallet, type PayInput, type VellarWallet, type VellarWalletConfig } from "./client";
++import type { PolicyFacade } from "./policy-facade";
++import type { WalletSession } from "./types";
++
++const WalletContext = createContext<VellarWallet | null>(null);
++
++export interface VellarProviderProps {
++  config: VellarWalletConfig;
++  children: ReactNode;
++}
++
++export function VellarProvider({ config, children }: VellarProviderProps) {
++  const [wallet] = useState(() => createVellarWallet(config));
++  return <WalletContext.Provider value={wallet}>{children}</WalletContext.Provider>;
++}
++
++export interface WalletHookValue {
++  wallet: VellarWallet;
++  session: WalletSession | null;
++  loading: boolean;
++  error: unknown | null;
++  create(input?: { username?: string }): Promise<WalletSession>;
++  connect(): Promise<WalletSession>;
++  pay(input: PayInput): Promise<{ hash: string }>;
++  policies: PolicyFacade;
++}
++
++export function useWallet(): WalletHookValue {
++  const wallet = useContext(WalletContext);
++  if (!wallet) throw new Error("useWallet must be used within a VellarProvider");
++
++  const session = useSyncExternalStore(
++    (onStoreChange) => wallet.subscribe(() => onStoreChange()),
++    () => wallet.session,
++    () => null,
++  );
++  const [loading, setLoading] = useState(false);
++  const [error, setError] = useState<unknown | null>(null);
++  const pendingActions = useRef(0);
++
++  async function runAction<T>(action: () => Promise<T>): Promise<T> {
++    pendingActions.current += 1;
++    setLoading(true);
++    setError(null);
++    try {
++      return await action();
++    } catch (actionError) {
++      setError(actionError);
++      throw actionError;
++    } finally {
++      pendingActions.current -= 1;
++      setLoading(pendingActions.current > 0);
++    }
++  }
++
++  return {
++    wallet,
++    session,
++    loading,
++    error,
++    create: (input) => runAction(() => wallet.create(input)),
++    connect: () => runAction(() => wallet.connect()),
++    pay: (input) => runAction(() => wallet.pay(input)),
++    policies: wallet.policies,
++  };
++}
+\ No newline at end of file
+diff --git a/tsconfig.json b/tsconfig.json
+index 6113bbe..14983b1 100644
+--- a/tsconfig.json
++++ b/tsconfig.json
+@@ -4,6 +4,7 @@
+     "lib": ["ES2022", "DOM"],
+     "module": "ESNext",
+     "moduleResolution": "Bundler",
++    "jsx": "react-jsx",
+     "strict": true,
+     "noUncheckedIndexedAccess": true,
+     "esModuleInterop": true,
+diff --git a/tsup.config.ts b/tsup.config.ts
+index 8497ada..3ff7631 100644
+--- a/tsup.config.ts
++++ b/tsup.config.ts
+@@ -7,6 +7,7 @@ import { defineConfig } from "tsup";
+ export default defineConfig({
+   entry: {
+     index: "src/index.ts",
++    react: "src/react.tsx",
+     balances: "src/balances.ts",
+     rpc: "src/rpc.ts",
+     // The pure x402 decision layer, published separately so payers that don't
+@@ -26,5 +27,5 @@ export default defineConfig({
+   dts: true,
+   clean: true,
+   sourcemap: true,
+-  external: ["@stellar/stellar-sdk", "zustand"],
++  external: ["@stellar/stellar-sdk", "react", "react-dom", "react/jsx-runtime", "zustand"],
+ });
+diff --git a/website/content/docs/api-reference.md b/website/content/docs/api-reference.md
+index 4d59bcc..920ea20 100644
+--- a/website/content/docs/api-reference.md
++++ b/website/content/docs/api-reference.md
+@@ -77,6 +77,83 @@ These forward to your server, which holds the relayer/sponsor credentials and
+ submits to the network. See [Installation](./getting-started/installation.md) and
+ [How It Works](./getting-started/how-it-works.md).
+ 
++## Wallet activity
++
++`createHttpWalletBackend()` also provides cursor-paginated transaction history
++through the gateway's `GET /wallet/transactions` route. The current server
++session id is required as a bearer capability and is sent in the authorization
++header, never in the URL.
++
++```ts
++const backend = createHttpWalletBackend(apiUrl);
++const session = await wallet.connect();
++if (!session.serverSessionId) throw new Error("No server session is available");
++
++const page = await backend.listActivity({
++  accountId: session.accountId,
++  network: session.network,
++  bearerSessionId: session.serverSessionId,
++  limit: 20,
++});
++
++// Continue with the opaque cursor; do not parse or construct it.
++const olderPage = page.nextCursor
++  ? await backend.listActivity({
++      accountId: session.accountId,
++      network: session.network,
++      bearerSessionId: session.serverSessionId,
++      limit: 20,
++      after: page.nextCursor,
++    })
++  : undefined;
++```
++
++Each normalized entry includes `type`, `txHash`, and an ISO `timestamp`.
++`counterparty`, `amount`, and `token` are optional when the recorded event has
++those details. Empty history resolves to `{ entries: [], hasMore: false }`.
++
++## React binding
++
++React is an optional peer dependency and the binding is available from the
++separate `vellar-sdk/react` entry, not the package root:
++
++```tsx
++import { VellarProvider, useWallet } from "vellar-sdk/react";
++
++function ConnectButton() {
++  const { session, connect, loading, error } = useWallet();
++  return (
++    <>
++      <button disabled={loading} onClick={() => void connect()}>
++        {session ? session.accountId : "Connect"}
++      </button>
++      {error instanceof Error && <p role="alert">{error.message}</p>}
++    </>
++  );
++}
++
++export function App() {
++  return (
++    <VellarProvider config={walletConfig}>
++      <ConnectButton />
++    </VellarProvider>
++  );
++}
++```
++
++`VellarProvider` takes the same configuration as `createVellarWallet()`.
++`useWallet()` exposes `session`, `create`, `connect`, `pay`, `policies`,
++`loading`, and `error`. It never invokes passkey actions automatically; the app
++calls them from explicit user interactions.
++
++## HTTP request controls
++
++`createHttpWalletBackend()` uses a 10-second request timeout and retries
++idempotent reads twice by default. It does not retry wallet creation or signed
++transaction submission. Configure `timeoutMs` and `maxRetries` in its options;
++each backend method accepts an optional `signal` for cancellation. A timed-out
++request rejects with `WalletApiTimeoutError`.
++
+ ## Returns
+ 
+ A [`VellarWallet`](./wallet-methods.md) handle.
