@@ -5,6 +5,26 @@ A PR against the `drips` branch that changes any file outside `contrib/` is clos
 
 This folder contains reference implementations, standalone wrappers, and validation scripts addressing the assigned issues.
 
+## CI: Building and Typechecking Contrib Examples
+
+Every example subdirectory in `contrib/` and `contrib/examples/` that contains a `package.json` or `tsconfig.json` is automatically checked in CI.
+The script runs `tsc --noEmit` for typecheck and `npm run build` (if the script exists) for each example that requires it.
+
+### Manual Run
+To check all contrib examples locally:
+```sh
+node scripts/check-contrib-examples.mjs
+```
+
+The script will:
+- Iterate through each example directory
+- Typecheck using the example's `tsconfig.json` or fall back to the root config
+- Run the `build` script if `package.json` defines one
+- Fail fast on the first error, reporting which example and which step failed
+- Exit with code 0 if all examples pass, or 1 if any fail
+
+See `.github/workflows/ci.yml` for the `check-contrib-examples` job that runs this on every push and PR.
+
 ---
 
 ## 1. Fallback Path for x402-client Discovery Timeout (#279)

@@ -34,6 +34,20 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  # Check that every contrib example builds and typechecks. This job is separate
+  # from the main test suite so build/typecheck failures in examples are
+  # distinguishable from test failures in the core SDK.
+  check-contrib-examples:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node scripts/check-contrib-examples.mjs
+
   # OPTIONAL load test job — measures concurrent payment-submission latency and
   # error rate at increasing concurrency. Deliberately NOT run on every
   # push/PR (it is slower and load-timing sensitive); trigger it manually with
