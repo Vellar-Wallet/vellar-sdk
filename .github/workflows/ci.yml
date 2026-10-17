@@ -31,6 +31,8 @@ jobs:
       # Docs snippets typecheck against the current source — a quickstart that
       # drifts from the real API fails the PR that introduces the drift.
       - run: npm run check:docs
+      # llms.txt and llms-full.txt must stay in sync with the docs registry.
+      - run: npm run check:llms-sync
       - run: npm test
       - run: npm run build
 
