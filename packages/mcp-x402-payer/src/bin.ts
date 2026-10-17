@@ -10,7 +10,12 @@ import { loadConfig } from "./config.js";
 import { createSpendLedger } from "./ledger.js";
 import { formatError, log, registerSecret } from "./output.js";
 import { createPayer } from "./payer.js";
-import { createMcpServer, startStdio } from "./server.js";
+import {
+  createMcpServer,
+  createMetricsRegistry,
+  startMetricsEndpoint,
+  startStdio,
+} from "./server.js";
 import { createOfficialSigner, createSmartAccountSigner } from "./signer.js";
 
 async function main(): Promise<void> {
@@ -20,12 +25,27 @@ async function main(): Promise<void> {
   registerSecret(config.secret);
 
   const ledger = createSpendLedger(config.ceilings);
+  const metrics = createMetricsRegistry();
   // Built once: the key is derived a single time, and a malformed secret fails
   // here rather than at the first payment. A configured wallet selects the
   // smart-account path, where the spending limit is enforced on-chain.
   const smartAccount = config.walletAddress !== undefined;
   const signer = smartAccount ? createSmartAccountSigner(config) : createOfficialSigner(config);
   const payer = createPayer({ config, ledger, signer });
+
+  if (config.metricsPort !== undefined) {
+    const endpoint = await startMetricsEndpoint({
+      registry: metrics,
+      ledger,
+      port: config.metricsPort,
+      host: config.metricsHost,
+    });
+    if (endpoint) {
+      log("info", "prometheus metrics endpoint ready", {
+        url: endpoint.url,
+      });
+    }
+  }
 
   log("info", "vellar x402 payer ready", {
     network: config.network,
@@ -37,7 +57,7 @@ async function main(): Promise<void> {
     ...(smartAccount ? { policies: config.policies.length } : {}),
   });
 
-  await startStdio(createMcpServer({ payer, config, ledger }));
+  await startStdio(createMcpServer({ payer, config, ledger, metrics }));
 }
 
 main().catch((err) => {

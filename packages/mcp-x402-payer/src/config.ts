@@ -56,6 +56,10 @@ export interface PayerConfig {
    * than a missing co-signer.
    */
   readonly policies: readonly string[];
+  /** Opt-in Prometheus metrics HTTP port (`VELLAR_X402_METRICS_PORT`); undefined (disabled) by default. */
+  readonly metricsPort?: number;
+  /** Optional bind address for the Prometheus metrics endpoint (`VELLAR_X402_METRICS_HOST`, default `"127.0.0.1"`). */
+  readonly metricsHost?: string;
   /** The payer secret. Non-enumerable — see the module comment. */
   readonly secret: string;
 }
@@ -218,6 +222,23 @@ function parseMaxResponseBytes(raw: string | undefined): number {
   return value;
 }
 
+function parseMetricsPort(raw: string | undefined): number | undefined {
+  if (raw === undefined || raw.trim() === "") return undefined;
+  const trimmed = raw.trim();
+  if (!/^\d+$/.test(trimmed)) {
+    throw new ConfigError(
+      `VELLAR_X402_METRICS_PORT must be an integer between 1 and 65535, got ${JSON.stringify(trimmed)}.`,
+    );
+  }
+  const value = Number(trimmed);
+  if (value < 1 || value > 65535) {
+    throw new ConfigError(
+      `VELLAR_X402_METRICS_PORT must be between 1 and 65535, got ${value}.`,
+    );
+  }
+  return value;
+}
+
 /**
  * Build the payer configuration from the environment. Throws `ConfigError` with
  * an actionable message — and never with any part of the secret — on bad input.
@@ -228,6 +249,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PayerConfig {
   const ceilings = parseAssets(required(env, "VELLAR_X402_ASSETS"));
   const rpcUrl = env.VELLAR_X402_RPC_URL?.trim() || undefined;
   const maxResponseBytes = parseMaxResponseBytes(env.VELLAR_X402_MAX_RESPONSE_BYTES);
+  const metricsPort = parseMetricsPort(env.VELLAR_X402_METRICS_PORT);
+  const metricsHost = env.VELLAR_X402_METRICS_HOST?.trim() || undefined;
 
   const walletAddress = env.VELLAR_X402_WALLET?.trim() || undefined;
   if (walletAddress !== undefined && !StrKey.isValidContract(walletAddress)) {
@@ -254,6 +277,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PayerConfig {
     allowedAssets: Object.freeze([...ceilings.keys()]),
     maxResponseBytes,
     ...(walletAddress !== undefined ? { walletAddress } : {}),
+    ...(metricsPort !== undefined ? { metricsPort } : {}),
+    ...(metricsHost !== undefined ? { metricsHost } : {}),
     policies,
   };
 

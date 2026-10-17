@@ -42,6 +42,16 @@ export {
   type X402Requirement,
   type X402ResourceInfo,
 } from "./protocol.js";
-export { createMcpServer, startStdio, type ServerDeps } from "./server.js";
+export {
+  createMcpServer,
+  createMetricsRegistry,
+  renderPrometheusMetrics,
+  startMetricsEndpoint,
+  startStdio,
+  type MetricsEndpointHandle,
+  type MetricsEndpointOptions,
+  type PayerMetricsRegistry,
+  type ServerDeps,
+} from "./server.js";
 export { createOfficialSigner, createSmartAccountSigner, type PaymentSigner } from "./signer.js";
 export { createSmartAccountScheme, SmartAccountAuthError, type SchemeClientLike } from "./smart-account-scheme.js";

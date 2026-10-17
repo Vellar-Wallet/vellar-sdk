@@ -23,6 +23,14 @@ import { z } from "zod";
 import type { PayerConfig } from "./config.js";
 import type { SpendLedger } from "./ledger.js";
 import {
+  createMetricsRegistry,
+  renderPrometheusMetrics,
+  startMetricsEndpoint,
+  type MetricsEndpointHandle,
+  type MetricsEndpointOptions,
+  type PayerMetricsRegistry,
+} from "./metrics.js";
+import {
   divertStdoutToStderr,
   formatError,
   log,
@@ -32,6 +40,15 @@ import {
 import { payAndCall } from "./pay-and-call.js";
 import type { PayResult, Payer, QuoteResult } from "./payer.js";
 import type { X402ResourceInfo } from "./protocol.js";
+
+export {
+  createMetricsRegistry,
+  renderPrometheusMetrics,
+  startMetricsEndpoint,
+  type MetricsEndpointHandle,
+  type MetricsEndpointOptions,
+  type PayerMetricsRegistry,
+};
 
 const PACKAGE_NAME = "vellar-x402-payer";
 const PACKAGE_VERSION = "0.1.0";
@@ -151,6 +168,8 @@ export interface ServerDeps {
   payer: Payer;
   config: PayerConfig;
   ledger: SpendLedger;
+  /** Optional Prometheus metrics registry (#676). */
+  metrics?: PayerMetricsRegistry;
 }
 
 export function createMcpServer(deps: ServerDeps): McpServer {
@@ -245,6 +264,13 @@ export function createMcpServer(deps: ServerDeps): McpServer {
     async ({ resource_url, max_amount }) => {
       try {
         const result = await deps.payer.pay(resource_url, max_amount);
+        if (result.paid && result.settlement) {
+          deps.metrics?.recordPaymentSuccess(
+            result.settlement.asset,
+            BigInt(result.settlement.amount),
+            result.settlement.network,
+          );
+        }
         log("info", "payment", {
           url: resource_url,
           paid: result.paid,
@@ -253,6 +279,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
         });
         return textResult(renderPayment(result));
       } catch (err) {
+        deps.metrics?.recordPaymentFailure(err);
         log("warn", "payment refused or failed", {
           url: resource_url,
           error: formatError(err),
@@ -329,6 +356,13 @@ export function createMcpServer(deps: ServerDeps): McpServer {
           query,
           max_amount,
         );
+        if (result.paid && result.settlement) {
+          deps.metrics?.recordPaymentSuccess(
+            result.settlement.asset,
+            BigInt(result.settlement.amount),
+            result.settlement.network,
+          );
+        }
         log("info", "pay_and_call", {
           query,
           url: result.selectedUrl,
@@ -345,6 +379,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
         ].join("\n");
         return textResult(`${preamble}\n${renderPayment(result)}`);
       } catch (err) {
+        deps.metrics?.recordPaymentFailure(err);
         log("warn", "pay_and_call refused or failed", { query, error: formatError(err) });
         return textResult(`pay_and_call did not complete: ${formatError(err)}`, true);
       }
