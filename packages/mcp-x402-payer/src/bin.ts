@@ -8,7 +8,7 @@
 
 import { loadConfig } from "./config.js";
 import { createSpendLedger } from "./ledger.js";
-import { formatError, log, registerSecret } from "./output.js";
+import { formatError, log, registerSecret, setLogLevel } from "./output.js";
 import { createPayer } from "./payer.js";
 import { createMcpServer, startStdio } from "./server.js";
 import { createOfficialSigner, createSmartAccountSigner } from "./signer.js";
@@ -18,6 +18,7 @@ async function main(): Promise<void> {
 
   // First thing after parsing: nothing emitted from here on can carry it.
   registerSecret(config.secret);
+  setLogLevel(config.logLevel);
 
   const ledger = createSpendLedger(config.ceilings);
   // Built once: the key is derived a single time, and a malformed secret fails

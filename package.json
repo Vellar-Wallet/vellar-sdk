@@ -99,6 +99,17 @@
         "types": "./dist/x402-request-auth.d.cts",
         "default": "./dist/x402-request-auth.cjs"
       }
+    },
+    "./logger": {
+      "source": "./src/logger.ts",
+      "import": {
+        "types": "./dist/logger.d.ts",
+        "default": "./dist/logger.js"
+      },
+      "require": {
+        "types": "./dist/logger.d.cts",
+        "default": "./dist/logger.cjs"
+      }
     }
   },
   "main": "./dist/index.cjs",

@@ -28,6 +28,12 @@
 //      if any src file calls console.* or touches process.stdout.)
 
 import {
+  resolveVellarLogLevel,
+  shouldEmitLog,
+  type VellarActiveLogLevel,
+  type VellarLogLevel,
+} from "vellar-sdk/logger";
+import {
   renderUntrusted as fenceUntrusted,
   sanitizeMetadata as sanitizeMetadataText,
   type SanitizeOptions,
@@ -139,7 +145,26 @@ export function formatError(err: unknown): string {
 
 // ── stderr logging ───────────────────────────────────────────────────────────
 
-export type LogLevel = "info" | "warn" | "error";
+export type LogLevel = VellarActiveLogLevel;
+
+let configuredLogLevel: VellarLogLevel | undefined;
+
+/** Explicitly set or clear the active log level override. */
+export function setLogLevel(level: VellarLogLevel | undefined): void {
+  configuredLogLevel = level;
+}
+
+/** Resolve the active log level from override or `VELLAR_LOG_LEVEL` (default `"info"`). */
+export function getLogLevel(env: NodeJS.ProcessEnv = process.env): VellarLogLevel {
+  if (configuredLogLevel !== undefined) {
+    return configuredLogLevel;
+  }
+  try {
+    return resolveVellarLogLevel(env, "info");
+  } catch {
+    return "info";
+  }
+}
 
 /**
  * Redirect anything written to stdout into stderr, for the process lifetime.
@@ -173,6 +198,9 @@ export function divertStdoutToStderr(): () => void {
 
 /** Structured log line → stderr. NEVER stdout: stdout is the MCP transport. */
 export function log(level: LogLevel, message: string, fields: Record<string, unknown> = {}): void {
+  if (!shouldEmitLog(getLogLevel(), level)) {
+    return;
+  }
   const line = {
     level,
     msg: message,

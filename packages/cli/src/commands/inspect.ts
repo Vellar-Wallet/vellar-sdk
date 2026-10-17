@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { createCliLogger } from "../logger.js";
 
 export const HORIZON_URLS: Record<string, string> = {
   testnet: "https://horizon-testnet.stellar.org",
@@ -22,9 +23,11 @@ export function makeInspectCommand(): Command {
     .option("--network <network>", "testnet or mainnet", process.env.VELLAR_NETWORK ?? "testnet")
     .option("--json", "Output raw JSON")
     .action(async (txHash: string, opts: { network: string; json?: boolean }) => {
+      const logger = createCliLogger();
       try {
         const base = HORIZON_URLS[opts.network];
         if (!base) {
+          logger.error("invalid network option", { network: opts.network });
           console.error(`Error: --network must be 'testnet' or 'mainnet', got '${opts.network}'`);
           process.exit(1);
           return;
@@ -33,6 +36,7 @@ export function makeInspectCommand(): Command {
         // Catch a malformed hash here rather than reporting Horizon's 404 as
         // "not found", which reads as "this payment never happened".
         if (!/^[0-9a-f]{64}$/i.test(txHash)) {
+          logger.warn("malformed transaction hash", { txHash });
           console.error(
             `Error: '${txHash}' is not a transaction hash (expected 64 hex characters).`,
           );
@@ -40,8 +44,17 @@ export function makeInspectCommand(): Command {
           return;
         }
 
-        const res = await fetch(`${base}/transactions/${txHash}`);
+        const lookupUrl = `${base}/transactions/${txHash}`;
+        logger.debug("querying Horizon transaction endpoint", {
+          network: opts.network,
+          url: lookupUrl,
+        });
+        const res = await fetch(lookupUrl);
         if (!res.ok) {
+          logger.warn("Horizon lookup non-OK response", {
+            network: opts.network,
+            status: res.status,
+          });
           if (res.status === 404) {
             console.error(`Transaction not found on ${opts.network}: ${txHash}`);
             console.error("  A testnet hash returns 404 on mainnet Horizon and vice versa.");
@@ -53,6 +66,11 @@ export function makeInspectCommand(): Command {
         }
 
         const tx = (await res.json()) as HorizonTransaction;
+        logger.info("inspected transaction", {
+          hash: tx.hash ?? txHash,
+          ledger: tx.ledger,
+          successful: tx.successful,
+        });
         if (opts.json) {
           console.log(JSON.stringify(tx, null, 2));
           return;

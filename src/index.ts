@@ -39,3 +39,4 @@ export * as experimental from "./experimental-exports";
 
 // Legacy flat re-exports of experimental symbols (same stability as experimental.*).
 export * from "./experimental-exports";
+export * from "./logger";

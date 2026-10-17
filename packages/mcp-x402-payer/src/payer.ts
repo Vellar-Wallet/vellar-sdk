@@ -28,7 +28,7 @@ import {
 import type { PayerConfig } from "./config.js";
 import { IndeterminateSettlementError, SettlementFailedError } from "./errors.js";
 import { createMutex, type SpendLedger } from "./ledger.js";
-import { truncateUtf8, type Truncated } from "./output.js";
+import { log, truncateUtf8, type Truncated } from "./output.js";
 import {
   assertV2Challenge,
   narrowTo,
@@ -277,6 +277,7 @@ export function createPayer(deps: PayerDeps): Payer {
     // 2^53 are refused here exactly as they are for a server-supplied price.
     const ceiling = parseAmount(maxAmount);
 
+    log("debug", "x402 probe", { url, maxAmount });
     const first = await doFetch(url, { method: "GET" });
 
     if (first.status !== 402) {
@@ -306,6 +307,12 @@ export function createPayer(deps: PayerDeps): Payer {
       // guard that matters if the ledger ever gains another writer.
       ledger.assertWithinCeiling(chosen.asset, amount);
 
+      log("debug", "x402 signing attempt", {
+        url,
+        attempt,
+        asset: chosen.asset,
+        amount: amount.toString(),
+      });
       // FRESH signature per attempt — never reuse a payload across attempts.
       const headers = await signer.signPayment(narrowed);
       const res = await doFetch(url, { method: "GET", headers });

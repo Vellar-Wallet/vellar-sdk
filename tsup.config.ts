@@ -21,6 +21,7 @@ export default defineConfig({
     // Dependency-free, like the guards/untrusted modules, so a payer that
     // doesn't share the wallet plumbing can sign facilitator requests alone.
     "x402-request-auth": "src/x402-request-auth.ts",
+    logger: "src/logger.ts",
   },
   format: ["esm", "cjs"],
   dts: true,

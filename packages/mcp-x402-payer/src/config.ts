@@ -9,6 +9,11 @@
 
 import { readFileSync } from "node:fs";
 import { StrKey } from "@stellar/stellar-sdk";
+import {
+  parseVellarLogLevel,
+  VELLAR_LOG_LEVEL_ENV,
+  type VellarLogLevel,
+} from "vellar-sdk/logger";
 import { ConfigError } from "./errors.js";
 
 export type PayerNetwork = "testnet" | "mainnet";
@@ -56,6 +61,8 @@ export interface PayerConfig {
    * than a missing co-signer.
    */
   readonly policies: readonly string[];
+  /** Shared log level from `VELLAR_LOG_LEVEL` (`silent | error | warn | info | debug`). */
+  readonly logLevel: VellarLogLevel;
   /** The payer secret. Non-enumerable — see the module comment. */
   readonly secret: string;
 }
@@ -246,6 +253,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PayerConfig {
     );
   }
 
+  let logLevel: VellarLogLevel;
+  try {
+    logLevel = parseVellarLogLevel(env[VELLAR_LOG_LEVEL_ENV], "info");
+  } catch (err) {
+    throw new ConfigError(err instanceof Error ? err.message : String(err));
+  }
+
   const config = {
     network,
     caip2: CAIP2_BY_NETWORK[network],
@@ -255,6 +269,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PayerConfig {
     maxResponseBytes,
     ...(walletAddress !== undefined ? { walletAddress } : {}),
     policies,
+    logLevel,
   };
 
   // Non-enumerable: absent from JSON.stringify, {...spread}, Object.keys, and
