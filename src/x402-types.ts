@@ -9,6 +9,7 @@
 // time. See docs/design-x402-sdk-client.md and technical-doc.md §17.
 
 import type { Network } from "./types";
+import type { X402DiagnosticTrace, X402TraceRecorder } from "./x402-trace";
 
 /**
  * Payment requirements for one accepted payment option, as carried in a 402
@@ -71,6 +72,8 @@ export interface X402PayOptions {
   /** If set, only pay for these asset (SAC) ids; a 402 asking for anything else
    * is rejected without signing. Default: accept whatever asset the server asks. */
   allowedAssets?: string[];
+  /** Opt-in diagnostic trace recorder for support tickets (#680). */
+  traceRecorder?: X402TraceRecorder;
 }
 
 export interface X402FetchInit extends X402PayOptions {
@@ -109,6 +112,8 @@ export interface X402Response {
   paid: boolean;
   /** Present when `paid` — the on-chain settlement. */
   settlement?: X402Settlement;
+  /** Present when an opt-in `traceRecorder` was configured (#680). */
+  trace?: X402DiagnosticTrace;
 }
 
 /** The public x402 facade on the wallet handle. */

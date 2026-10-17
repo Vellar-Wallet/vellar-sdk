@@ -52,6 +52,7 @@ import {
   type X402PayOptions,
   type X402Response,
 } from "./x402-types";
+import type { X402TraceRecorder } from "./x402-trace";
 
 // The pure guard layer is part of this module's published surface.
 export * from "./x402-guards";
@@ -97,6 +98,8 @@ export interface X402ClientDeps {
   /** Clock for time-window budget rules (defaults to `() => new Date()`);
    * overridable for tests. */
   now?: () => Date;
+  /** Opt-in diagnostic trace recorder for support tickets (#680). */
+  traceRecorder?: X402TraceRecorder;
 }
 
 // Estimated ledger close time (seconds). The facilitator fetches its own estimate
@@ -172,7 +175,9 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
 
   async function buildSignedPayment(
     requirements: PaymentRequirements,
+    recorder?: X402TraceRecorder,
   ): Promise<{ header: string; amount: bigint }> {
+    const signStart = performance.now();
     const net = NETWORKS[requirements.network];
     if (!net) throw new NoUsablePaymentOptionError(`Unknown network ${requirements.network}`);
 
@@ -250,16 +255,35 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
       accepted: requirements,
       payload: { transaction: built.toXDR() },
     };
-    return {
-      header: utf8ToBase64(JSON.stringify(payload)),
-      amount: parseAmount(requirements.amount),
-    };
+    const header = utf8ToBase64(JSON.stringify(payload));
+    const amount = parseAmount(requirements.amount);
+
+    recorder?.recordStep({
+      step: "sign",
+      durationMs: performance.now() - signStart,
+      request: {
+        contract: requirements.asset,
+        method: "transfer",
+        from: deps.signer.address,
+        to: requirements.payTo,
+        amount: amount.toString(),
+        expirationLedger,
+      },
+      response: {
+        signedEntriesCount: signed,
+        paymentSignature: header,
+        transactionXdr: built.toXDR(),
+      },
+    });
+
+    return { header, amount };
   }
 
   async function createPayment(
     requirements: PaymentRequirements,
     opts: X402PayOptions,
   ): Promise<SignedPayment> {
+    const recorder = opts.traceRecorder ?? deps.traceRecorder;
     // Re-apply guards even on the direct path (a caller-supplied requirement is
     // still subject to maxAmount / allowedAssets).
     if (opts.allowedAssets && !opts.allowedAssets.includes(requirements.asset)) {
@@ -269,7 +293,7 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
     if (required > opts.maxAmount) {
       throw new MaxAmountExceededError(required, opts.maxAmount, requirements.asset);
     }
-    const { header, amount } = await buildSignedPayment(requirements);
+    const { header, amount } = await buildSignedPayment(requirements, recorder);
     return { header, requirements, amount };
   }
 
@@ -284,6 +308,7 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
           "Pass a buffered body (string, Uint8Array, Blob, FormData) instead.",
       );
     }
+    const recorder = init.traceRecorder ?? deps.traceRecorder;
     const baseInit: RequestInit = {
       ...init.requestInit,
       method: init.method ?? "GET",
@@ -291,30 +316,130 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
       body: init.body ?? undefined,
     };
 
+    const discoveryStart = performance.now();
     const first = await doFetch(url, baseInit);
+    recorder?.recordStep({
+      step: "discovery",
+      durationMs: performance.now() - discoveryStart,
+      request: {
+        url,
+        method: baseInit.method ?? "GET",
+        headers: init.headers ?? {},
+      },
+      response: {
+        status: first.status,
+        paymentRequiredPresent: Boolean(
+          first.headers.get("PAYMENT-REQUIRED") ?? first.headers.get("X-PAYMENT-REQUIRED"),
+        ),
+      },
+    });
+
     if (first.status !== 402) {
-      return { response: first, paid: false };
+      return {
+        response: first,
+        paid: false,
+        ...(recorder ? { trace: recorder.getTrace() } : {}),
+      };
     }
 
-    const decoded = decodePaymentRequired(first);
-    const requirements = selectRequirements(decoded, init, ourCaip2);
-    const { header, amount } = await buildSignedPayment(requirements);
+    const quoteStart = performance.now();
+    let decoded;
+    let requirements;
+    try {
+      decoded = decodePaymentRequired(first);
+      requirements = selectRequirements(decoded, init, ourCaip2);
+      recorder?.recordStep({
+        step: "quote",
+        durationMs: performance.now() - quoteStart,
+        request: {
+          maxAmount: init.maxAmount.toString(),
+          allowedAssets: init.allowedAssets,
+          expectedNetwork: ourCaip2,
+        },
+        response: {
+          x402Version: decoded.x402Version,
+          optionsOffered: decoded.accepts.length,
+          selectedRequirements: { ...requirements },
+        },
+      });
+    } catch (err) {
+      recorder?.recordStep({
+        step: "quote",
+        durationMs: performance.now() - quoteStart,
+        outcome: "error",
+        error: err,
+      });
+      throw err;
+    }
 
-    const paid = await doFetch(url, {
-      ...baseInit,
-      headers: { ...(init.headers ?? {}), "PAYMENT-SIGNATURE": header },
+    const { header, amount } = await buildSignedPayment(requirements, recorder);
+
+    const submitStart = performance.now();
+    const retryHeaders = { ...(init.headers ?? {}), "PAYMENT-SIGNATURE": header };
+    let paid: Response;
+    try {
+      paid = await doFetch(url, {
+        ...baseInit,
+        headers: retryHeaders,
+      });
+    } catch (err) {
+      recorder?.recordStep({
+        step: "submit",
+        durationMs: performance.now() - submitStart,
+        outcome: "error",
+        request: {
+          url,
+          method: baseInit.method ?? "GET",
+          headers: retryHeaders,
+        },
+        error: err,
+      });
+      throw err;
+    }
+    recorder?.recordStep({
+      step: "submit",
+      durationMs: performance.now() - submitStart,
+      outcome: paid.status === 402 || paid.status >= 400 ? "error" : "ok",
+      request: {
+        url,
+        method: baseInit.method ?? "GET",
+        headers: retryHeaders,
+      },
+      response: {
+        status: paid.status,
+      },
     });
 
     if (paid.status === 402 || paid.status >= 400) {
       const reason = extractRejectionReason(paid);
-      throw new PaymentRejectedError(
+      const rejectionError = new PaymentRejectedError(
         `x402 payment was not accepted (HTTP ${paid.status}${reason ? `: ${reason}` : ""}). ` +
           `If this was over-budget, the on-chain policy rejected it at facilitator verify.`,
         reason,
       );
+      recorder?.recordStep({
+        step: "settlement",
+        outcome: "error",
+        response: { status: paid.status, reason },
+        error: rejectionError,
+      });
+      throw rejectionError;
     }
 
     const settlement = readSettlement(paid, requirements, amount, deps.network);
+    recorder?.recordStep({
+      step: "settlement",
+      outcome: "ok",
+      response: settlement
+        ? {
+            transaction: settlement.transaction,
+            payer: settlement.payer,
+            asset: settlement.asset,
+            amount: settlement.amount.toString(),
+            network: settlement.network,
+          }
+        : { settled: true, headerPresent: false },
+    });
 
     // Record spend only now that the facilitator has actually accepted the
     // payment — a request rejected above (over-budget on-chain, or any other
@@ -326,7 +451,12 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
       }
     }
 
-    return { response: paid, paid: true, settlement };
+    return {
+      response: paid,
+      paid: true,
+      settlement,
+      ...(recorder ? { trace: recorder.getTrace() } : {}),
+    };
   }
 
   return { fetch: x402Fetch, createPayment };

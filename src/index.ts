@@ -27,6 +27,7 @@ export * from "./x402-budget-attributes";
 export * from "./x402-client";
 export * from "./x402-facade";
 export * from "./x402-request-auth";
+export * from "./x402-trace";
 export * from "./session";
 export * from "./tx-status";
 export * from "./circuit-breaker";
