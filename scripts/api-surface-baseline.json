@@ -1,0 +1,1260 @@
+{
+  "packageName": "vellar-sdk",
+  "version": "0.6.2",
+  "entryPoint": "src/index.ts",
+  "exports": {
+    "AgentKeyRuntime": {
+      "name": "AgentKeyRuntime",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ addAgentKey: (input: { publicKey: string; grants: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/agents-facade\").AgentPolicyGrant[]; expirationSeconds?: number; store: \"persistent\" | \"temporary\"; }) => Promise<{ hash: string; }>; removeAgentKey: (publicKey: string) => Promise<{ hash: string; }>; resume?: ((keyId: string) => Promise<void>) | undefined }"
+    },
+    "AgentPolicyGrant": {
+      "name": "AgentPolicyGrant",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ policies: string[]; token: string }"
+    },
+    "AgentsFacade": {
+      "name": "AgentsFacade",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ mint: (input: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/agents-facade\").MintAgentInput) => Promise<import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/agents-facade\").MintAgentResult>; revoke: (publicKey: string) => Promise<{ hash: string; }> }"
+    },
+    "AgentsFacadeDeps": {
+      "name": "AgentsFacadeDeps",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ requireSession: () => { accountId: string; keyId?: string; }; runtime?: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/agents-facade\").AgentKeyRuntime | undefined }"
+    },
+    "AgentsNotConfiguredError": {
+      "name": "AgentsNotConfiguredError",
+      "kind": "class",
+      "isValue": true,
+      "isType": true,
+      "signature": "typeof import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/agents-facade\").AgentsNotConfiguredError"
+    },
+    "AuthEntryMismatchError": {
+      "name": "AuthEntryMismatchError",
+      "kind": "class",
+      "isValue": true,
+      "isType": true,
+      "signature": "typeof import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-auth-entry\").AuthEntryMismatchError"
+    },
+    "BalanceReader": {
+      "name": "BalanceReader",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ getTokenBalance: (tokenContractId: string, holder: string) => Promise<bigint> }"
+    },
+    "BalanceService": {
+      "name": "BalanceService",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ getBalances: (holder: string) => Promise<import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/balances\").TokenBalance[]>; getBalancesBatch: (holder: string, tokens: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/balances\").TokenInfo[]) => Promise<import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/balances\").BatchBalanceResult[]> }"
+    },
+    "BatchBalanceResult": {
+      "name": "BatchBalanceResult",
+      "kind": "type",
+      "isValue": false,
+      "isType": true,
+      "signature": "import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/balances\").BatchBalanceResult"
+    },
+    "BatchBalanceSizeError": {
+      "name": "BatchBalanceSizeError",
+      "kind": "class",
+      "isValue": true,
+      "isType": true,
+      "signature": "typeof import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/balances\").BatchBalanceSizeError"
+    },
+    "BudgetAttributeDeniedError": {
+      "name": "BudgetAttributeDeniedError",
+      "kind": "class",
+      "isValue": true,
+      "isType": true,
+      "signature": "typeof import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-budget-attributes\").BudgetAttributeDeniedError"
+    },
+    "BudgetAttributeRequest": {
+      "name": "BudgetAttributeRequest",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ amount: bigint; at: Date; category?: string | undefined; merchant: string }"
+    },
+    "BudgetAttributeRule": {
+      "name": "BudgetAttributeRule",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ category?: string | undefined; maxAmount: bigint; merchant: string; periodMaxAmount?: bigint | undefined; window?: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-budget-attributes\").BudgetTimeWindow | undefined }"
+    },
+    "BudgetAttributeTracker": {
+      "name": "BudgetAttributeTracker",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ record: (rule: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-budget-attributes\").BudgetAttributeRule, amount: bigint) => Promise<void>; spent: (rule: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-budget-attributes\").BudgetAttributeRule) => Promise<bigint> }"
+    },
+    "BudgetTimeWindow": {
+      "name": "BudgetTimeWindow",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ daysUtc?: readonly number[] | undefined; endHourUtc?: number | undefined; startHourUtc?: number | undefined }"
+    },
+    "CAIP2_BY_NETWORK": {
+      "name": "CAIP2_BY_NETWORK",
+      "kind": "variable",
+      "isValue": true,
+      "isType": false,
+      "signature": "Record<import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").Network, string>"
+    },
+    "CapabilityDeniedError": {
+      "name": "CapabilityDeniedError",
+      "kind": "class",
+      "isValue": true,
+      "isType": true,
+      "signature": "typeof import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-signer-capabilities\").CapabilityDeniedError"
+    },
+    "CapabilityRequest": {
+      "name": "CapabilityRequest",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ action: string; resourceType: string }"
+    },
+    "CapabilityRule": {
+      "name": "CapabilityRule",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ action: string; resourceType: string }"
+    },
+    "CircuitBreaker": {
+      "name": "CircuitBreaker",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ execute: <T>(fn: () => Promise<T>) => Promise<T>; failureCount: number; reset: () => void; state: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/circuit-breaker\").CircuitBreakerState }"
+    },
+    "CircuitBreakerClock": {
+      "name": "CircuitBreakerClock",
+      "kind": "type",
+      "isValue": false,
+      "isType": true,
+      "signature": "import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/circuit-breaker\").CircuitBreakerClock"
+    },
+    "CircuitBreakerOptions": {
+      "name": "CircuitBreakerOptions",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ failureThreshold?: number | undefined; halfOpenMaxCalls?: number | undefined; isFailure?: ((result: { ok: boolean; error?: unknown; }) => boolean) | undefined; now?: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/circuit-breaker\").CircuitBreakerClock | undefined; openDurationMs?: number | undefined }"
+    },
+    "CircuitBreakerState": {
+      "name": "CircuitBreakerState",
+      "kind": "type",
+      "isValue": false,
+      "isType": true,
+      "signature": "import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/circuit-breaker\").CircuitBreakerState"
+    },
+    "CircuitOpenError": {
+      "name": "CircuitOpenError",
+      "kind": "class",
+      "isValue": true,
+      "isType": true,
+      "signature": "typeof import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/circuit-breaker\").CircuitOpenError"
+    },
+    "CreateSessionStoreOptions": {
+      "name": "CreateSessionStoreOptions",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ refreshIntervalMs?: number | undefined }"
+    },
+    "CreateWalletInput": {
+      "name": "CreateWalletInput",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ network: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").Network; username?: string | undefined }"
+    },
+    "DeployPolicyResult": {
+      "name": "DeployPolicyResult",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ attachTxHash: string; contractId: string; policy: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/policy-types\").GeneratedPolicy }"
+    },
+    "DisallowedAssetError": {
+      "name": "DisallowedAssetError",
+      "kind": "class",
+      "isValue": true,
+      "isType": true,
+      "signature": "typeof import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-types\").DisallowedAssetError"
+    },
+    "Enforcement": {
+      "name": "Enforcement",
+      "kind": "type",
+      "isValue": false,
+      "isType": true,
+      "signature": "import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/policy-types\").Enforcement"
+    },
+    "ExpectedInvocation": {
+      "name": "ExpectedInvocation",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ amount: bigint; contract: string; from: string; functionName: string; to: string }"
+    },
+    "FacilitatorRequestSigningConfig": {
+      "name": "FacilitatorRequestSigningConfig",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ keyId: string; nonce?: (() => string) | undefined; now?: (() => number) | undefined; secret: string }"
+    },
+    "FetchLike": {
+      "name": "FetchLike",
+      "kind": "type",
+      "isValue": false,
+      "isType": true,
+      "signature": "import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-client\").FetchLike"
+    },
+    "GeneratedPolicy": {
+      "name": "GeneratedPolicy",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ createdAt: string; definition: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").PolicyDefinition; deployment?: { contractId?: string; txHash: string; deployedAt: string; } | undefined; id: string; instance?: { contractId: string; txHash: string; deployedAt: string; } | undefined; manifest: { template: string; enforcement: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/policy-types\").Enforcement; network: \"testnet\" | \"mainnet\"; }; policyHash: string; status: \"generated\" | \"instance_deployed\" | \"deployed\" }"
+    },
+    "HttpWalletBackend": {
+      "name": "HttpWalletBackend",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ lookupContractId: (input: { keyId: string; network: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").Network; }) => Promise<{ contractId: string; sessionId: string; } | undefined>; submitTransaction: (input: { signedXdr: string; network: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").Network; }) => Promise<{ hash: string; }>; submitWalletCreation: (input: { keyId: string; contractId: string; network: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").Network; signedTx: unknown; }) => Promise<{ sessionId: string; }> }"
+    },
+    "InvalidAgentInputError": {
+      "name": "InvalidAgentInputError",
+      "kind": "class",
+      "isValue": true,
+      "isType": true,
+      "signature": "typeof import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/agents-facade\").InvalidAgentInputError"
+    },
+    "InvalidAmountError": {
+      "name": "InvalidAmountError",
+      "kind": "class",
+      "isValue": true,
+      "isType": true,
+      "signature": "typeof import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/payments\").InvalidAmountError"
+    },
+    "InvalidBudgetAttributeRuleError": {
+      "name": "InvalidBudgetAttributeRuleError",
+      "kind": "class",
+      "isValue": true,
+      "isType": true,
+      "signature": "typeof import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-budget-attributes\").InvalidBudgetAttributeRuleError"
+    },
+    "InvalidCapabilityRuleError": {
+      "name": "InvalidCapabilityRuleError",
+      "kind": "class",
+      "isValue": true,
+      "isType": true,
+      "signature": "typeof import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-signer-capabilities\").InvalidCapabilityRuleError"
+    },
+    "InvalidRecipientError": {
+      "name": "InvalidRecipientError",
+      "kind": "class",
+      "isValue": true,
+      "isType": true,
+      "signature": "typeof import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/payments-client\").InvalidRecipientError"
+    },
+    "InvalidRequirementsError": {
+      "name": "InvalidRequirementsError",
+      "kind": "class",
+      "isValue": true,
+      "isType": true,
+      "signature": "typeof import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-types\").InvalidRequirementsError"
+    },
+    "InvalidSigningConfigError": {
+      "name": "InvalidSigningConfigError",
+      "kind": "class",
+      "isValue": true,
+      "isType": true,
+      "signature": "typeof import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-request-auth\").InvalidSigningConfigError"
+    },
+    "MAINNET": {
+      "name": "MAINNET",
+      "kind": "variable",
+      "isValue": true,
+      "isType": false,
+      "signature": "import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/config\").NetworkConfig"
+    },
+    "MAX_BATCH_BALANCE_SIZE": {
+      "name": "MAX_BATCH_BALANCE_SIZE",
+      "kind": "variable",
+      "isValue": true,
+      "isType": false,
+      "signature": "32"
+    },
+    "MainnetConfigError": {
+      "name": "MainnetConfigError",
+      "kind": "class",
+      "isValue": true,
+      "isType": true,
+      "signature": "typeof import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/config\").MainnetConfigError"
+    },
+    "MaxAmountExceededError": {
+      "name": "MaxAmountExceededError",
+      "kind": "class",
+      "isValue": true,
+      "isType": true,
+      "signature": "typeof import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-types\").MaxAmountExceededError"
+    },
+    "MintAgentInput": {
+      "name": "MintAgentInput",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ expiresAt?: number | Date | undefined; grants: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/agents-facade\").AgentPolicyGrant[]; publicKey: string; store?: \"persistent\" | \"temporary\" | undefined }"
+    },
+    "MintAgentResult": {
+      "name": "MintAgentResult",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ expiresAt?: string | undefined; hash: string; publicKey: string }"
+    },
+    "NETWORKS": {
+      "name": "NETWORKS",
+      "kind": "variable",
+      "isValue": true,
+      "isType": false,
+      "signature": "Record<string, { passphrase: string; network: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").Network; }>"
+    },
+    "Network": {
+      "name": "Network",
+      "kind": "type",
+      "isValue": false,
+      "isType": true,
+      "signature": "import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").Network"
+    },
+    "NetworkConfig": {
+      "name": "NetworkConfig",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ horizonUrl: string; nativeTokenContractId: string; network: \"testnet\" | \"mainnet\"; networkPassphrase: string; rpcUrl: string; usdcContractId: string; usdcIssuer: string; walletWasmHash: string }"
+    },
+    "NoUsablePaymentOptionError": {
+      "name": "NoUsablePaymentOptionError",
+      "kind": "class",
+      "isValue": true,
+      "isType": true,
+      "signature": "typeof import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-types\").NoUsablePaymentOptionError"
+    },
+    "PasskeyBrowserRequiredError": {
+      "name": "PasskeyBrowserRequiredError",
+      "kind": "class",
+      "isValue": true,
+      "isType": true,
+      "signature": "typeof import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/passkeykit-connector\").PasskeyBrowserRequiredError"
+    },
+    "PasskeyKitConnectorOptions": {
+      "name": "PasskeyKitConnectorOptions",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ appName: string; backend: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/passkeykit-connector\").WalletBackend; kit: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/passkeykit-connector\").PasskeyKitLike; network: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").Network; now?: (() => Date) | undefined; onDebugLog?: ((event: string, details: Record<string, unknown>) => void) | undefined; sessionKeyRotation?: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/passkeykit-connector\").SessionKeyRotationRuntime | undefined; signedToXdr?: ((signed: unknown) => string) | undefined }"
+    },
+    "PasskeyKitLike": {
+      "name": "PasskeyKitLike",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ connectWallet: (opts?: { keyId?: string; getContractId?: (keyId: string) => Promise<string | undefined>; }) => Promise<{ keyIdBase64: string; contractId: string; }>; createWallet: (app: string, user: string) => Promise<{ keyIdBase64: string; contractId: string; signedTx: unknown; }>; sign: (tx: unknown) => Promise<unknown>; wallet?: unknown }"
+    },
+    "PasskeyX402SignerConfig": {
+      "name": "PasskeyX402SignerConfig",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ address: string; capabilities?: readonly import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-signer-capabilities\").CapabilityRule[] | undefined; onSignerAction?: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-signer\").X402SignerActionHook | undefined; policies?: readonly string[] | undefined; webAuthn: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-signer\").WebAuthnAssertionSigner }"
+    },
+    "PayInput": {
+      "name": "PayInput",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ amount: bigint; to: string; token: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/balances\").TokenInfo }"
+    },
+    "PaymentClient": {
+      "name": "PaymentClient",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ preparePayment: (input: { from: string; to: string; token: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/balances\").TokenInfo; amount: bigint; }) => Promise<import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/payments-client\").PreparedPayment> }"
+    },
+    "PaymentClientOptions": {
+      "name": "PaymentClientOptions",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ backend: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/payments-client\").PaymentSubmitBackend; isValidAddress: (address: string) => boolean; kit: Pick<import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/passkeykit-connector\").PasskeyKitLike, \"sign\">; network: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").Network; sac: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/payments-client\").SacClientLike; signedToXdr?: ((signed: unknown) => string) | undefined }"
+    },
+    "PaymentRejectedError": {
+      "name": "PaymentRejectedError",
+      "kind": "class",
+      "isValue": true,
+      "isType": true,
+      "signature": "typeof import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-types\").PaymentRejectedError"
+    },
+    "PaymentRequired": {
+      "name": "PaymentRequired",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ accepts: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-types\").PaymentRequirements[]; error?: string | undefined; resource?: { url: string; description?: string; mimeType?: string; } | undefined; x402Version: number }"
+    },
+    "PaymentRequirements": {
+      "name": "PaymentRequirements",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ amount: string; asset: string; extra?: Record<string, unknown> | undefined; maxTimeoutSeconds?: number | undefined; network: string; payTo: string; scheme: string }"
+    },
+    "PaymentReview": {
+      "name": "PaymentReview",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ amount: bigint; from: string; network: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").Network; to: string; token: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/balances\").TokenInfo }"
+    },
+    "PaymentSubmitBackend": {
+      "name": "PaymentSubmitBackend",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ submitTransaction: (input: { signedXdr: string; network: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").Network; }) => Promise<{ hash: string; }> }"
+    },
+    "PolicyApiError": {
+      "name": "PolicyApiError",
+      "kind": "class",
+      "isValue": true,
+      "isType": true,
+      "signature": "typeof import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/policy-types\").PolicyApiError"
+    },
+    "PolicyAttachRuntime": {
+      "name": "PolicyAttachRuntime",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ attachPolicy: (policyContractId: string) => Promise<{ hash: string; }>; resume?: ((keyId: string) => Promise<void>) | undefined }"
+    },
+    "PolicyClient": {
+      "name": "PolicyClient",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ deployInstance: (policyId: string, wallet: string) => Promise<{ contractId: string; }>; generate: (definition: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").PolicyDefinition) => Promise<import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/policy-types\").GeneratedPolicy>; listPolicies: (filters?: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/policy-client\").PolicyListFilters) => Promise<import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/policy-types\").GeneratedPolicy[]>; listTemplates: () => Promise<import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/policy-types\").PolicyTemplateInfo[]>; recordDeployment: (policyId: string, txHash: string, contractId?: string) => Promise<import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/policy-types\").GeneratedPolicy>; simulate: (policyId: string, wallet: string) => Promise<import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/policy-types\").SimulateResult>; validate: (definition: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").PolicyDefinition) => Promise<import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/policy-types\").ValidationResult> }"
+    },
+    "PolicyClientOptions": {
+      "name": "PolicyClientOptions",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ apiUrl: string; fetch?: ((input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) | undefined; network: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").Network }"
+    },
+    "PolicyDefinition": {
+      "name": "PolicyDefinition",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ allowlistedContracts?: string[] | undefined; owners: string[]; spendingLimits?: { dailyXlm?: string; perTxXlm?: string; } | undefined; threshold?: number | undefined; timelocks?: { adminActionDelaySeconds?: number; } | undefined; type: string; version: string }"
+    },
+    "PolicyFacade": {
+      "name": "PolicyFacade",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ client: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/policy-client\").PolicyClient; deploy: (policyId: string) => Promise<import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/policy-types\").DeployPolicyResult>; generate: (definition: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").PolicyDefinition) => Promise<import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/policy-types\").GeneratedPolicy>; listTemplates: () => Promise<import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/policy-types\").PolicyTemplateInfo[]>; simulate: (policyId: string) => Promise<import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/policy-types\").SimulateResult> }"
+    },
+    "PolicyFacadeDeps": {
+      "name": "PolicyFacadeDeps",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ apiUrl: string; attach?: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/policy-facade\").PolicyAttachRuntime | undefined; fetch?: ((input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) | undefined; network: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").Network; requireSession: () => { accountId: string; keyId?: string; } }"
+    },
+    "PolicyListFilterError": {
+      "name": "PolicyListFilterError",
+      "kind": "class",
+      "isValue": true,
+      "isType": true,
+      "signature": "typeof import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/policy-client\").PolicyListFilterError"
+    },
+    "PolicyListFilters": {
+      "name": "PolicyListFilters",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ createdAfter?: string | undefined; createdBefore?: string | undefined; status?: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/policy-client\").PolicyListStatus | undefined }"
+    },
+    "PolicyListStatus": {
+      "name": "PolicyListStatus",
+      "kind": "type",
+      "isValue": false,
+      "isType": true,
+      "signature": "import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/policy-client\").PolicyListStatus"
+    },
+    "PolicyNotDeployableError": {
+      "name": "PolicyNotDeployableError",
+      "kind": "class",
+      "isValue": true,
+      "isType": true,
+      "signature": "typeof import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/policy-facade\").PolicyNotDeployableError"
+    },
+    "PolicyTemplateInfo": {
+      "name": "PolicyTemplateInfo",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ description: string; enforcement: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/policy-types\").Enforcement; title: string; type: string }"
+    },
+    "PreparedPayment": {
+      "name": "PreparedPayment",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ confirm: () => Promise<{ hash: string; }>; review: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/payments\").PaymentReview }"
+    },
+    "RELAYER_MAX_TIMEOUT_SECONDS": {
+      "name": "RELAYER_MAX_TIMEOUT_SECONDS",
+      "kind": "variable",
+      "isValue": true,
+      "isType": false,
+      "signature": "30"
+    },
+    "RequestSigningUnavailableError": {
+      "name": "RequestSigningUnavailableError",
+      "kind": "class",
+      "isValue": true,
+      "isType": true,
+      "signature": "typeof import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-request-auth\").RequestSigningUnavailableError"
+    },
+    "SIGNED_REQUEST_HEADER_NAMES": {
+      "name": "SIGNED_REQUEST_HEADER_NAMES",
+      "kind": "variable",
+      "isValue": true,
+      "isType": false,
+      "signature": "{ readonly keyId: \"X-Vellar-Key-Id\"; readonly timestamp: \"X-Vellar-Timestamp\"; readonly nonce: \"X-Vellar-Nonce\"; readonly signature: \"X-Vellar-Signature\"; }"
+    },
+    "SacClientLike": {
+      "name": "SacClientLike",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ getSACClient: (tokenContractId: string) => import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/payments-client\").TokenContractClientLike }"
+    },
+    "SessionKeyRotationRuntime": {
+      "name": "SessionKeyRotationRuntime",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ mint: () => Promise<{ publicKey: string; }>; revoke: (publicKey: string) => Promise<void> }"
+    },
+    "SessionKeySignerConfig": {
+      "name": "SessionKeySignerConfig",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ address: string; onSignerAction?: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-signer\").X402SignerActionHook | undefined; policies?: readonly string[] | undefined; secretKey: string }"
+    },
+    "SessionState": {
+      "name": "SessionState",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ dispose: () => void; end: () => Promise<void>; restore: () => Promise<void>; session: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").WalletSession | null; start: (session: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").WalletSession) => Promise<void>; status: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/session\").SessionStatus; touch: (now?: Date) => Promise<void> }"
+    },
+    "SessionStatus": {
+      "name": "SessionStatus",
+      "kind": "type",
+      "isValue": false,
+      "isType": true,
+      "signature": "import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/session\").SessionStatus"
+    },
+    "SessionStorageAdapter": {
+      "name": "SessionStorageAdapter",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ clear: () => Promise<void>; load: () => Promise<import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").WalletSession | null>; save: (session: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").WalletSession) => Promise<void> }"
+    },
+    "SessionStore": {
+      "name": "SessionStore",
+      "kind": "type",
+      "isValue": false,
+      "isType": true,
+      "signature": "import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/session\").SessionStore"
+    },
+    "SettleResult": {
+      "name": "SettleResult",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ errorReason?: string | undefined; network?: string | undefined; payer?: string | undefined; success?: boolean | undefined; transaction?: string | undefined }"
+    },
+    "SettlementOutcome": {
+      "name": "SettlementOutcome",
+      "kind": "type",
+      "isValue": false,
+      "isType": true,
+      "signature": "import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-guards\").SettlementOutcome"
+    },
+    "SignTransactionInput": {
+      "name": "SignTransactionInput",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ network: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").Network; xdr: string }"
+    },
+    "SignedPayment": {
+      "name": "SignedPayment",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ amount: bigint; header: string; requirements: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-types\").PaymentRequirements }"
+    },
+    "SignedRequestHeaders": {
+      "name": "SignedRequestHeaders",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ X-Vellar-Key-Id: string; X-Vellar-Nonce: string; X-Vellar-Signature: string; X-Vellar-Timestamp: string }"
+    },
+    "SignedTransaction": {
+      "name": "SignedTransaction",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ signedXdr: string }"
+    },
+    "SimulateResult": {
+      "name": "SimulateResult",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ error?: string | undefined; minResourceFee?: string | undefined; ok: boolean }"
+    },
+    "SmartAccountX402Signer": {
+      "name": "SmartAccountX402Signer",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ address: string; signAuthEntry: (entryXdr: string, opts: { networkPassphrase: string; expirationLedger: number; }) => Promise<string> }"
+    },
+    "SpendingConstructor": {
+      "name": "SpendingConstructor",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ dailyLimitStroops: string; windowSeconds: number }"
+    },
+    "TESTNET": {
+      "name": "TESTNET",
+      "kind": "variable",
+      "isValue": true,
+      "isType": false,
+      "signature": "import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/config\").NetworkConfig"
+    },
+    "TokenBalance": {
+      "name": "TokenBalance",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ amount: bigint; contractId: string; decimals: number; symbol: string }"
+    },
+    "TokenContractClientLike": {
+      "name": "TokenContractClientLike",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ transfer: (args: { from: string; to: string; amount: bigint; }, options?: { timeoutInSeconds?: number; }) => Promise<unknown> }"
+    },
+    "TokenInfo": {
+      "name": "TokenInfo",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ contractId: string; decimals: number; symbol: string }"
+    },
+    "TransactionTimeoutError": {
+      "name": "TransactionTimeoutError",
+      "kind": "class",
+      "isValue": true,
+      "isType": true,
+      "signature": "typeof import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/tx-status\").TransactionTimeoutError"
+    },
+    "TxStatus": {
+      "name": "TxStatus",
+      "kind": "type",
+      "isValue": false,
+      "isType": true,
+      "signature": "import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/tx-status\").TxStatus"
+    },
+    "TxStatusReader": {
+      "name": "TxStatusReader",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ getStatus: (hash: string) => Promise<import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/tx-status\").TxStatus> }"
+    },
+    "ValidationResult": {
+      "name": "ValidationResult",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ errors: string[]; valid: boolean }"
+    },
+    "VellarWallet": {
+      "name": "VellarWallet",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ agents: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/agents-facade\").AgentsFacade; connect: () => Promise<import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").WalletSession>; connector: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/connector\").WalletConnector; create: (input?: { username?: string; }) => Promise<import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").WalletSession>; pay: (input: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/client\").PayInput) => Promise<{ hash: string; }>; payments: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/payments-client\").PaymentClient; policies: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/policy-facade\").PolicyFacade; session: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").WalletSession | null; x402: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-types\").X402Client }"
+    },
+    "VellarWalletConfig": {
+      "name": "VellarWalletConfig",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ agentKeys?: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/agents-facade\").AgentKeyRuntime | undefined; apiUrl?: string | undefined; appName: string; backend: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/passkeykit-connector\").WalletBackend & { submitTransaction(input: { signedXdr: string; network: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").Network; }): Promise<{ hash: string; }>; }; circuitBreaker?: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/circuit-breaker\").CircuitBreakerOptions | null | undefined; isValidAddress: (address: string) => boolean; kit: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/passkeykit-connector\").PasskeyKitLike; network: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").Network; policyAttach?: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/policy-facade\").PolicyAttachRuntime | undefined; rpcUrl?: string | undefined; sac: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/payments-client\").SacClientLike; signedToXdr?: ((signed: unknown) => string) | undefined; x402?: { signer: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-types\").SmartAccountX402Signer; simulationSourceAccount: string; rpcUrl?: string; fetchImpl?: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-client\").FetchLike; expirationLedgerOffset?: number; budgetAttributes?: readonly import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-budget-attributes\").BudgetAttributeRule[]; budgetAttributeTracker?: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-budget-attributes\").BudgetAttributeTracker; } | undefined }"
+    },
+    "VerifiedRecipientConstructor": {
+      "name": "VerifiedRecipientConstructor",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ registry: string }"
+    },
+    "WaitOptions": {
+      "name": "WaitOptions",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ intervalMs?: number | undefined; now?: (() => number) | undefined; sleep?: ((ms: number) => Promise<void>) | undefined; timeoutMs?: number | undefined }"
+    },
+    "WalletApiError": {
+      "name": "WalletApiError",
+      "kind": "class",
+      "isValue": true,
+      "isType": true,
+      "signature": "typeof import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/http-backend\").WalletApiError"
+    },
+    "WalletBackend": {
+      "name": "WalletBackend",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ lookupContractId: (input: { keyId: string; network: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").Network; }) => Promise<{ contractId: string; sessionId: string; } | undefined>; submitWalletCreation: (input: { keyId: string; contractId: string; network: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").Network; signedTx: unknown; }) => Promise<{ sessionId: string; }> }"
+    },
+    "WalletConnector": {
+      "name": "WalletConnector",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ connectWallet: (network: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").Network) => Promise<import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").WalletSession>; createWallet: (input: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").CreateWalletInput) => Promise<import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").WalletSession>; signTransaction: (input: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").SignTransactionInput) => Promise<import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/connector\").SignedTransaction> }"
+    },
+    "WalletNetworkMismatchError": {
+      "name": "WalletNetworkMismatchError",
+      "kind": "class",
+      "isValue": true,
+      "isType": true,
+      "signature": "typeof import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/passkeykit-connector\").WalletNetworkMismatchError"
+    },
+    "WalletNotReadyError": {
+      "name": "WalletNotReadyError",
+      "kind": "class",
+      "isValue": true,
+      "isType": true,
+      "signature": "typeof import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/client\").WalletNotReadyError"
+    },
+    "WalletSession": {
+      "name": "WalletSession",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ accountId: string; authMethod: \"passkey\"; connected: boolean; createdAt: string; keyId?: string | undefined; lastActiveAt: string; network: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").Network; serverSessionId?: string | undefined }"
+    },
+    "WebAuthnAssertion": {
+      "name": "WebAuthnAssertion",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ authenticatorData: Uint8Array<ArrayBufferLike>; clientDataJSON: Uint8Array<ArrayBufferLike>; keyId: Uint8Array<ArrayBufferLike>; signature: Uint8Array<ArrayBufferLike> }"
+    },
+    "WebAuthnAssertionSigner": {
+      "name": "WebAuthnAssertionSigner",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ sign: (payloadHash: Uint8Array) => Promise<import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-signer\").WebAuthnAssertion> }"
+    },
+    "X402Client": {
+      "name": "X402Client",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ createPayment: (requirements: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-types\").PaymentRequirements, opts: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-types\").X402PayOptions) => Promise<import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-types\").SignedPayment>; fetch: (url: string, init: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-types\").X402FetchInit) => Promise<import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-types\").X402Response> }"
+    },
+    "X402ClientDeps": {
+      "name": "X402ClientDeps",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ budgetAttributeTracker?: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-budget-attributes\").BudgetAttributeTracker | undefined; budgetAttributes?: readonly import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-budget-attributes\").BudgetAttributeRule[] | undefined; expirationLedgerOffset?: number | undefined; fetchImpl?: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-client\").FetchLike | undefined; network: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").Network; now?: (() => Date) | undefined; requestSigning?: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-request-auth\").FacilitatorRequestSigningConfig | undefined; rpcUrl: string; signer: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-types\").SmartAccountX402Signer; simulationSourceAccount: string }"
+    },
+    "X402FacadeDeps": {
+      "name": "X402FacadeDeps",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ config?: { rpcUrl: string; network: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").Network; simulationSourceAccount: string; fetchImpl?: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-client\").FetchLike; expirationLedgerOffset?: number; requestSigning?: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-request-auth\").FacilitatorRequestSigningConfig; budgetAttributes?: readonly import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-budget-attributes\").BudgetAttributeRule[]; budgetAttributeTracker?: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-budget-attributes\").BudgetAttributeTracker; } | undefined; resolveSigner: () => import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-types\").SmartAccountX402Signer }"
+    },
+    "X402FetchInit": {
+      "name": "X402FetchInit",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ allowedAssets?: string[] | undefined; body?: BodyInit | null | undefined; headers?: Record<string, string> | undefined; maxAmount: bigint; method?: string | undefined; requestInit?: Omit<RequestInit, \"method\" | \"headers\" | \"body\"> | undefined }"
+    },
+    "X402NotConfiguredError": {
+      "name": "X402NotConfiguredError",
+      "kind": "class",
+      "isValue": true,
+      "isType": true,
+      "signature": "typeof import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-types\").X402NotConfiguredError"
+    },
+    "X402PayOptions": {
+      "name": "X402PayOptions",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ allowedAssets?: string[] | undefined; maxAmount: bigint }"
+    },
+    "X402Response": {
+      "name": "X402Response",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ paid: boolean; response: Response; settlement?: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-types\").X402Settlement | undefined }"
+    },
+    "X402Settlement": {
+      "name": "X402Settlement",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ amount: bigint; asset: string; network: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").Network; payer: string; transaction: string }"
+    },
+    "X402SignerAction": {
+      "name": "X402SignerAction",
+      "kind": "type",
+      "isValue": false,
+      "isType": true,
+      "signature": "import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-signer\").X402SignerAction"
+    },
+    "X402SignerActionEvent": {
+      "name": "X402SignerActionEvent",
+      "kind": "interface",
+      "isValue": false,
+      "isType": true,
+      "signature": "{ action: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-signer\").X402SignerAction; actor: string; error?: unknown; networkPassphrase: string; outcome: \"success\" | \"error\" }"
+    },
+    "X402SignerActionHook": {
+      "name": "X402SignerActionHook",
+      "kind": "type",
+      "isValue": false,
+      "isType": true,
+      "signature": "import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-signer\").X402SignerActionHook"
+    },
+    "assertAuthEntryInvocation": {
+      "name": "assertAuthEntryInvocation",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(entry: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/node_modules/@stellar/stellar-sdk/lib/esm/index\").xdr.SorobanAuthorizationEntry, expected: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-auth-entry\").ExpectedInvocation): void"
+    },
+    "assertBudgetAttributes": {
+      "name": "assertBudgetAttributes",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(rules: readonly import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-budget-attributes\").BudgetAttributeRule[], request: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-budget-attributes\").BudgetAttributeRequest, tracker?: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-budget-attributes\").BudgetAttributeTracker): Promise<void>"
+    },
+    "assertCapability": {
+      "name": "assertCapability",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(rules: readonly import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-signer-capabilities\").CapabilityRule[], request: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-signer-capabilities\").CapabilityRequest): void"
+    },
+    "assertValidBudgetAttributeRules": {
+      "name": "assertValidBudgetAttributeRules",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(rules: readonly import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-budget-attributes\").BudgetAttributeRule[]): void"
+    },
+    "assertValidCapabilityRules": {
+      "name": "assertValidCapabilityRules",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(rules: readonly import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-signer-capabilities\").CapabilityRule[]): void"
+    },
+    "assertValidX402RpcUrl": {
+      "name": "assertValidX402RpcUrl",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(rpcUrl: string | undefined): asserts rpcUrl is string"
+    },
+    "base64ToUtf8": {
+      "name": "base64ToUtf8",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(b64: string): string"
+    },
+    "canonicalRequestString": {
+      "name": "canonicalRequestString",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(input: { method: string; path: string; body: string; timestamp: string; nonce: string; }): string"
+    },
+    "classifySettlement": {
+      "name": "classifySettlement",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(res: Response): import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-guards\").SettlementOutcome"
+    },
+    "createAgentsFacade": {
+      "name": "createAgentsFacade",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(deps: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/agents-facade\").AgentsFacadeDeps): import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/agents-facade\").AgentsFacade"
+    },
+    "createBalanceService": {
+      "name": "createBalanceService",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(reader: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/balances\").BalanceReader, tokens: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/balances\").TokenInfo[]): import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/balances\").BalanceService"
+    },
+    "createCircuitBreaker": {
+      "name": "createCircuitBreaker",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(options?: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/circuit-breaker\").CircuitBreakerOptions): import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/circuit-breaker\").CircuitBreaker"
+    },
+    "createCircuitBreakingBackend": {
+      "name": "createCircuitBreakingBackend",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "<T extends object>(backend: T, breaker?: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/circuit-breaker\").CircuitBreaker): T"
+    },
+    "createHttpWalletBackend": {
+      "name": "createHttpWalletBackend",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(apiUrl: string, fetchImpl?: typeof fetch): import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/http-backend\").HttpWalletBackend"
+    },
+    "createInMemoryBudgetAttributeTracker": {
+      "name": "createInMemoryBudgetAttributeTracker",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(): import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-budget-attributes\").BudgetAttributeTracker"
+    },
+    "createMemoryStorageAdapter": {
+      "name": "createMemoryStorageAdapter",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(): import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/session\").SessionStorageAdapter"
+    },
+    "createPasskeyKitConnector": {
+      "name": "createPasskeyKitConnector",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(options: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/passkeykit-connector\").PasskeyKitConnectorOptions): import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/connector\").WalletConnector"
+    },
+    "createPasskeyX402Signer": {
+      "name": "createPasskeyX402Signer",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(config: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-signer\").PasskeyX402SignerConfig): import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-types\").SmartAccountX402Signer"
+    },
+    "createPaymentClient": {
+      "name": "createPaymentClient",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(options: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/payments-client\").PaymentClientOptions): import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/payments-client\").PaymentClient"
+    },
+    "createPolicyClient": {
+      "name": "createPolicyClient",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(options: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/policy-client\").PolicyClientOptions): import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/policy-client\").PolicyClient"
+    },
+    "createPolicyFacade": {
+      "name": "createPolicyFacade",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(deps: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/policy-facade\").PolicyFacadeDeps): import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/policy-facade\").PolicyFacade"
+    },
+    "createSessionKeySigner": {
+      "name": "createSessionKeySigner",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(config: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-signer\").SessionKeySignerConfig): import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-types\").SmartAccountX402Signer"
+    },
+    "createSessionStore": {
+      "name": "createSessionStore",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(storage: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/session\").SessionStorageAdapter, options?: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/session\").CreateSessionStoreOptions): import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/session\").SessionStore"
+    },
+    "createSignedFetch": {
+      "name": "createSignedFetch",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(config: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-request-auth\").FacilitatorRequestSigningConfig, fetchImpl?: (url: string, init?: RequestInit) => Promise<Response>): (url: string, init?: RequestInit) => Promise<Response>"
+    },
+    "createVellarWallet": {
+      "name": "createVellarWallet",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(config: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/client\").VellarWalletConfig): import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/client\").VellarWallet"
+    },
+    "createWebStorageAdapter": {
+      "name": "createWebStorageAdapter",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(storage: Pick<Storage, \"getItem\" | \"setItem\" | \"removeItem\">, key?: string): import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/session\").SessionStorageAdapter"
+    },
+    "createX402Client": {
+      "name": "createX402Client",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(deps: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-client\").X402ClientDeps): import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-types\").X402Client"
+    },
+    "createX402Facade": {
+      "name": "createX402Facade",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(deps: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-facade\").X402FacadeDeps): import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-types\").X402Client"
+    },
+    "decodePaymentRequired": {
+      "name": "decodePaymentRequired",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(res: Response): import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-types\").PaymentRequired"
+    },
+    "decodeSettleResponseHeader": {
+      "name": "decodeSettleResponseHeader",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(res: Response): import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-guards\").SettleResult | undefined"
+    },
+    "decodeSettlementHeader": {
+      "name": "decodeSettlementHeader",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(res: Response): { transaction: string; payer?: string; } | undefined"
+    },
+    "defaultSignedToXdr": {
+      "name": "defaultSignedToXdr",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(signed: unknown): string"
+    },
+    "enforcementLabel": {
+      "name": "enforcementLabel",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(e: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/policy-types\").Enforcement): string"
+    },
+    "evaluateBudgetAttributes": {
+      "name": "evaluateBudgetAttributes",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(rules: readonly import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-budget-attributes\").BudgetAttributeRule[], request: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-budget-attributes\").BudgetAttributeRequest): boolean"
+    },
+    "evaluateCapability": {
+      "name": "evaluateCapability",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(rules: readonly import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-signer-capabilities\").CapabilityRule[], request: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-signer-capabilities\").CapabilityRequest): boolean"
+    },
+    "experimental": {
+      "name": "experimental",
+      "kind": "namespace",
+      "isValue": true,
+      "isType": false,
+      "signature": "namespace { AuthEntryMismatchError, CAIP2_BY_NETWORK, DisallowedAssetError, ExpectedInvocation, FetchLike, InvalidRequirementsError, MaxAmountExceededError, NETWORKS, NoUsablePaymentOptionError, PasskeyX402SignerConfig, PaymentRejectedError, PaymentRequired, PaymentRequirements, SessionKeySignerConfig, SettleResult, SettlementOutcome, SignedPayment, SmartAccountX402Signer, WebAuthnAssertion, WebAuthnAssertionSigner, X402Client, X402ClientDeps, X402FacadeDeps, X402FetchInit, X402NotConfiguredError, X402PayOptions, X402Response, X402Settlement, X402SignerAction, X402SignerActionEvent, X402SignerActionHook, assertAuthEntryInvocation, assertValidX402RpcUrl, base64ToUtf8, classifySettlement, createPasskeyX402Signer, createSessionKeySigner, createX402Client, createX402Facade, decodePaymentRequired, decodeSettleResponseHeader, decodeSettlementHeader, expirationOffsetFor, extractRejectionReason, isRetryableSettleFailure, parseAmount, selectRequirements, utf8ToBase64 }"
+    },
+    "expirationOffsetFor": {
+      "name": "expirationOffsetFor",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(maxTimeoutSeconds: number | undefined, ceiling?: number): number"
+    },
+    "extractRejectionReason": {
+      "name": "extractRejectionReason",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(res: Response): string | undefined"
+    },
+    "fetchBalancesBatch": {
+      "name": "fetchBalancesBatch",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(reader: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/balances\").BalanceReader, holder: string, tokens: Pick<import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/balances\").TokenInfo, \"contractId\">[]): Promise<import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/balances\").BatchBalanceResult[]>"
+    },
+    "formatTokenAmount": {
+      "name": "formatTokenAmount",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(amount: bigint, decimals: number): string"
+    },
+    "isRetryableSettleFailure": {
+      "name": "isRetryableSettleFailure",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(settle: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-guards\").SettleResult | undefined): boolean"
+    },
+    "isWalletSession": {
+      "name": "isWalletSession",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(value: unknown): value is import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/types\").WalletSession"
+    },
+    "mainnetConfig": {
+      "name": "mainnetConfig",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(opts: { rpcUrl: string; walletWasmHash: string; }): import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/config\").NetworkConfig"
+    },
+    "matchingBudgetRule": {
+      "name": "matchingBudgetRule",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(rules: readonly import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-budget-attributes\").BudgetAttributeRule[], request: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-budget-attributes\").BudgetAttributeRequest): import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-budget-attributes\").BudgetAttributeRule | undefined"
+    },
+    "parseAmount": {
+      "name": "parseAmount",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(amount: string): bigint"
+    },
+    "parseTokenAmount": {
+      "name": "parseTokenAmount",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(input: string, decimals: number): bigint"
+    },
+    "resumeKitConnection": {
+      "name": "resumeKitConnection",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(kit: Pick<import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/passkeykit-connector\").PasskeyKitLike, \"connectWallet\" | \"wallet\">, keyId: string): Promise<void>"
+    },
+    "selectRequirements": {
+      "name": "selectRequirements",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(decoded: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-types\").PaymentRequired, opts: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-types\").X402PayOptions, ourCaip2: string): import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-types\").PaymentRequirements"
+    },
+    "signFacilitatorRequest": {
+      "name": "signFacilitatorRequest",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(config: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-request-auth\").FacilitatorRequestSigningConfig, request: { method: string; path: string; body?: string; }): Promise<import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/x402-request-auth\").SignedRequestHeaders>"
+    },
+    "stroopsToXlm": {
+      "name": "stroopsToXlm",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(stroops: string): string"
+    },
+    "utf8ToBase64": {
+      "name": "utf8ToBase64",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(s: string): string"
+    },
+    "verifyFacilitatorRequest": {
+      "name": "verifyFacilitatorRequest",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(secret: string, headers: { keyId: string; timestamp: string; nonce: string; signature: string; }, request: { method: string; path: string; body?: string; }, opts?: { toleranceSeconds?: number; now?: () => number; }): Promise<boolean>"
+    },
+    "waitForTransaction": {
+      "name": "waitForTransaction",
+      "kind": "function",
+      "isValue": true,
+      "isType": false,
+      "signature": "(reader: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/tx-status\").TxStatusReader, hash: string, options?: import(\"C:/Users/Admin/Downloads/agy-automaton/workspaces/bounty-vellar-sdk/vellar-sdk/src/tx-status\").WaitOptions): Promise<\"success\" | \"failed\">"
+    }
+  }
+}
