@@ -50,7 +50,30 @@ async function main(): Promise<void> {
     ...(smartAccount ? { policies: config.policies.length } : {}),
   });
 
-  await startStdio(createMcpServer({ payer, config, ledger }));
+  const serverHandle = await startStdio(createMcpServer({ payer, config, ledger }), ledger);
+
+  // Set up graceful shutdown handlers for SIGTERM and SIGINT
+  const shutdownHandler = async (signal: string) => {
+    log("info", `shutdown signal received: ${signal}`, { signal });
+
+    try {
+      // Initiate graceful shutdown: stop accepting new payments and wait for in-flight to complete
+      await serverHandle.shutdown();
+      log("info", "graceful shutdown complete", { signal });
+    } catch (err) {
+      log("error", "error during graceful shutdown", {
+        signal,
+        error: formatError(err),
+      });
+    }
+
+    // Exit cleanly after shutdown completes
+    process.exit(0);
+  };
+
+  // Register signal handlers
+  process.on("SIGTERM", () => shutdownHandler("SIGTERM"));
+  process.on("SIGINT", () => shutdownHandler("SIGINT"));
 }
 
 main().catch((err) => {

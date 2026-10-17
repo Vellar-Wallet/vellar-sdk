@@ -153,6 +153,11 @@ export interface ServerDeps {
   ledger: SpendLedger;
 }
 
+export interface ManagedMcpServer {
+  server: McpServer;
+  shutdown(): Promise<void>;
+}
+
 export function createMcpServer(deps: ServerDeps): McpServer {
   // Server-level instructions reach the model before any tool is called, which
   // makes this the most prominent place to state what the spending limit is and
@@ -365,7 +370,10 @@ export function createMcpServer(deps: ServerDeps): McpServer {
  * writing to stdout (a dependency's `console.log`) goes to stderr and cannot
  * desynchronise the JSON-RPC stream.
  */
-export async function startStdio(server: McpServer): Promise<void> {
+export async function startStdio(
+  server: McpServer,
+  ledger: SpendLedger,
+): Promise<{ shutdown(): Promise<void>; waitForShutdown(): Promise<void> }> {
   const realWrite = process.stdout.write.bind(process.stdout);
   const protocolOut = new Writable({
     // decodeStrings is left on, so `chunk` arrives as a Buffer; pass it straight
@@ -383,4 +391,21 @@ export async function startStdio(server: McpServer): Promise<void> {
   await server.connect(transport);
 
   divertStdoutToStderr();
+
+  let shutdownPromise: Promise<void> | undefined;
+
+  return {
+    shutdown: async () => {
+      if (shutdownPromise) return shutdownPromise;
+      shutdownPromise = ledger.shutdown();
+      return shutdownPromise;
+    },
+    waitForShutdown: async () => {
+      if (shutdownPromise) return shutdownPromise;
+      // Wait indefinitely if no shutdown is initiated
+      return new Promise(() => {
+        // Never resolves unless shutdown() is called
+      });
+    },
+  };
 }

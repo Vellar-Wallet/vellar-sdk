@@ -31,6 +31,14 @@ export interface SpendLedger {
   record(asset: string, amount: bigint): void;
   remainingFor(asset: string): bigint;
   snapshot(): SpendSnapshot[];
+  /** Returns true if shutdown has been initiated. Blocks new payments. */
+  isShuttingDown(): boolean;
+  /** Initiate graceful shutdown: stop accepting new calls, wait for in-flight to finish. */
+  shutdown(): Promise<void>;
+  /** For internal use: track when a critical section begins. */
+  _trackCriticalSectionStart(): void;
+  /** For internal use: track when a critical section ends. */
+  _trackCriticalSectionEnd(): void;
 }
 
 /**
@@ -40,9 +48,16 @@ export interface SpendLedger {
  * than treated as unlimited. Base units are only comparable within one asset, so
  * there is deliberately no cross-asset total — summing them would fail OPEN on a
  * cheaply-denominated asset.
+ *
+ * Supports graceful shutdown: after initiating shutdown, no new payments are
+ * accepted, but in-flight payments are allowed to complete cleanly. The shutdown
+ * call blocks until all in-flight critical sections have finished.
  */
 export function createSpendLedger(ceilings: ReadonlyMap<string, bigint>): SpendLedger {
   const spent = new Map<string, bigint>();
+  let shutdownInitiated = false;
+  let inFlightCount = 0;
+  let shutdownResolve: (() => void) | undefined;
 
   function ceilingFor(asset: string): bigint {
     const ceiling = ceilings.get(asset);
@@ -58,8 +73,22 @@ export function createSpendLedger(ceilings: ReadonlyMap<string, bigint>): SpendL
     return spent.get(asset) ?? 0n;
   }
 
+  function startCriticalSection(): void {
+    inFlightCount++;
+  }
+
+  function endCriticalSection(): void {
+    inFlightCount--;
+    if (shutdownInitiated && inFlightCount === 0 && shutdownResolve) {
+      shutdownResolve();
+    }
+  }
+
   return {
     assertWithinCeiling(asset, amount) {
+      if (shutdownInitiated) {
+        throw new Error("Server is shutting down and cannot accept new payments");
+      }
       const ceiling = ceilingFor(asset);
       const already = spentFor(asset);
       if (already + amount > ceiling) {
@@ -87,6 +116,30 @@ export function createSpendLedger(ceilings: ReadonlyMap<string, bigint>): SpendL
         remaining: (ceiling - spentFor(asset) > 0n ? ceiling - spentFor(asset) : 0n).toString(),
       }));
     },
+
+    isShuttingDown() {
+      return shutdownInitiated;
+    },
+
+    async shutdown() {
+      shutdownInitiated = true;
+      // If there are no in-flight critical sections, resolve immediately.
+      if (inFlightCount === 0) {
+        return;
+      }
+      // Otherwise wait for all in-flight sections to complete.
+      return new Promise<void>((resolve) => {
+        shutdownResolve = resolve;
+      });
+    },
+
+    _trackCriticalSectionStart() {
+      startCriticalSection();
+    },
+
+    _trackCriticalSectionEnd() {
+      endCriticalSection();
+    },
   };
 }
 
@@ -99,12 +152,28 @@ export function createSpendLedger(ceilings: ReadonlyMap<string, bigint>): SpendL
  * single shared x402 client's per-payment selection tripwire unambiguous.
  *
  * One key, one budget, one payment at a time.
+ *
+ * Supports graceful shutdown: when a ledger is provided, critical sections
+ * are tracked so shutdown can wait for in-flight payments to complete.
  */
-export function createMutex(): <T>(fn: () => Promise<T>) => Promise<T> {
+export function createMutex(ledger?: SpendLedger): <T>(fn: () => Promise<T>) => Promise<T> {
   let tail: Promise<unknown> = Promise.resolve();
 
   return function run<T>(fn: () => Promise<T>): Promise<T> {
-    const result = tail.then(fn, fn);
+    const wrappedFn = async () => {
+      if (ledger) {
+        ledger._trackCriticalSectionStart();
+      }
+      try {
+        return await fn();
+      } finally {
+        if (ledger) {
+          ledger._trackCriticalSectionEnd();
+        }
+      }
+    };
+
+    const result = tail.then(wrappedFn, wrappedFn);
     // Keep the chain alive regardless of this call's outcome.
     tail = result.then(
       () => undefined,

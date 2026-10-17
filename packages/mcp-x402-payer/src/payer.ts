@@ -188,7 +188,8 @@ export function createPayer(deps: PayerDeps): Payer {
   // through means the guarantee does not depend on which door they came in by.
   //
   // One key, one budget, one payment at a time.
-  const exclusive = createMutex();
+  // Pass the ledger so shutdown can wait for in-flight payments to complete.
+  const exclusive = createMutex(ledger);
 
   /**
    * Run the guards and return the single option we are willing to pay, together
