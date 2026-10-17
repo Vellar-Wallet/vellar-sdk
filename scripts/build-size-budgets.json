@@ -1,0 +1,31 @@
+{
+  "budgets": [
+    {
+      "packageName": "vellar-sdk",
+      "packageDir": ".",
+      "distDir": "dist",
+      "measuredBaselineBytes": 148480,
+      "maxTotalBytes": 266240,
+      "maxSingleFileBytes": 122880,
+      "notes": "Root SDK ESM + CJS multi-entry output (index, balances, rpc, x402-guards, x402-untrusted, x402-untrusted-vectors, x402-request-auth). @stellar/stellar-sdk and zustand remain external."
+    },
+    {
+      "packageName": "vellar-cli",
+      "packageDir": "packages/cli",
+      "distDir": "dist",
+      "measuredBaselineBytes": 32768,
+      "maxTotalBytes": 81920,
+      "maxSingleFileBytes": 61440,
+      "notes": "CLI ESM output (index.js, bin.js). Runtime dependencies (@stellar/stellar-sdk, @x402/*, commander, vellar-sdk) remain external."
+    },
+    {
+      "packageName": "vellar-mcp-x402-payer",
+      "packageDir": "packages/mcp-x402-payer",
+      "distDir": "dist",
+      "measuredBaselineBytes": 57344,
+      "maxTotalBytes": 122880,
+      "maxSingleFileBytes": 81920,
+      "notes": "MCP x402 payer ESM output (index.js, bin.js). Runtime dependencies (@modelcontextprotocol/sdk, @stellar/stellar-sdk, @x402/*, vellar-sdk, zod) remain external."
+    }
+  ]
+}
