@@ -1,0 +1,8 @@
+{
+  "name": "fixture-happy-path-pkg-b",
+  "version": "0.0.0",
+  "dependencies": {
+    "@x402/core": "^2.16.0",
+    "@x402/stellar": "^2.16.0"
+  }
+}
