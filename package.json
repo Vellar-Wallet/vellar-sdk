@@ -116,6 +116,7 @@
     "build": "tsup",
     "typecheck": "tsc --noEmit && tsc --noEmit -p packages/mcp-x402-payer/tsconfig.json && tsc --noEmit -p packages/cli/tsconfig.json",
     "check:docs": "node scripts/check-doc-snippets.mjs",
+    "check:x402-versions": "node scripts/check-x402-versions.mjs",
     "test": "vitest run",
     "test:integration": "npm run test:integration --workspace @vellar/mcp-x402-payer",
     "test:load": "vitest run --config vitest.load.config.ts",

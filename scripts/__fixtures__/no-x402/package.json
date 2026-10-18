@@ -1,0 +1,5 @@
+{
+  "name": "fixture-no-x402",
+  "version": "0.0.0",
+  "workspaces": ["packages/*"]
+}

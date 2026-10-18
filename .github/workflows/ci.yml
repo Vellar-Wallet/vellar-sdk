@@ -31,6 +31,9 @@ jobs:
       # Docs snippets typecheck against the current source — a quickstart that
       # drifts from the real API fails the PR that introduces the drift.
       - run: npm run check:docs
+      # Verify @x402/core and @x402/stellar stay on the same major version
+      # across all workspace packages (issue #618).
+      - run: npm run check:x402-versions
       - run: npm test
       - run: npm run build
 
