@@ -7,6 +7,20 @@ This folder contains reference implementations, standalone wrappers, and validat
 
 ---
 
+## Recipe: CI Job to Build and Typecheck Every Contrib Example (#631)
+
+A complete implementation recipe and reference for building a CI job that validates every example in `contrib/` and `contrib/examples/`.
+
+**Files**:
+- **[check-contrib-examples-recipe.md](check-contrib-examples-recipe.md)**: Detailed design document with requirements, implementation strategy, and integration checklist
+- **[check-contrib-examples-reference.mjs](check-contrib-examples-reference.mjs)**: Reference implementation showing the intended pattern
+
+**What it does**: Ensures every example subdirectory with a `package.json` or `tsconfig.json` builds and typechecks, catching drift early when the SDK evolves.
+
+**Integration path**: Copy the reference implementation to `scripts/check-contrib-examples.mjs`, add unit tests, wire into `.github/workflows/ci.yml`, and update documentation.
+
+---
+
 ## 1. Fallback Path for x402-client Discovery Timeout (#279)
 
 We implement `createX402ClientWithFallback` inside [contrib/x402-client-fallback.ts](file:///c:/Users/DELL/drips/luchi/vellar-sdk/contrib/x402-client-fallback.ts). 
