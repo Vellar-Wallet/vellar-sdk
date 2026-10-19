@@ -37,6 +37,28 @@ export class InvalidRecipientError extends Error {
   }
 }
 
+/**
+ * Thrown when the caller-supplied token.decimals differs from the token
+ * contract's on-chain decimals(). Proceeding would scale the amount by the
+ * wrong power of ten, producing a payment off by orders of magnitude.
+ */
+export class TokenDecimalsMismatchError extends Error {
+  constructor(
+    readonly contractId: string,
+    readonly suppliedDecimals: number,
+    readonly onChainDecimals: number,
+  ) {
+    super(
+      `Token ${contractId} reports ${onChainDecimals} decimals on-chain but the token descriptor says ${suppliedDecimals}; paying with the wrong decimals would send an amount off by orders of magnitude`,
+    );
+    this.name = "TokenDecimalsMismatchError";
+  }
+}
+
+export interface TokenDecimalsReader {
+  getTokenDecimals(tokenContractId: string): Promise<number>;
+}
+
 export interface PreparedPayment {
   review: PaymentReview;
   /** Sign with the passkey and submit. Only ever call after explicit user approval. */
@@ -60,6 +82,12 @@ export interface PaymentClientOptions {
   /** Address validation is required — payments must never reach signing with a bad recipient. */
   isValidAddress: (address: string) => boolean;
   signedToXdr?: (signed: unknown) => string;
+  /**
+   * When set, preparePayment compares the on-chain decimals against
+   * token.decimals and throws TokenDecimalsMismatchError on divergence. If the
+   * on-chain value cannot be read, the check is skipped.
+   */
+  decimalsReader?: TokenDecimalsReader;
 }
 
 export function createPaymentClient(options: PaymentClientOptions): PaymentClient {
@@ -75,6 +103,15 @@ export function createPaymentClient(options: PaymentClientOptions): PaymentClien
       }
       if (amount <= 0n) {
         throw new InvalidAmountError("Amount must be greater than zero");
+      }
+
+      if (options.decimalsReader) {
+        const onChain = await options.decimalsReader
+          .getTokenDecimals(token.contractId)
+          .catch(() => undefined);
+        if (onChain !== undefined && onChain !== token.decimals) {
+          throw new TokenDecimalsMismatchError(token.contractId, token.decimals, onChain);
+        }
       }
 
       // Builds AND simulates; simulation failures (e.g. insufficient balance)

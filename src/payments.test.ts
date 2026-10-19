@@ -3,6 +3,7 @@ import { InvalidAmountError, parseTokenAmount } from "./payments";
 import {
   createPaymentClient,
   InvalidRecipientError,
+  TokenDecimalsMismatchError,
   type PaymentClientOptions,
   type SacClientLike,
 } from "./payments-client";
@@ -155,5 +156,69 @@ describe("PreparedPayment.confirm", () => {
     });
     const prepared = await client.preparePayment({ from: FROM, to: TO, token: xlm, amount: 5n });
     await expect(prepared.confirm()).rejects.toThrow("relayer down");
+  });
+});
+
+describe("parseTokenAmount sub-stroop rounding mode (reject, never round)", () => {
+  it.each([["0.00000015"], ["0.00000019"], ["0.00000011"], ["1.00000005"], ["0.99999999"]])(
+    "rejects %s instead of truncating or rounding it",
+    (input) => {
+      expect(() => parseTokenAmount(input, 7)).toThrow(InvalidAmountError);
+      expect(() => parseTokenAmount(input, 7)).toThrow(/at most 7 decimal places/);
+    },
+  );
+
+  it("accepts the smallest representable amounts exactly", () => {
+    expect(parseTokenAmount("0.0000001", 7)).toBe(1n);
+    expect(parseTokenAmount("0.0000015", 7)).toBe(15n);
+  });
+
+  it("rejects number inputs rather than coercing them, so strings and numbers behave alike", () => {
+    for (const n of [0.00000015, 1.5, 5, 1e-7, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() => parseTokenAmount(n as unknown as string, 7)).toThrow(InvalidAmountError);
+    }
+  });
+
+  it("applies the same limit at other precisions", () => {
+    expect(parseTokenAmount("0.000001", 6)).toBe(1n);
+    expect(() => parseTokenAmount("0.0000015", 6)).toThrow(InvalidAmountError);
+    expect(() => parseTokenAmount("1.5", 0)).toThrow(InvalidAmountError);
+  });
+});
+
+describe("createPaymentClient decimals mismatch detection", () => {
+  const input = { from: FROM, to: TO, token: xlm, amount: 5n };
+
+  it("proceeds when on-chain decimals match the token descriptor", async () => {
+    const getTokenDecimals = vi.fn().mockResolvedValue(7);
+    const { client, transfer } = clientWith({ decimalsReader: { getTokenDecimals } });
+    await expect(client.preparePayment(input)).resolves.toBeDefined();
+    expect(getTokenDecimals).toHaveBeenCalledWith("CNATIVE");
+    expect(transfer).toHaveBeenCalled();
+  });
+
+  it("throws TokenDecimalsMismatchError before building the transfer when they diverge", async () => {
+    const { client, transfer } = clientWith({
+      decimalsReader: { getTokenDecimals: vi.fn().mockResolvedValue(6) },
+    });
+    const err = await client.preparePayment(input).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(TokenDecimalsMismatchError);
+    expect((err as TokenDecimalsMismatchError).suppliedDecimals).toBe(7);
+    expect((err as TokenDecimalsMismatchError).onChainDecimals).toBe(6);
+    expect((err as Error).message).toMatch(/orders of magnitude/);
+    expect(transfer).not.toHaveBeenCalled();
+  });
+
+  it("skips the check when the on-chain decimals cannot be read", async () => {
+    const { client, transfer } = clientWith({
+      decimalsReader: { getTokenDecimals: vi.fn().mockRejectedValue(new Error("rpc down")) },
+    });
+    await expect(client.preparePayment(input)).resolves.toBeDefined();
+    expect(transfer).toHaveBeenCalled();
+  });
+
+  it("does nothing when no decimalsReader is configured", async () => {
+    const { client } = clientWith();
+    await expect(client.preparePayment(input)).resolves.toBeDefined();
   });
 });

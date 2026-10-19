@@ -12,7 +12,12 @@ import {
   type CircuitBreaker,
   type CircuitBreakerOptions,
 } from "./circuit-breaker";
-import { createPaymentClient, type PaymentClient, type SacClientLike } from "./payments-client";
+import {
+  createPaymentClient,
+  type PaymentClient,
+  type SacClientLike,
+  type TokenDecimalsReader,
+} from "./payments-client";
 import type { WalletConnector } from "./connector";
 import { createPolicyFacade, type PolicyAttachRuntime, type PolicyFacade } from "./policy-facade";
 import { createAgentsFacade, type AgentKeyRuntime, type AgentsFacade } from "./agents-facade";
@@ -66,6 +71,12 @@ export interface VellarWalletConfig {
   };
   /** Soroban token client factory, used for payments (a `SACClient`). */
   sac: SacClientLike;
+  /**
+   * Optional on-chain decimals check for pay(): pass the reader from
+   * createRpcBalanceReader to reject a token descriptor whose decimals differ
+   * from the token contract (TokenDecimalsMismatchError).
+   */
+  decimalsReader?: TokenDecimalsReader;
   /** Validates a Stellar address before a payment is ever signed. */
   isValidAddress: (address: string) => boolean;
   /** Test/advanced hook: convert the kit's signed output to XDR. */
@@ -213,6 +224,7 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
   const payments = createPaymentClient({
     kit: config.kit,
     sac: config.sac,
+    decimalsReader: config.decimalsReader,
     backend,
     network: config.network,
     isValidAddress: config.isValidAddress,

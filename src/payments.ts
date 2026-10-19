@@ -15,11 +15,20 @@ export class InvalidAmountError extends Error {
 /**
  * Parses a user-entered decimal amount into raw token units (inverse of
  * formatTokenAmount). Rejects empty/non-numeric input, negatives, zero, and
- * more fractional digits than the token supports — never rounds silently.
+ * more fractional digits than the token supports.
+ *
+ * Rounding mode: none. Sub-unit precision is REJECTED, never truncated or
+ * rounded: with 7 decimals, "0.00000015" throws InvalidAmountError instead of
+ * becoming 1 or 2 stroops, so a payment never differs from what was entered.
+ * Input must be a decimal string; numbers are rejected because binary floats
+ * cannot represent most decimal amounts exactly.
  */
 export function parseTokenAmount(input: string, decimals: number): bigint {
   if (decimals < 0 || !Number.isInteger(decimals)) {
     throw new RangeError(`decimals must be a non-negative integer, got ${decimals}`);
+  }
+  if (typeof input !== "string") {
+    throw new InvalidAmountError(`Amount must be a decimal string, got ${typeof input}`);
   }
   const trimmed = input.trim();
   if (!/^\d+(\.\d+)?$/.test(trimmed)) {

@@ -93,6 +93,19 @@ const { hash } = await vellar.pay({
 `pay()` simulates **before** the passkey prompt, so failures (e.g. insufficient
 balance) surface without asking the user to sign.
 
+> **Warning: `decimals` and `amount` must agree with the token.** `amount` is in
+> raw base units and `decimals` is caller-supplied. If `decimals` differs from
+> the token contract's real `decimals()`, any amount you derive from it (for
+> example with `parseTokenAmount`) is off by orders of magnitude (5 tokens
+> becomes 0.05 or 500). To catch this, pass
+> `decimalsReader: createRpcBalanceReader({ rpcUrl, networkPassphrase })`
+> (from `vellar-sdk/rpc`) to `createVellarWallet`. `pay()` then reads the
+> on-chain decimals and throws `TokenDecimalsMismatchError` before anything is
+> signed. If the on-chain value cannot be read, the check is skipped.
+>
+> `parseTokenAmount` never rounds: input with more fractional digits than
+> `decimals` is rejected with `InvalidAmountError`.
+
 ## Your backend
 
 Submission is fee-sponsored, which requires an OpenZeppelin Relayer API key and

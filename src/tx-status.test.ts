@@ -86,3 +86,51 @@ describe("waitForTransaction", () => {
     expect(reader.getStatus).toHaveBeenCalledTimes(3);
   });
 });
+
+describe("waitForTransaction with a stuck relayer job", () => {
+  function stuckRelayer() {
+    let time = 0;
+    const reader: TxStatusReader = { getStatus: vi.fn().mockResolvedValue("pending") };
+    const sleep = vi.fn().mockImplementation(async (ms: number) => {
+      time += ms;
+    });
+    return { reader, sleep, now: () => time };
+  }
+
+  it("stops polling at the timeout instead of polling indefinitely", async () => {
+    const { reader, sleep, now } = stuckRelayer();
+    await expect(
+      waitForTransaction(reader, "h", { timeoutMs: 1000, intervalMs: 100, sleep, now }),
+    ).rejects.toBeInstanceOf(TransactionTimeoutError);
+    expect(reader.getStatus).toHaveBeenCalledTimes(11);
+  });
+
+  it("uses a 60s deadline at 2s intervals by default", async () => {
+    const { reader, sleep, now } = stuckRelayer();
+    await expect(waitForTransaction(reader, "h", { sleep, now })).rejects.toBeInstanceOf(
+      TransactionTimeoutError,
+    );
+    expect(reader.getStatus).toHaveBeenCalledTimes(31);
+  });
+
+  it("names the error and says the relayer never reported a final status, not an on-chain failure", async () => {
+    const { reader, sleep, now } = stuckRelayer();
+    const err = (await waitForTransaction(reader, "abc123", {
+      timeoutMs: 100,
+      intervalMs: 50,
+      sleep,
+      now,
+    }).catch((e: unknown) => e)) as TransactionTimeoutError;
+    expect(err.name).toBe("TransactionTimeoutError");
+    expect(err.hash).toBe("abc123");
+    expect(err.timeoutMs).toBe(100);
+    expect(err.message).toMatch(/never reported a final status/);
+    expect(err.message).toMatch(/not an on-chain failure/);
+  });
+
+  it("reports an on-chain failure as a resolved failed status, never as the timeout error", async () => {
+    await expect(
+      waitForTransaction(readerReturning(["pending", "failed"]), "h", { sleep: instantSleep }),
+    ).resolves.toBe("failed");
+  });
+});
