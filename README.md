@@ -281,6 +281,12 @@ Your gateway must expose the policy routes (`/policies/templates`,
 `/policies/:id/deploy-instance`, `/policies/deploy`) — instance deploys are
 funded by **your** sponsor account, server-side.
 
+The templates catalog (`listTemplates`) is a provisioning aid: it is how you
+pick a template and generate a new policy. It is not a live dependency of an
+instance that has already been deployed. Removing or changing a template in
+the catalog later leaves the on-chain contract untouched, and reading or
+re-simulating that instance still works.
+
 → Full guide: [Policies on docs.vellar.xyz](https://docs.vellar.xyz/docs/policies).
 
 ### Agent keys
