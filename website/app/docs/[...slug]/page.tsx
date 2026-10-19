@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { getCanonicalUrl } from "@/lib/canonical-url";
 import { DOC_PAGES, getDocMarkdown, getDocPage } from "@/lib/docs";
 import { CopyForAgentButton } from "../copy-button";
 import { Markdown } from "../markdown";
@@ -17,9 +18,16 @@ export async function generateMetadata({
   params: Promise<{ slug: string[] }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const page = getDocPage(slug.join("/"));
+  const pageSlug = slug.join("/");
+  const page = getDocPage(pageSlug);
   if (!page) return { title: "Docs — Vellar SDK" };
-  return { title: `${page.title} — Vellar SDK`, description: page.description };
+  return {
+    title: `${page.title} — Vellar SDK`,
+    description: page.description,
+    alternates: {
+      canonical: getCanonicalUrl(pageSlug),
+    },
+  };
 }
 
 export default async function DocPage({ params }: { params: Promise<{ slug: string[] }> }) {

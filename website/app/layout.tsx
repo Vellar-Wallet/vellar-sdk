@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { CANONICAL_ORIGIN } from "@/lib/canonical-url";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(CANONICAL_ORIGIN),
   title: "Vellar SDK — Docs",
   description:
     "Documentation for vellar-sdk: the passkey smart-wallet SDK for Stellar. Add passkey login, a Soroban smart account, and fee-sponsored payments to your app.",
