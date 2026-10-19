@@ -32,6 +32,7 @@ jobs:
       # drifts from the real API fails the PR that introduces the drift.
       - run: npm run check:docs
       - run: npm run check:licenses
+      - run: npm run check:vscode-mcp
       - run: npm test
       - run: npm run build
 

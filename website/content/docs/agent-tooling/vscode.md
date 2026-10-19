@@ -408,6 +408,34 @@ and the facilitator handles every Stellar interaction.
 | `ownerVerified` stays false | A localhost or http URL, which can never verify | Deploy behind a public https URL |
 | A payment settles but the balance is unchanged | The payTo has no trustline to the asset | Open the trustline, then retry |
 
+## MCP payer in VS Code
+
+VS Code can run the x402 payer (`vellar-mcp-x402-payer`) as a stdio MCP server.
+Configuration is environment-only: `bin.ts` accepts no flags of its own. Put
+this in `.vscode/mcp.json`. Every `env` name below is read by
+`packages/mcp-x402-payer/src/config.ts`, and CI rejects the snippet if one of
+them is renamed or removed.
+
+```json
+{
+  "servers": {
+    "vellar-x402-payer": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "vellar-mcp-x402-payer"],
+      "env": {
+        "VELLAR_X402_SECRET_FILE": "/run/secrets/x402-payer-key",
+        "VELLAR_X402_ASSETS": "CBIN4HTPJM2QLJ32DTRO6OCLIMM7TR7D74JDIPVQYLNYGL7SBWOXH5ND:5000000",
+        "VELLAR_X402_NETWORK": "testnet"
+      }
+    }
+  }
+}
+```
+
+Prefer `VELLAR_X402_SECRET_FILE` over `VELLAR_X402_SECRET`. The file path keeps
+the key out of the process environment. Never commit a real secret in this file.
+
 ## Next steps
 
 - [Charge for an endpoint](../sellers/charge-for-an-endpoint.md)
