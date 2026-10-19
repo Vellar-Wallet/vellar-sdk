@@ -1,4 +1,4 @@
-import type { Network } from "./types";
+import type { AddressValidator, Network } from "./types";
 import type { TokenInfo } from "./balances";
 import { InvalidAmountError, type PaymentReview } from "./payments";
 import { defaultSignedToXdr, type PasskeyKitLike } from "./passkeykit-connector";
@@ -57,8 +57,9 @@ export interface PaymentClientOptions {
   sac: SacClientLike;
   backend: PaymentSubmitBackend;
   network: Network;
-  /** Address validation is required — payments must never reach signing with a bad recipient. */
-  isValidAddress: (address: string) => boolean;
+  /** Address validation is required — payments must never reach signing with a bad recipient.
+   * Must return a boolean and not throw; see `AddressValidator`. */
+  isValidAddress: AddressValidator;
   signedToXdr?: (signed: unknown) => string;
 }
 

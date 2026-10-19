@@ -12,14 +12,37 @@ export interface SessionStorageAdapter {
   clear(): Promise<void>;
 }
 
+/**
+ * Persisting the session failed (e.g. a browser `QuotaExceededError` from a
+ * full quota or Safari private browsing). The in-memory session is still set and
+ * usable for the current page lifetime; only reload survival is lost. The
+ * original storage error is available as `cause`.
+ */
+export class SessionPersistenceError extends Error {
+  constructor(operation: "save" | "clear", cause: unknown) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    super(
+      `Session could not be persisted (${operation}): ${detail}. The session stays active in memory but will not survive a reload.`,
+      { cause },
+    );
+    this.name = "SessionPersistenceError";
+  }
+}
+
 export type SessionStatus = "loading" | "connected" | "disconnected";
 
 export interface SessionState {
   session: WalletSession | null;
   status: SessionStatus;
-  /** Begin a session (after wallet create/connect) and persist it. */
+  /**
+   * Begin a session (after wallet create/connect) and persist it. The session is
+   * set in memory first; if persistence fails (e.g. storage quota exceeded) this
+   * rejects with `SessionPersistenceError` but the session remains connected
+   * for the current page lifetime and will not survive a reload.
+   */
   start(session: WalletSession): Promise<void>;
-  /** Update lastActiveAt on user activity and persist. No-op when disconnected. */
+  /** Update lastActiveAt on user activity and persist. No-op when disconnected.
+   * Same degraded-persistence contract as `start()`. */
   touch(now?: Date): Promise<void>;
   /** End the session and clear persisted state. */
   end(): Promise<void>;
@@ -80,7 +103,7 @@ export function createSessionStore(
       // Refresh is a fire-and-forget touch; storage failures are non-fatal here
       // (the user-facing start()/touch() still surface them).
       if (disposed) return;
-      void store.getState().touch();
+      store.getState().touch().catch(() => {});
     }, options.refreshIntervalMs);
   }
 
@@ -91,6 +114,14 @@ export function createSessionStore(
     }
   }
 
+  async function persist(session: WalletSession): Promise<void> {
+    try {
+      await storage.save(session);
+    } catch (err) {
+      throw new SessionPersistenceError("save", err);
+    }
+  }
+
   let store: SessionStore = null as never;
 
   store = createStore<SessionState>((set, get) => ({
@@ -98,18 +129,18 @@ export function createSessionStore(
     status: "loading",
 
     async start(session) {
-      await storage.save(session);
       set({ session, status: "connected" });
       // Begin periodic refresh only once connected (and only if configured).
       startRefresh();
+      await persist(session);
     },
 
     async touch(now = new Date()) {
       const { session } = get();
       if (!session) return;
       const updated: WalletSession = { ...session, lastActiveAt: now.toISOString() };
-      await storage.save(updated);
       set({ session: updated });
+      await persist(updated);
     },
 
     async end() {

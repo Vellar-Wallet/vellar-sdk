@@ -32,8 +32,9 @@ export interface PolicyFacade {
   listTemplates(): Promise<PolicyTemplateInfo[]>;
   /** Validate + generate the deployable artifacts for a definition. */
   generate(definition: PolicyDefinition): Promise<GeneratedPolicy>;
-  /** Dry-run the on-chain deploy for the connected wallet (no submit). */
-  simulate(policyId: string): Promise<SimulateResult>;
+  /** Dry-run the on-chain deploy (no submit). Defaults to the connected wallet;
+   * pass `accountId` to simulate without a session (e.g. no passkey kit). */
+  simulate(policyId: string, accountId?: string): Promise<SimulateResult>;
   /** Attach a generated policy to the connected wallet (passkey-signed). */
   deploy(policyId: string): Promise<DeployPolicyResult>;
   /** The lower-level HTTP client, for custom flows. */
@@ -72,17 +73,16 @@ export function createPolicyFacade(deps: PolicyFacadeDeps): PolicyFacade {
     generate(definition) {
       return client.generate(definition);
     },
-    simulate(policyId) {
-      const { accountId } = deps.requireSession();
-      return client.simulate(policyId, accountId);
+    simulate(policyId, accountId) {
+      return client.simulate(policyId, accountId ?? deps.requireSession().accountId);
     },
     async deploy(policyId) {
-      const session = deps.requireSession();
       if (!deps.attach) {
         throw new PolicyNotDeployableError(
           "Policy deploy needs a passkey-attach runtime. This wallet was created without one — provide `policyAttach` in the config (or use the web app runtime).",
         );
       }
+      const session = deps.requireSession();
       // 1. server-side, sponsor-funded instance deploy bound to the wallet.
       const { contractId } = await client.deployInstance(policyId, session.accountId);
       // 2. passkey-sign the attach (the ONLY prompt).

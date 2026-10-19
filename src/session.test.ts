@@ -5,6 +5,7 @@ import {
   createSessionStore,
   createWebStorageAdapter,
   isWalletSession,
+  SessionPersistenceError,
   type SessionStorageAdapter,
 } from "./session";
 
@@ -97,7 +98,7 @@ describe("createSessionStore", () => {
     expect(await storage.load()).toBeNull();
   });
 
-  it("start() propagates storage failures so callers can surface them", async () => {
+  it("start() surfaces storage failures but keeps the session in memory", async () => {
     const broken: SessionStorageAdapter = {
       load: vi.fn(),
       save: vi.fn().mockRejectedValue(new Error("quota exceeded")),
@@ -105,7 +106,8 @@ describe("createSessionStore", () => {
     };
     const store = createSessionStore(broken);
     await expect(store.getState().start(session)).rejects.toThrow("quota exceeded");
-    expect(store.getState().status).toBe("loading");
+    expect(store.getState().status).toBe("connected");
+    expect(store.getState().session).toEqual(session);
   });
 });
 
@@ -178,6 +180,9 @@ describe("createSessionStore teardown", () => {
     // No active timers remain after dispose (a leak would fail here by keeping
     // the interval scheduled).
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
 describe("createSessionStore — refresh & expiry edge cases", () => {
   it("refreshes lastActiveAt just before session expiry (boundary condition)", async () => {
     const storage = createMemoryStorageAdapter();
@@ -423,5 +428,102 @@ describe("isWalletSession", () => {
     ["non-boolean connected", { ...session, connected: "yes" }],
   ])("rejects %s", (_label, value) => {
     expect(isWalletSession(value)).toBe(false);
+  });
+});
+
+describe("localStorage quota exceeded during session persistence", () => {
+  function quotaError(): DOMException {
+    return new DOMException("The quota has been exceeded.", "QuotaExceededError");
+  }
+
+  function fullStorage() {
+    return {
+      setItem: vi.fn(() => {
+        throw quotaError();
+      }),
+      getItem: vi.fn(() => null),
+      removeItem: vi.fn(),
+    };
+  }
+
+  it("persists normally when storage has room (happy path)", async () => {
+    const backing = new Map<string, string>();
+    const storage = {
+      getItem: (k: string) => backing.get(k) ?? null,
+      setItem: (k: string, v: string) => void backing.set(k, v),
+      removeItem: (k: string) => void backing.delete(k),
+    };
+    const store = createSessionStore(createWebStorageAdapter(storage));
+    await store.getState().start(session);
+    expect(store.getState().status).toBe("connected");
+    expect(backing.get("vellar.session")).toBe(JSON.stringify(session));
+  });
+
+  it("start() rejects with a named SessionPersistenceError carrying the QuotaExceededError as cause", async () => {
+    const store = createSessionStore(createWebStorageAdapter(fullStorage()));
+    const err = await store
+      .getState()
+      .start(session)
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(SessionPersistenceError);
+    expect((err as SessionPersistenceError).name).toBe("SessionPersistenceError");
+    expect((err as SessionPersistenceError).message).toMatch(/not survive a reload/);
+    expect(((err as SessionPersistenceError).cause as DOMException).name).toBe(
+      "QuotaExceededError",
+    );
+  });
+
+  it("keeps the in-memory session usable after start() fails to persist", async () => {
+    const store = createSessionStore(createWebStorageAdapter(fullStorage()));
+    await expect(store.getState().start(session)).rejects.toBeInstanceOf(SessionPersistenceError);
+    expect(store.getState().status).toBe("connected");
+    expect(store.getState().session).toEqual(session);
+  });
+
+  it("touch() under quota pressure updates memory, then surfaces SessionPersistenceError", async () => {
+    const storage = createMemoryStorageAdapter();
+    const store = createSessionStore(storage);
+    await store.getState().start(session);
+    vi.spyOn(storage, "save").mockRejectedValueOnce(quotaError());
+
+    const later = new Date("2026-07-16T10:10:00.000Z");
+    await expect(store.getState().touch(later)).rejects.toBeInstanceOf(SessionPersistenceError);
+    expect(store.getState().status).toBe("connected");
+    expect(store.getState().session?.lastActiveAt).toBe(later.toISOString());
+  });
+
+  it("end() still disconnects when persistence is degraded", async () => {
+    const store = createSessionStore(createWebStorageAdapter(fullStorage()));
+    await store
+      .getState()
+      .start(session)
+      .catch(() => undefined);
+    await store.getState().end();
+    expect(store.getState().status).toBe("disconnected");
+    expect(store.getState().session).toBeNull();
+  });
+
+  it("background refresh does not raise unhandled rejections under quota pressure", async () => {
+    vi.useFakeTimers();
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    try {
+      const store = createSessionStore(createWebStorageAdapter(fullStorage()), {
+        refreshIntervalMs: 1000,
+      });
+      await store
+        .getState()
+        .start(session)
+        .catch(() => undefined);
+      await vi.advanceTimersByTimeAsync(3500);
+      vi.useRealTimers();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(unhandled).not.toHaveBeenCalled();
+      expect(store.getState().status).toBe("connected");
+      store.getState().dispose();
+    } finally {
+      process.off("unhandledRejection", unhandled);
+      vi.useRealTimers();
+    }
   });
 });

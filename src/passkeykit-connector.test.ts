@@ -390,6 +390,77 @@ describe("resumeKitConnection", () => {
   });
 });
 
+describe("resumeKitConnection staleness guard", () => {
+  function deferred<T>() {
+    let resolve!: (v: T) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+
+  it("resolves true when the resume completes while still live", async () => {
+    const connectWallet = vi.fn().mockResolvedValue({ keyIdBase64: "k", contractId: "C" });
+    const { signal } = new AbortController();
+    await expect(
+      resumeKitConnection({ connectWallet, wallet: undefined }, "k", { signal }),
+    ).resolves.toBe(true);
+  });
+
+  it("does not call the kit at all when already aborted", async () => {
+    const connectWallet = vi.fn();
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      resumeKitConnection({ connectWallet, wallet: undefined }, "k", { signal: controller.signal }),
+    ).resolves.toBe(false);
+    expect(connectWallet).not.toHaveBeenCalled();
+  });
+
+  it("resolves false when disconnected mid-flight, and a late success is ignored", async () => {
+    const pending = deferred<{ keyIdBase64: string; contractId: string }>();
+    const connectWallet = vi.fn().mockReturnValue(pending.promise);
+    const controller = new AbortController();
+    const result = resumeKitConnection({ connectWallet, wallet: undefined }, "k", {
+      signal: controller.signal,
+    });
+    controller.abort();
+    await expect(result).resolves.toBe(false);
+    pending.resolve({ keyIdBase64: "k", contractId: "C" });
+    await Promise.resolve();
+  });
+
+  it("a late rejection after disconnect does not become an unhandled rejection", async () => {
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    try {
+      const pending = deferred<never>();
+      const connectWallet = vi.fn().mockReturnValue(pending.promise);
+      const controller = new AbortController();
+      const result = resumeKitConnection({ connectWallet, wallet: undefined }, "k", {
+        signal: controller.signal,
+      });
+      controller.abort();
+      await expect(result).resolves.toBe(false);
+      pending.reject(new Error("not a signer"));
+      await new Promise((r) => setTimeout(r, 10));
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off("unhandledRejection", unhandled);
+    }
+  });
+
+  it("still propagates a failure that happens while live", async () => {
+    const connectWallet = vi.fn().mockRejectedValue(new Error("not a signer"));
+    const { signal } = new AbortController();
+    await expect(
+      resumeKitConnection({ connectWallet, wallet: undefined }, "k", { signal }),
+    ).rejects.toThrow("not a signer");
+  });
+});
+
 describe("defaultSignedToXdr", () => {
   it("passes strings through", () => {
     expect(defaultSignedToXdr("xdr")).toBe("xdr");

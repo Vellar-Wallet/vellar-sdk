@@ -3,6 +3,21 @@
 
 export type Network = "testnet" | "mainnet";
 
+// --- Address validation ---
+
+/**
+ * Caller-supplied Stellar address validator (e.g. wrap
+ * `StrKey.isValidEd25519PublicKey` / `StrKey.isValidContract`).
+ *
+ * Contract: return `true` for a valid address and `false` for an invalid one.
+ * Implementations MUST NOT throw — an invalid address is a `false`, not an
+ * exception. The SDK does not catch a throwing validator: the error propagates
+ * unchanged out of `wallet.pay()` (before any transaction is built or any
+ * passkey prompt), so it surfaces as the validator's own error rather than as
+ * an "invalid recipient" result, and nothing is signed or submitted.
+ */
+export type AddressValidator = (address: string) => boolean;
+
 // --- Passkey wallet ---
 
 export interface WalletSession {

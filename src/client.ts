@@ -1,4 +1,4 @@
-import type { Network, WalletSession } from "./types";
+import type { AddressValidator, Network, WalletSession } from "./types";
 import type { TokenInfo } from "./balances";
 import {
   createPasskeyKitConnector,
@@ -53,9 +53,11 @@ export interface VellarWalletConfig {
   /**
    * The passkey smart-wallet engine (a `PasskeyKit` instance). Supplied by the
    * host so the SDK stays free of a hard dependency on a specific version and so
-   * browser-only code is never imported during SSR.
+   * browser-only code is never imported during SSR. Optional for read-only use
+   * (e.g. `wallet.policies` templates/generate with `apiUrl`); without it
+   * `create()`, `connect()` and `pay()` throw a `WalletNotReadyError` naming it.
    */
-  kit: PasskeyKitLike;
+  kit?: PasskeyKitLike;
   /**
    * The backend the SDK talks to for submission and keyId→contractId lookup.
    * The relayer/sponsor keys live server-side, so all submission round-trips
@@ -64,10 +66,12 @@ export interface VellarWalletConfig {
   backend: WalletBackend & {
     submitTransaction(input: { signedXdr: string; network: Network }): Promise<{ hash: string }>;
   };
-  /** Soroban token client factory, used for payments (a `SACClient`). */
-  sac: SacClientLike;
-  /** Validates a Stellar address before a payment is ever signed. */
-  isValidAddress: (address: string) => boolean;
+  /** Soroban token client factory, used for payments (a `SACClient`). Optional;
+   * without it `pay()` throws a `WalletNotReadyError` naming it. */
+  sac?: SacClientLike;
+  /** Validates a Stellar address before a payment is ever signed. Must return a
+   * boolean and not throw; see `AddressValidator`. */
+  isValidAddress: AddressValidator;
   /** Test/advanced hook: convert the kit's signed output to XDR. */
   signedToXdr?: (signed: unknown) => string;
   /**
@@ -202,22 +206,47 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
     ? createCircuitBreakingBackend(config.backend, breaker)
     : config.backend;
 
-  const connector = createPasskeyKitConnector({
-    kit: config.kit,
-    backend,
-    network: config.network,
-    appName: config.appName,
-    signedToXdr,
-  });
+  const { kit, sac } = config;
 
-  const payments = createPaymentClient({
-    kit: config.kit,
-    sac: config.sac,
-    backend,
-    network: config.network,
-    isValidAddress: config.isValidAddress,
-    signedToXdr,
-  });
+  const connector: WalletConnector = kit
+    ? createPasskeyKitConnector({
+        kit,
+        backend,
+        network: config.network,
+        appName: config.appName,
+        signedToXdr,
+      })
+    : {
+        async createWallet() {
+          throw missingDependency("wallet.create()", ["kit"]);
+        },
+        async connectWallet() {
+          throw missingDependency("wallet.connect()", ["kit"]);
+        },
+        async signTransaction() {
+          throw missingDependency("signTransaction()", ["kit"]);
+        },
+      };
+
+  const payments: PaymentClient =
+    kit && sac
+      ? createPaymentClient({
+          kit,
+          sac,
+          backend,
+          network: config.network,
+          isValidAddress: config.isValidAddress,
+          signedToXdr,
+        })
+      : {
+          async preparePayment() {
+            throw missingDependency("wallet.pay()", missingNames(["kit", "sac"]));
+          },
+        };
+
+  function missingNames(names: ("kit" | "sac")[]): ("kit" | "sac")[] {
+    return names.filter((n) => (n === "kit" ? !kit : !sac));
+  }
 
   let session: WalletSession | null = null;
 
@@ -324,6 +353,8 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
     },
 
     async pay({ to, amount, token }) {
+      const missing = missingNames(["kit", "sac"]);
+      if (missing.length > 0) throw missingDependency("wallet.pay()", missing);
       if (!session) {
         throw new WalletNotReadyError("Call create() or connect() before pay()");
       }
@@ -336,6 +367,13 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
       return prepared.confirm();
     },
   };
+}
+
+function missingDependency(operation: string, names: ("kit" | "sac")[]): WalletNotReadyError {
+  const list = names.map((n) => "`" + n + "`").join(" and ");
+  return new WalletNotReadyError(
+    `${operation} requires ${list} in createVellarWallet config, but it was omitted.`,
+  );
 }
 
 export class WalletNotReadyError extends Error {

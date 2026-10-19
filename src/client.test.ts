@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createVellarWallet, WalletNotReadyError } from "./client";
 import { PasskeyBrowserRequiredError } from "./passkeykit-connector";
 import { X402NotConfiguredError, type SmartAccountX402Signer } from "./x402-types";
+import { PolicyNotDeployableError } from "./policy-facade";
 import type { TokenInfo } from "./balances";
 
 // create()/connect() guard on a browser WebAuthn context; these unit tests run
@@ -229,5 +230,144 @@ describe("circuit breaker around facilitator calls", () => {
     backend.submitTransaction.mockClear();
     await expect(wallet.pay({ to: "CDEST", amount: 1n, token })).resolves.toBeTruthy();
     expect(backend.submitTransaction).toHaveBeenCalledOnce();
+  });
+});
+
+describe("isValidAddress implementation that throws", () => {
+  const boom = new Error("validator exploded on input");
+  const throwing = (address: string): boolean => {
+    if (address === "CBOOM") throw boom;
+    return true;
+  };
+
+  it("wallet.pay rejects with the validator's own error, unwrapped and attributable", async () => {
+    const { wallet } = build({ isValidAddress: throwing });
+    await wallet.connect();
+
+    const err = await wallet.pay({ to: "CBOOM", amount: 5n, token }).catch((e: unknown) => e);
+    expect(err).toBe(boom);
+  });
+
+  it("never reaches the SAC build, the passkey, or the backend when the validator throws", async () => {
+    const { wallet, kit, backend, sac } = build({ isValidAddress: throwing });
+    await wallet.connect();
+
+    await expect(wallet.pay({ to: "CBOOM", amount: 5n, token })).rejects.toThrow(
+      "validator exploded",
+    );
+    expect(sac.getSACClient).not.toHaveBeenCalled();
+    expect(kit.sign).not.toHaveBeenCalled();
+    expect(backend.submitTransaction).not.toHaveBeenCalled();
+  });
+
+  it("does not misreport a throwing validator as an invalid-recipient result", async () => {
+    const { wallet } = build({ isValidAddress: throwing });
+    await wallet.connect();
+    const err = await wallet.pay({ to: "CBOOM", amount: 5n, token }).catch((e: unknown) => e);
+    expect((err as Error).name).not.toBe("InvalidRecipientError");
+  });
+
+  it("a later payment with an input the validator accepts still succeeds", async () => {
+    const { wallet } = build({ isValidAddress: throwing });
+    await wallet.connect();
+    await expect(wallet.pay({ to: "CBOOM", amount: 5n, token })).rejects.toBe(boom);
+    await expect(wallet.pay({ to: "CDEST", amount: 5n, token })).resolves.toEqual({
+      hash: "txhash-abc",
+    });
+  });
+});
+
+describe("createVellarWallet with kit and sac omitted but policies apiUrl set", () => {
+  const API = "https://policies.test";
+  const WALLET_ID = "CWALLET1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDE";
+
+  function jsonResponse(body: unknown): Response {
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }
+
+  function buildWithoutKit() {
+    const gateway = vi.fn<typeof fetch>(async (url) => {
+      const u = String(url);
+      if (u.includes("/templates")) return jsonResponse({ templates: [{ id: "spending-limit" }] });
+      if (u.endsWith("/generate")) return jsonResponse({ policy: { id: "p1", status: "draft" } });
+      if (u.endsWith("/simulate")) return jsonResponse({ ok: true });
+      return jsonResponse({});
+    });
+    vi.stubGlobal("fetch", gateway);
+    const wallet = createVellarWallet({
+      network: "testnet",
+      appName: "Test App",
+      backend: fakeBackend() as never,
+      isValidAddress: () => true,
+      apiUrl: API,
+    });
+    return { wallet, gateway };
+  }
+
+  it("constructs without throwing", () => {
+    expect(() => buildWithoutKit()).not.toThrow();
+  });
+
+  it("policies.listTemplates, generate and simulate succeed against the gateway", async () => {
+    const { wallet, gateway } = buildWithoutKit();
+
+    await expect(wallet.policies.listTemplates()).resolves.toBeDefined();
+    await expect(
+      wallet.policies.generate({ version: "1", type: "spending-limit", owners: ["GOWNER"] }),
+    ).resolves.toBeDefined();
+    await expect(wallet.policies.simulate("p1", WALLET_ID)).resolves.toEqual({ ok: true });
+
+    const urls = gateway.mock.calls.map(([u]) => String(u));
+    expect(urls.every((u) => u.startsWith(API))).toBe(true);
+    expect(urls).toHaveLength(3);
+  });
+
+  it("connect() fails naming the missing kit, not a generic undefined error", async () => {
+    const { wallet } = buildWithoutKit();
+    const err = await wallet.connect().catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(WalletNotReadyError);
+    expect((err as Error).message).toMatch(/`kit`/);
+    expect((err as Error).message).not.toMatch(/undefined/);
+  });
+
+  it("create() fails naming the missing kit", async () => {
+    const { wallet } = buildWithoutKit();
+    await expect(wallet.create({ username: "alice" })).rejects.toThrow(/`kit`/);
+  });
+
+  it("pay() fails naming both the missing kit and sac", async () => {
+    const { wallet } = buildWithoutKit();
+    const err = await wallet.pay({ to: "CDEST", amount: 5n, token }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(WalletNotReadyError);
+    expect((err as Error).message).toMatch(/`kit`/);
+    expect((err as Error).message).toMatch(/`sac`/);
+  });
+
+  it("pay() with a kit but no sac names only the sac", async () => {
+    const { wallet } = build({ sac: undefined });
+    await wallet.connect();
+    const err = await wallet.pay({ to: "CDEST", amount: 5n, token }).catch((e: unknown) => e);
+    expect((err as Error).message).toMatch(/`sac`/);
+    expect((err as Error).message).not.toMatch(/`kit`/);
+  });
+
+  it("policies.deploy fails with the distinct policyAttach-missing error", async () => {
+    const { wallet } = buildWithoutKit();
+    const err = await wallet.policies.deploy("p1").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(PolicyNotDeployableError);
+    expect((err as Error).message).toMatch(/policyAttach/);
+  });
+
+  it("without apiUrl, policies still fails with its own clear error", () => {
+    const wallet = createVellarWallet({
+      network: "testnet",
+      appName: "Test App",
+      backend: fakeBackend() as never,
+      isValidAddress: () => true,
+    });
+    expect(() => wallet.policies).toThrow(/apiUrl/);
   });
 });

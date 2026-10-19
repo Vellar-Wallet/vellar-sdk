@@ -26,13 +26,49 @@ export interface PasskeyKitLike {
  * discovery ceremony and verifies the key is still a signer on the wallet.
  * No-op when the kit is already connected. Signer operations (kit.sign) throw
  * WalletNotConnectedError without this.
+ *
+ * Lifecycle contract for callers wrapping this in a component framework: pass
+ * an `AbortSignal` and abort it when the owner goes away (React effect cleanup,
+ * route change, explicit disconnect). If the signal aborts before or while the
+ * resume is pending, this resolves `false` immediately and the kit's late
+ * outcome (success or failure) is discarded — it never throws or leaves an
+ * unhandled rejection, so there is nothing to mutate on a disposed store. Check
+ * the return value before touching session state: only `true` (resumed) and
+ * the already-connected no-op are safe to act on. Without a signal this behaves
+ * as before and failures propagate.
+ *
+ * @returns `false` when the resume was abandoned as stale, otherwise `true`.
  */
 export async function resumeKitConnection(
   kit: Pick<PasskeyKitLike, "connectWallet" | "wallet">,
   keyId: string,
-): Promise<void> {
-  if (kit.wallet) return;
-  await kit.connectWallet({ keyId });
+  options: { signal?: AbortSignal } = {},
+): Promise<boolean> {
+  const { signal } = options;
+  if (signal?.aborted) return false;
+  if (kit.wallet) return true;
+  const pending = kit.connectWallet({ keyId });
+  if (!signal) {
+    await pending;
+    return true;
+  }
+  let onAbort: (() => void) | undefined;
+  const aborted = new Promise<"stale">((resolve) => {
+    onAbort = () => resolve("stale");
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+  try {
+    const outcome = await Promise.race([pending.then(() => "live" as const), aborted]);
+    if (outcome === "stale") return false;
+    return !signal.aborted;
+  } catch (err) {
+    if (signal.aborted) return false;
+    throw err;
+  } finally {
+    if (onAbort) signal.removeEventListener("abort", onAbort);
+    // A rejection arriving after we stopped listening must not go unhandled.
+    pending.catch(() => {});
+  }
 }
 
 // Backend seam (idea.md §11 Wallet API). The relayer API key lives server-side
