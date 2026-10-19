@@ -1,0 +1,42 @@
+# Peer-compat CI matrix (#635, #636). Reference workflow: copy to
+# .github/workflows/peer-compat.yml (maintainers only; see README.md here).
+#
+# Each leg installs one peer at the floor or latest version that satisfies the
+# range declared in package.json (resolved by resolve-compat-versions.mjs, never
+# hardcoded), then runs the suite. A test passing on the default install but
+# failing on the floor fails that leg. passkey-kit legs also run the connector
+# suite explicitly, which includes the structural PasskeyKitLike seam check.
+name: Peer compat
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  peer-compat:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        peer: ["@stellar/stellar-sdk", "passkey-kit"]
+        bound: [floor, latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Resolve ${{ matrix.bound }} version of ${{ matrix.peer }}
+        id: resolve
+        run: |
+          json=$(node contrib/issues-635-638/resolve-compat-versions.mjs "${{ matrix.peer }}")
+          echo "$json"
+          echo "version=$(echo "$json" | node -pe 'JSON.parse(require("fs").readFileSync(0))["${{ matrix.bound }}"]')" >> "$GITHUB_OUTPUT"
+      - name: Install ${{ matrix.peer }}@${{ steps.resolve.outputs.version }}
+        run: npm install --no-save --no-audit --no-fund "${{ matrix.peer }}@${{ steps.resolve.outputs.version }}"
+      - run: npm run typecheck
+      - run: npm test
+      - name: passkeykit-connector suite
+        if: matrix.peer == 'passkey-kit'
+        run: npx vitest run src/passkeykit-connector.test.ts contrib/passkey-kit-range

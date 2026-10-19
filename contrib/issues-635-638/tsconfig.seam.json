@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": { "allowJs": false },
+  "include": ["../passkey-kit-range/passkey-kit-range-check.test.ts", "../../src"]
+}
