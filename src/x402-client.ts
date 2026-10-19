@@ -52,6 +52,7 @@ import {
   type X402PayOptions,
   type X402Response,
 } from "./x402-types";
+import type { X402TraceStepName, X402Tracer } from "./x402-trace";
 
 // The pure guard layer is part of this module's published surface.
 export * from "./x402-guards";
@@ -97,6 +98,12 @@ export interface X402ClientDeps {
   /** Clock for time-window budget rules (defaults to `() => new Date()`);
    * overridable for tests. */
   now?: () => Date;
+  /**
+   * Opt-in support-ticket trace. Absent ⇒ nothing is recorded. When present,
+   * each step is stored already redacted; export writes only that redacted
+   * document. See ./x402-trace.ts.
+   */
+  trace?: X402Tracer;
 }
 
 // Estimated ledger close time (seconds). The facilitator fetches its own estimate
@@ -159,6 +166,10 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
   // A hard ceiling on the derived expiration offset (undefined ⇒ no ceiling).
   const expirationCeiling = deps.expirationLedgerOffset;
   const ourCaip2 = CAIP2_BY_NETWORK[deps.network];
+
+  function traced(step: X402TraceStepName, ok: boolean, request: unknown, response: unknown): void {
+    deps.trace?.record({ step, ok, request, response });
+  }
 
   function budgetRequestFor(requirements: PaymentRequirements): BudgetAttributeRequest {
     const category = requirements.extra?.category;
@@ -233,14 +244,29 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
       // smart-account work — the classic path has always had this gap.
       assertAuthEntryInvocation(entry, expected);
 
-      const signedXdr = await deps.signer.signAuthEntry(entry.toXDR("base64"), {
-        networkPassphrase: net.passphrase,
-        expirationLedger,
-      });
+      let signedXdr: string;
+      try {
+        signedXdr = await deps.signer.signAuthEntry(entry.toXDR("base64"), {
+          networkPassphrase: net.passphrase,
+          expirationLedger,
+        });
+      } catch (err) {
+        traced("sign", false, { address: deps.signer.address, contract: requirements.asset }, {
+          error: err instanceof Error ? err.message : "sign failed",
+        });
+        throw err;
+      }
       auth[i] = xdr.SorobanAuthorizationEntry.fromXDR(signedXdr, "base64");
       signed++;
+      traced(
+        "sign",
+        true,
+        { address: deps.signer.address, contract: requirements.asset, amount: requirements.amount },
+        { signedEntry: signedXdr },
+      );
     }
     if (signed === 0) {
+      traced("sign", false, { address: deps.signer.address }, { error: "no wallet auth entry" });
       throw new Error("No wallet auth entry found to sign for the payer address.");
     }
     op.auth = auth;
@@ -292,18 +318,40 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
     };
 
     const first = await doFetch(url, baseInit);
+    traced("discovery", true, { url, method: baseInit.method ?? "GET" }, { status: first.status });
     if (first.status !== 402) {
       return { response: first, paid: false };
     }
 
-    const decoded = decodePaymentRequired(first);
-    const requirements = selectRequirements(decoded, init, ourCaip2);
+    let requirements: PaymentRequirements;
+    try {
+      const decoded = decodePaymentRequired(first);
+      requirements = selectRequirements(decoded, init, ourCaip2);
+      traced("quote", true, { url }, {
+        scheme: requirements.scheme,
+        network: requirements.network,
+        asset: requirements.asset,
+        amount: requirements.amount,
+        payTo: requirements.payTo,
+      });
+    } catch (err) {
+      traced("quote", false, { url }, {
+        error: err instanceof Error ? err.message : "quote failed",
+      });
+      throw err;
+    }
     const { header, amount } = await buildSignedPayment(requirements);
 
     const paid = await doFetch(url, {
       ...baseInit,
       headers: { ...(init.headers ?? {}), "PAYMENT-SIGNATURE": header },
     });
+    traced(
+      "submit",
+      paid.status < 400,
+      { url, headers: { "PAYMENT-SIGNATURE": header } },
+      { status: paid.status },
+    );
 
     if (paid.status === 402 || paid.status >= 400) {
       const reason = extractRejectionReason(paid);
@@ -315,6 +363,20 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
     }
 
     const settlement = readSettlement(paid, requirements, amount, deps.network);
+    traced(
+      "settlement",
+      settlement !== undefined,
+      { url },
+      settlement
+        ? {
+            transaction: settlement.transaction,
+            payer: settlement.payer,
+            asset: settlement.asset,
+            amount: settlement.amount.toString(),
+            network: settlement.network,
+          }
+        : { error: "settlement header missing" },
+    );
 
     // Record spend only now that the facilitator has actually accepted the
     // payment — a request rejected above (over-budget on-chain, or any other

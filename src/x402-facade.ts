@@ -13,6 +13,7 @@ import {
 import type { Network } from "./types";
 import type { FacilitatorRequestSigningConfig } from "./x402-request-auth";
 import type { BudgetAttributeRule, BudgetAttributeTracker } from "./x402-budget-attributes";
+import type { X402Tracer } from "./x402-trace";
 
 export interface X402FacadeDeps {
   /** Present ⇒ x402 is configured. Absent ⇒ the facade throws a clear error. */
@@ -29,6 +30,8 @@ export interface X402FacadeDeps {
     budgetAttributes?: readonly BudgetAttributeRule[];
     /** Running-spend accounting for `budgetAttributes` period ceilings. */
     budgetAttributeTracker?: BudgetAttributeTracker;
+    /** Opt-in redacted trace of discovery, quote, sign, submit, and settlement. */
+    trace?: X402Tracer;
   };
   /** Resolves the x402 signer for the connected wallet (throws if not ready). */
   resolveSigner: () => SmartAccountX402Signer;
@@ -55,6 +58,7 @@ export function createX402Facade(deps: X402FacadeDeps): X402Client {
       requestSigning: deps.config.requestSigning,
       budgetAttributes: deps.config.budgetAttributes,
       budgetAttributeTracker: deps.config.budgetAttributeTracker,
+      trace: deps.config.trace,
     });
   }
 

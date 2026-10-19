@@ -18,6 +18,7 @@ import { createPolicyFacade, type PolicyAttachRuntime, type PolicyFacade } from 
 import { createAgentsFacade, type AgentKeyRuntime, type AgentsFacade } from "./agents-facade";
 import { createX402Facade } from "./x402-facade";
 import type { FetchLike } from "./x402-client";
+import type { X402Tracer } from "./x402-trace";
 import {
   assertValidX402RpcUrl,
   X402NotConfiguredError,
@@ -116,6 +117,13 @@ export interface VellarWalletConfig {
      * `periodMaxAmount`. Defaults to an in-memory, process-lifetime tracker
      * when `budgetAttributes` includes one and no tracker is supplied. */
     budgetAttributeTracker?: BudgetAttributeTracker;
+    /**
+     * Opt-in trace of a payment (discovery, quote, sign, submit, settlement).
+     * Steps are redacted before they are retained. Export with
+     * `trace.exportToFile(path, writeFile)` — the writer receives only the
+     * redacted document.
+     */
+    trace?: X402Tracer;
   };
   /** RPC URL for x402 simulation when `x402.rpcUrl` is not given. */
   rpcUrl?: string;
@@ -242,6 +250,7 @@ export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
             (config.x402.budgetAttributes?.length
               ? createInMemoryBudgetAttributeTracker()
               : undefined),
+          trace: config.x402.trace,
         }
       : undefined,
     resolveSigner: () => {

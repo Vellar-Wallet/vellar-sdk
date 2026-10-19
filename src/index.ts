@@ -25,6 +25,7 @@ export * from "./x402-signer";
 export * from "./x402-signer-capabilities";
 export * from "./x402-budget-attributes";
 export * from "./x402-client";
+export * from "./x402-trace";
 export * from "./x402-facade";
 export * from "./x402-request-auth";
 export * from "./session";
