@@ -52,6 +52,43 @@ npm run build
 
 New code is expected to come with tests.
 
+## Renaming or moving a docs page
+
+If you rename a docs page, move it to a different directory, or change its URL slug, add a redirect entry to preserve indexed links. Search engines, bookmarks, and old documentation should not break.
+
+**When to add an entry:**
+- Any rename of a `.md` file in `website/content/docs/` that changes its URL
+- Any move to a different directory (e.g. `docs/foo.md` → `docs/section/foo.md`)
+- Any change to the `slug` frontmatter field
+
+**Where it goes:**
+- Open `contrib/docs-redirect-map/redirects.ts`
+- Add an entry to the `REDIRECTS` array with the format:
+  ```typescript
+  { source: "/docs/old-slug", destination: "/docs/new-slug", permanent: true },
+  ```
+- Include only the slug part (no `.md` extension, no trailing slash)
+- Always use `permanent: true` (HTTP 308) so search engines transfer ranking
+
+**Example:**
+If you rename `website/content/docs/quickstart.md` to move it into Getting Started:
+```typescript
+// Old: docs/my-guide.md → New: docs/getting-started/quickstart.md
+{ source: "/docs/my-guide", destination: "/docs/getting-started/quickstart", permanent: true },
+```
+
+**Important notes:**
+- The destination must be a page that currently exists, or the test will fail
+- Do not delete old entries casually — indexed links live for years, and removing them will 404 external sites
+- Query strings and fragments are preserved by Next.js, but anchors (`#section-name`) cannot be redirected (they never reach the server). If a heading was renamed, you must manually update links to it elsewhere
+- The test (`contrib/docs-redirect-map/redirects.test.ts`) runs in CI and checks for common mistakes (dangling links, chains, duplicates, self-redirects). Run it locally before pushing:
+  ```sh
+  cd website
+  npm test
+  ```
+
+See `contrib/docs-redirect-map/README.md` for more details.
+
 ## Testing
 
 The default suite is hermetic — no network, no local stack, no chain:

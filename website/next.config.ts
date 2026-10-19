@@ -1,7 +1,11 @@
 import type { NextConfig } from "next";
+import { REDIRECTS } from "../contrib/docs-redirect-map/redirects";
 
 const nextConfig: NextConfig = {
   // Docs site — deployed standalone to docs.vellar.xyz.
+  async redirects() {
+    return REDIRECTS;
+  },
   async rewrites() {
     return [
       // Serve the self-contained pitch deck at a clean, unlisted route.
