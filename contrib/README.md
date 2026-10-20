@@ -686,137 +686,15 @@ Replace the `reduce` in `selectRequirements` (src/x402-guards.ts:142-144) with
 
 ---
 
-## 19. Workspace Publish Integrity (#619, #620, #621, #622)
+## 19. Workspace Release Safety Proposals (#623, #624, #625, #628)
 
 The executable proposal in
-[contrib/workspace-publish-integrity/](workspace-publish-integrity/README.md)
-adds contributor-safe reference checks for public SDK imports, coordinated
-breaking releases, workspace-local SDK resolution, and isolated workspace
-package installation. Root scripts, CI wiring, and `CONTRIBUTING.md` updates are
-documented for maintainers and intentionally remain outside this contribution.
+[contrib/workspace-release-safety/](workspace-release-safety/README.md) covers:
 
----
+- dependency-range compatibility and stale-minimum detection across workspaces;
+- a Changesets adoption plan that preserves the detailed root changelog;
+- isolated tarball installation and smoke checks for the CLI and MCP payer;
+- README installation-name checks against each package manifest.
 
-## 20. Orphaned deployed policies (#660)
-
-Tests in [contrib/orphaned-deployed-policy.test.ts](orphaned-deployed-policy.test.ts) drive the real
-policy facade. A template that disappears from `listTemplates` does not affect an instance that
-was already deployed: reading it and re-simulating it still succeed, and a catalog outage does
-not block that re-simulation. A missing policy id still surfaces `PolicyApiError`.
-
-### Manual run
-
-```sh
-npx vitest run contrib/orphaned-deployed-policy.test.ts
-```
-
-### Integration into Core
-
-Move the tests into `src/policy-facade.test.ts` and add this paragraph to the Policies section
-of the root `README.md`, after the gateway route list:
-
-> The templates catalog (`listTemplates`) is a provisioning aid: it is how you pick a template
-> and generate a new policy. It is not a live dependency of an instance that has already been
-> deployed. Removing or changing a template in the catalog later leaves the on-chain contract
-> untouched, and reading or re-simulating that instance still works.
-
----
-
-## 21. Dependency license audit (#673)
-
-[contrib/check-licenses.mjs](check-licenses.mjs) walks the lockfile from the root package and both
-workspace packages. A license outside the Apache-2.0 allowlist fails the run. The AGPL-3.0-or-later
-package `@openzeppelin/relayer-sdk` is an explicit exception dated 2026-09-30 for issue 516, not a
-silent skip. A different AGPL package still fails. `passkey-kit-sdk` and `sac-sdk` are recorded
-because their published metadata omits `license` (upstream LICENCE is MIT).
-
-### Manual run
-
-```sh
-node contrib/check-licenses.mjs
-npx vitest run contrib/check-licenses.test.ts
-```
-
-### Integration into Core
-
-1. Copy the script to `scripts/check-licenses.mjs` (its root resolution is the parent directory).
-2. Add `"check:licenses": "node scripts/check-licenses.mjs"` to the root `package.json` scripts.
-3. In `.github/workflows/ci.yml`, after `npm run check:docs`:
-
-```yaml
-      - run: npm run check:licenses
-```
-
----
-
-## 22. VS Code MCP config check (#682)
-
-[contrib/check-vscode-mcp.mjs](check-vscode-mcp.mjs) extracts the MCP JSON snippet from
-`website/content/docs/agent-tooling/vscode.md` and checks every `env` name against
-`packages/mcp-x402-payer/src/config.ts` and every payer CLI flag (args after the package name)
-against `packages/mcp-x402-payer/src/bin.ts`. Launcher flags such as npx `-y` are ignored.
-`bin.ts` currently accepts no flags. A fixture with a stale flag or env var fails.
-
-The page today documents the VS Code extension and has no MCP snippet, so
-`node contrib/check-vscode-mcp.mjs` fails until a maintainer adds the snippet below.
-
-### Snippet to add to vscode.md
-
-```json
-{
-  "servers": {
-    "vellar-x402-payer": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "vellar-mcp-x402-payer"],
-      "env": {
-        "VELLAR_X402_SECRET_FILE": "/run/secrets/x402-payer-key",
-        "VELLAR_X402_ASSETS": "CBIN4HTPJM2QLJ32DTRO6OCLIMM7TR7D74JDIPVQYLNYGL7SBWOXH5ND:5000000",
-        "VELLAR_X402_NETWORK": "testnet"
-      }
-    }
-  }
-}
-```
-
-### Manual run
-
-```sh
-npx vitest run contrib/check-vscode-mcp.test.ts
-```
-
-### Integration into Core
-
-1. Paste the snippet into `website/content/docs/agent-tooling/vscode.md`.
-2. Copy the script to `scripts/check-vscode-mcp.mjs`.
-3. Add `"check:vscode-mcp": "node scripts/check-vscode-mcp.mjs"` and a CI step next to `check:licenses`.
-
----
-
-## 23. Exportable x402 payment trace (#680)
-
-[contrib/x402-payment-trace.ts](x402-payment-trace.ts) records discovery, quote, sign, submit, and
-settlement. Redaction runs when a step is recorded and again before the writer is called, so a
-crash mid-write cannot persist a secret or a raw signature. `instrumentX402ClientDeps` is the
-opt-in that wraps the existing `createX402Client` deps; it does not edit `src/`.
-
-```ts
-import { createX402Client } from "vellar-sdk";
-import { createX402Tracer, instrumentX402ClientDeps } from "./x402-payment-trace";
-
-const trace = createX402Tracer({ secrets: [sessionKeySecret] });
-const x402 = createX402Client(instrumentX402ClientDeps(deps, trace));
-trace.exportToFile("x402-trace.json", writeFileSync);
-```
-
-### Manual run
-
-```sh
-npx vitest run contrib/x402-payment-trace.test.ts
-```
-
-### Integration into Core
-
-1. Move `createX402Tracer` and `redactX402Value` into `src/x402-trace.ts` and export them from `src/index.ts`.
-2. Add an optional `trace` field on `X402ClientDeps`, `X402FacadeDeps`, and `createVellarWallet`'s `x402` config, and record the five steps inside `x402Fetch` / `buildSignedPayment`.
-3. Keep calling the writer only with the already-redacted JSON.
+All implementation targets outside `contrib/` are documented as maintainer
+integration steps and are intentionally unchanged.

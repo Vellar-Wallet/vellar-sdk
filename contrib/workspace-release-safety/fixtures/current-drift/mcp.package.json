@@ -1,0 +1,7 @@
+{
+  "name": "vellar-mcp-x402-payer",
+  "version": "0.1.5",
+  "dependencies": {
+    "vellar-sdk": "^0.6.1"
+  }
+}

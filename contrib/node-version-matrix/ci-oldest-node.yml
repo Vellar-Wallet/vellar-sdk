@@ -1,0 +1,18 @@
+# Maintainer integration fragment for .github/workflows/ci.yml.
+# This is intentionally a separate job so the ordinary Node 22 job remains fast
+# and the documented floor is continuously exercised.
+node-oldest-supported:
+  name: Full suite (Node 20 minimum)
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: npm
+    - run: npm ci
+    - run: npm run typecheck
+    - run: npm run check:docs
+    - run: npm test
+    - run: npm run build
+    - run: node contrib/node-version-matrix/check-node-engines.mjs
