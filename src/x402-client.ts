@@ -41,6 +41,7 @@ import {
 import {
   assertValidX402RpcUrl,
   DisallowedAssetError,
+  DiscoveryResponseTooLargeError,
   MaxAmountExceededError,
   NoUsablePaymentOptionError,
   PaymentRejectedError,
@@ -107,10 +108,18 @@ const ESTIMATED_LEDGER_SECONDS = 5;
 // between our getLatestLedger() read and the facilitator's (it reads a beat
 // later, so ITS current ledger is ≥ ours; a margin keeps us inside its window
 // even though it grants a +2 tolerance).
-const EXPIRATION_SAFETY_MARGIN = 2;
+//
+// This margin is also the clock-skew tolerance. Expiration is a LEDGER number
+// read from the RPC, never derived from the local wall clock, so a client clock
+// that is seconds ahead of or behind the facilitator's cannot shift it. The
+// residual drift is between two ledger reads: 2 ledgers ≈ 10s, which absorbs
+// several seconds of skew. Consistent with the V-13 floor below
+// (MIN_EXPIRATION_LEDGERS), see docs/security-audit.md "Expiration floor and
+// clock skew".
+export const EXPIRATION_SAFETY_MARGIN = 2;
 // Never sign an expiration less than this many ledgers out, even for a tiny
 // server timeout — below this the payment can't realistically round-trip.
-const MIN_EXPIRATION_LEDGERS = 3;
+export const MIN_EXPIRATION_LEDGERS = 3;
 /**
  * Default ceiling on seller-requested signature lifetime (security audit V-7).
  * `maxTimeoutSeconds` is attacker-controlled and previously had no upper bound
@@ -138,6 +147,58 @@ export function expirationOffsetFor(
   // rather than honouring whatever the seller asked for.
   offset = Math.min(offset, ceiling ?? DEFAULT_MAX_EXPIRATION_LEDGERS);
   return Math.max(offset, MIN_EXPIRATION_LEDGERS);
+}
+
+/**
+ * Largest discovery (Bazaar catalog) response we will read: 1 MiB. A catalog
+ * page of ~10 entries is a few KiB, so this is generous, but the catalog bounds
+ * seller-written fields only by promise (the CLI clamps descriptions for the
+ * same reason), so the client must not be at the mercy of that promise.
+ */
+export const DISCOVERY_MAX_RESPONSE_BYTES = 1024 * 1024;
+
+/**
+ * Fetch a discovery catalog URL and parse it as JSON, failing fast with
+ * {@link DiscoveryResponseTooLargeError} if the body exceeds
+ * `maxBytes` — BEFORE it is handed to JSON.parse. Checks `Content-Length` first
+ * (no body read at all), then enforces the cap while streaming, since the header
+ * can be absent or lie.
+ */
+export async function fetchDiscoveryCatalog<T = unknown>(
+  url: string,
+  fetchImpl: FetchLike = (u, i) => fetch(u, i),
+  maxBytes: number = DISCOVERY_MAX_RESPONSE_BYTES,
+): Promise<T> {
+  const res = await fetchImpl(url);
+  if (!res.ok) {
+    throw new Error(`x402 discovery failed: ${res.status} ${res.statusText}`);
+  }
+  const declared = Number(res.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    await res.body?.cancel();
+    throw new DiscoveryResponseTooLargeError(maxBytes, declared);
+  }
+  const reader = res.body?.getReader();
+  if (!reader) return JSON.parse(await res.text()) as T;
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      throw new DiscoveryResponseTooLargeError(maxBytes, total);
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) {
+    bytes.set(c, off);
+    off += c.byteLength;
+  }
+  return JSON.parse(new TextDecoder().decode(bytes)) as T;
 }
 
 export function createX402Client(deps: X402ClientDeps): X402Client {

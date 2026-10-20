@@ -144,6 +144,19 @@ So metadata is sanitized at ingest:
 If your service name disappears from a listing, this is why. Rename it in
 ASCII and settle once more.
 
+## Response size limit
+
+The catalog bounds seller-written fields only by promise, so the SDK enforces
+its own cap on the discovery response: **1 MiB** (`DISCOVERY_MAX_RESPONSE_BYTES`
+in `x402-client`). A real catalog page is a few KiB, so the limit is far above
+honest use but stops a hostile or broken facilitator from exhausting memory.
+
+`fetchDiscoveryCatalog` checks `Content-Length` first and, because that header
+can be absent or wrong, also counts bytes while streaming. Past the limit it
+stops reading and throws `DiscoveryResponseTooLargeError` (carrying `limitBytes`)
+**before** anything is passed to `JSON.parse`. The response is rejected, never
+truncated, since a truncated JSON document is not trustworthy.
+
 ## The extension-responses header
 
 On a successful `/settle`, the facilitator returns a lowercase

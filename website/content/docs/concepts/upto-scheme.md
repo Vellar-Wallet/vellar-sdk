@@ -105,6 +105,13 @@ Get the order wrong and it fails before any signature is checked.
 
 One more bound worth knowing before you sign: `expiration_ledger` must not exceed `current_ledger + 17,280`, roughly 24 hours at 5 seconds per ledger. A ceiling authorization cannot be left open indefinitely.
 
+## Amount validation
+
+The ceiling (`max_amount`) in a challenge is validated the same way as an
+`exact` amount: bare decimal digits only. A negative ceiling is refused with
+`InvalidRequirementsError` before signing; see
+[exact scheme](./exact-scheme.md).
+
 ## Composing with spending policies
 
 A Vellar wallet is a C address, a Soroban smart account governed by `__check_auth`, so it can carry a spending-limit policy. That policy caps cumulative spend over a fixed window. The obvious question is what a *ceiling* does to a budget when the eventual charge is smaller.

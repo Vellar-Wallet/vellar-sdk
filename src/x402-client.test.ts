@@ -6,9 +6,18 @@
 // tested once, purely, in x402-guards.test.ts — not re-derived here.
 
 import { describe, expect, it, vi } from "vitest";
-import { createX402Client, expirationOffsetFor, type FetchLike } from "./x402-client";
+import {
+  DISCOVERY_MAX_RESPONSE_BYTES,
+  EXPIRATION_SAFETY_MARGIN,
+  MIN_EXPIRATION_LEDGERS,
+  createX402Client,
+  expirationOffsetFor,
+  fetchDiscoveryCatalog,
+  type FetchLike,
+} from "./x402-client";
 import {
   DisallowedAssetError,
+  DiscoveryResponseTooLargeError,
   InvalidRequirementsError,
   MaxAmountExceededError,
   NoUsablePaymentOptionError,
@@ -162,6 +171,91 @@ describe("expirationOffsetFor — derived from maxTimeoutSeconds (bug #5)", () =
 
   it("defaults to the 120s window when maxTimeoutSeconds is undefined", () => {
     expect(expirationOffsetFor(undefined)).toBe(22);
+  });
+});
+
+describe("expiration — clock-skew tolerance", () => {
+  // Expiration is a ledger number from the RPC, never wall-clock time, so a
+  // skewed client clock cannot move it. The tolerance is the safety margin.
+  it("does not depend on the local clock at all", () => {
+    const real = Date.now;
+    try {
+      const baseline = expirationOffsetFor(120);
+      for (const skewMs of [-30_000, -5_000, 5_000, 30_000]) {
+        Date.now = () => real() + skewMs;
+        expect(expirationOffsetFor(120)).toBe(baseline);
+      }
+    } finally {
+      Date.now = real;
+    }
+  });
+
+  it("documented margin (2 ledgers ≈ 10s) absorbs several seconds of drift", () => {
+    expect(EXPIRATION_SAFETY_MARGIN * 5).toBeGreaterThanOrEqual(10);
+    // 120s window = 24 ledgers; we sign 22, i.e. 10s inside the server's window.
+    expect(Math.ceil(120 / 5) - expirationOffsetFor(120)).toBe(EXPIRATION_SAFETY_MARGIN);
+  });
+
+  it("never signs below the V-13 floor, however tight the server window", () => {
+    expect(expirationOffsetFor(0)).toBe(MIN_EXPIRATION_LEDGERS);
+    expect(expirationOffsetFor(5)).toBe(MIN_EXPIRATION_LEDGERS);
+  });
+
+  it("stays under the facilitator's ceiling for a window just above the floor", () => {
+    // 20s = 4 ledgers; minus margin = 2, floored to 3: still within the +2 grace.
+    expect(expirationOffsetFor(20)).toBe(MIN_EXPIRATION_LEDGERS);
+  });
+});
+
+describe("fetchDiscoveryCatalog — response size limit", () => {
+  const json = (body: string, headers: Record<string, string> = {}) =>
+    (async () => new Response(body, { status: 200, headers })) as FetchLike;
+
+  it("parses a normal catalog", async () => {
+    const out = await fetchDiscoveryCatalog<{ resources: unknown[] }>(
+      "https://f.example/discovery/search",
+      json(JSON.stringify({ resources: [{ resource: "https://s.example" }] })),
+    );
+    expect(out.resources).toHaveLength(1);
+  });
+
+  it("fails fast on a declared Content-Length over the limit, without reading the body", async () => {
+    const res = new Response("{}", {
+      status: 200,
+      headers: { "content-length": String(DISCOVERY_MAX_RESPONSE_BYTES + 1) },
+    });
+    const text = vi.spyOn(res, "text");
+    await expect(fetchDiscoveryCatalog("https://f.example", async () => res)).rejects.toBeInstanceOf(
+      DiscoveryResponseTooLargeError,
+    );
+    expect(text).not.toHaveBeenCalled();
+  });
+
+  it("enforces the cap on an oversized body that carries no Content-Length", async () => {
+    const big = JSON.stringify({ resources: [], pad: "x".repeat(2048) });
+    const err = await fetchDiscoveryCatalog("https://f.example", json(big), 1024).catch((e) => e);
+    expect(err).toBeInstanceOf(DiscoveryResponseTooLargeError);
+    expect(err.name).toBe("DiscoveryResponseTooLargeError");
+    expect(err.limitBytes).toBe(1024);
+  });
+
+  it("does not attempt JSON.parse on an oversized, invalid body", async () => {
+    // If it parsed first, this would be a SyntaxError, not the named error.
+    await expect(
+      fetchDiscoveryCatalog("https://f.example", json("{".repeat(4096)), 1024),
+    ).rejects.toBeInstanceOf(DiscoveryResponseTooLargeError);
+  });
+
+  it("accepts a body exactly at the limit", async () => {
+    const body = JSON.stringify({ a: "x".repeat(100) });
+    await expect(
+      fetchDiscoveryCatalog("https://f.example", json(body), new TextEncoder().encode(body).length),
+    ).resolves.toBeDefined();
+  });
+
+  it("surfaces a non-2xx as a plain error, not a size error", async () => {
+    const f: FetchLike = async () => new Response("no", { status: 503, statusText: "Unavailable" });
+    await expect(fetchDiscoveryCatalog("https://f.example", f)).rejects.toThrow(/503/);
   });
 });
 

@@ -923,3 +923,21 @@ file is committed for exactly that reason.
 5. **V-5, V-6, V-7** — before the facilitator adopts the fence, since V-5/V-6 fix the shared
    module and V-11's nonce width should change in the same pass.
 6. **V-9 – V-12.**
+
+## Expiration floor and clock skew
+
+Added alongside V-13 (see commit `844a315`) so the two documented floors stay
+consistent. Expiration is a **ledger number** read from the RPC, not wall-clock
+time, so client/facilitator clock skew cannot reject a payment. Two ledger-level
+constants in `src/x402-client.ts` bound it:
+
+- `MIN_EXPIRATION_LEDGERS = 3` — the V-13 floor: never sign an expiration closer
+  than a payment can round-trip.
+- `EXPIRATION_SAFETY_MARGIN = 2` (≈10s) — stay this far inside the facilitator's
+  `maxLedger`; this is the drift tolerance between our ledger read and its own.
+
+Both are exercised in `src/x402-client.test.ts` ("expiration — clock-skew
+tolerance"). Related hardening from the same pass: negative challenge amounts are
+refused by `parseAmount` (`AMOUNT_VECTORS`), nonces are tracked session-globally
+(`createNonceTracker`, replay window #407), and discovery responses are capped at
+1 MiB (`fetchDiscoveryCatalog`).

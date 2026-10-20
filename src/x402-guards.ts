@@ -74,7 +74,10 @@ export const CAIP2_BY_NETWORK: Record<Network, string> = {
 
 /**
  * Parse a requirement's `amount` (decimal string, base units) as a non-negative
- * i128. Throws a typed error rather than letting `BigInt(...)` throw a raw
+ * i128. A negative amount ("-5") is syntactically a number but semantically
+ * nonsense for a payment, so the digits-only test rejects it here, before it can
+ * reach signing (`buildSignedPayment`) or budget accounting
+ * (`budgetRequestFor`): both call this function first. Throws a typed error rather than letting `BigInt(...)` throw a raw
  * SyntaxError on malformed server input.
  *
  * Stricter than the official client's validator on purpose: that one uses
@@ -88,6 +91,34 @@ export function parseAmount(amount: string): bigint {
     );
   }
   return BigInt(amount);
+}
+
+// ── nonce tracking ───────────────────────────────────────────────────────────
+
+/**
+ * Session-wide replay guard for nonces.
+ *
+ * Scope is deliberately GLOBAL per tracker, not per resource. A nonce is meant
+ * to be unique to one authorization, so seeing the same value on two different
+ * resources is itself the anomaly; a per-resource cache would treat the second
+ * sighting as fresh and miss exactly the cross-resource replay. Create one
+ * tracker per session and share it across every resource you pay for. See also
+ * the replay-window contract test tracked in #407.
+ */
+export interface NonceTracker {
+  /** Record `nonce` for `resource`. Returns false if it was already seen anywhere. */
+  claim(nonce: string, resource: string): boolean;
+}
+
+export function createNonceTracker(): NonceTracker {
+  const seen = new Map<string, string>();
+  return {
+    claim(nonce, resource) {
+      if (seen.has(nonce)) return false;
+      seen.set(nonce, resource);
+      return true;
+    },
+  };
 }
 
 // ── selection ────────────────────────────────────────────────────────────────

@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 import {
   base64ToUtf8,
+  createNonceTracker,
   decodePaymentRequired,
   decodeSettlementHeader,
   extractRejectionReason,
@@ -279,5 +280,43 @@ describe("decodeSettlementHeader", () => {
   it("returns undefined when the header is missing or unparseable", () => {
     expect(decodeSettlementHeader(new Response("ok", { status: 200 }))).toBeUndefined();
     expect(decodeSettlementHeader(withHeader("X-PAYMENT-RESPONSE", "@@@"))).toBeUndefined();
+  });
+});
+
+describe("createNonceTracker — session-global replay scope (replay window: #407)", () => {
+  const NONCE = "a".repeat(32);
+
+  it("accepts a fresh nonce", () => {
+    expect(createNonceTracker().claim(NONCE, "https://a.example/x")).toBe(true);
+  });
+
+  it("rejects the same nonce on the same resource", () => {
+    const t = createNonceTracker();
+    t.claim(NONCE, "https://a.example/x");
+    expect(t.claim(NONCE, "https://a.example/x")).toBe(false);
+  });
+
+  it("rejects the same nonce reused on a DIFFERENT resource", () => {
+    // A per-resource cache would call this fresh and miss the replay.
+    const t = createNonceTracker();
+    expect(t.claim(NONCE, "https://a.example/x")).toBe(true);
+    expect(t.claim(NONCE, "https://b.example/y")).toBe(false);
+  });
+
+  it("keeps distinct nonces independent across resources", () => {
+    const t = createNonceTracker();
+    expect(t.claim("1".repeat(32), "https://a.example/x")).toBe(true);
+    expect(t.claim("2".repeat(32), "https://b.example/y")).toBe(true);
+  });
+
+  it("does not share state between sessions", () => {
+    createNonceTracker().claim(NONCE, "https://a.example/x");
+    expect(createNonceTracker().claim(NONCE, "https://a.example/x")).toBe(true);
+  });
+});
+
+describe("parseAmount — negative amounts (never reach signing or budgeting)", () => {
+  it.each(["-1", "-0", "-170141183460469231731687303715884105728"])("rejects %s", (bad) => {
+    expect(() => parseAmount(bad)).toThrow(InvalidRequirementsError);
   });
 });

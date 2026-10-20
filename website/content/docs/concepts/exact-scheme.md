@@ -36,6 +36,14 @@ rather than partially executed.
 Amounts are bigints in the asset's base units. Stellar Asset Contracts use 7
 decimals, so `1_000_000n` is 0.1 units and `10_000_000n` is 1.0.
 
+The `amount` in a 402 challenge is seller-supplied and untrusted. The client
+accepts only a string of bare decimal digits. A **negative** amount (`"-1"`),
+an explicit sign, a decimal point or exponent notation is refused with
+`InvalidRequirementsError` before anything is simulated, signed or counted
+against a budget, so a negative value can never lower tracked spend or win a
+"cheapest option" comparison. The same rule applies to the
+[`upto`](./upto-scheme.md) ceiling.
+
 > ⚠️ **The authorization entry is not a transaction.** The facilitator builds the
 > Stellar transaction around your signed entry and sets **its own account** as
 > the transaction source. The buyer never submits a transaction to the network
@@ -52,6 +60,13 @@ decimals, so `1_000_000n` is 0.1 units and `10_000_000n` is 1.0.
 The expiration ledger is derived from the seller's declared
 `maxTimeoutSeconds` in the 402 challenge, converted into a ledger offset added to
 the current ledger at signing time.
+
+**Clock skew.** Because the expiration is a ledger number read from the RPC,
+your machine's wall clock never enters the calculation, so a client clock that
+runs seconds ahead of or behind the facilitator's cannot shift or invalidate
+it. The client also signs `EXPIRATION_SAFETY_MARGIN` (2 ledgers, about 10
+seconds) inside the facilitator's window to absorb drift between its ledger read
+and the facilitator's, and never signs fewer than `MIN_EXPIRATION_LEDGERS` (3).
 
 Two consequences follow from this being a ledger count rather than a clock:
 

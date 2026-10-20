@@ -221,3 +221,19 @@ export class InvalidRequirementsError extends Error {
     this.name = "InvalidRequirementsError";
   }
 }
+
+/** A discovery (Bazaar catalog) response exceeded the size limit. It was never
+ * parsed. */
+export class DiscoveryResponseTooLargeError extends Error {
+  constructor(
+    readonly limitBytes: number,
+    readonly observedBytes?: number,
+  ) {
+    super(
+      `x402 discovery response exceeds the ${limitBytes}-byte limit` +
+        (observedBytes !== undefined ? ` (saw at least ${observedBytes} bytes)` : "") +
+        "; refusing to parse it.",
+    );
+    this.name = "DiscoveryResponseTooLargeError";
+  }
+}

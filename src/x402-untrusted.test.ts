@@ -11,7 +11,10 @@ import {
   sanitizeUntrusted,
   terminatorOf,
 } from "./x402-untrusted";
-import { FENCE_VECTORS } from "./x402-untrusted-vectors";
+import { AMOUNT_VECTORS, FENCE_VECTORS } from "./x402-untrusted-vectors";
+import { parseAmount, selectRequirements } from "./x402-guards";
+import { InvalidRequirementsError } from "./x402-types";
+import { CAIP2_TESTNET, decoded, requirements } from "./x402-test-fixtures";
 
 /** The renderer under test. Swap this to conform a different implementation. */
 const render = (label: string, text: string, asMetadata = false) =>
@@ -104,5 +107,36 @@ describe("fence invariants", () => {
     const out = sanitizeMetadata("x".repeat(5000));
     expect(out).toContain("[clamped]");
     expect(out.length).toBeLessThan(METADATA_MAX_CHARS + 20);
+  });
+});
+
+describe("amount vectors — hostile challenge amounts are refused by the guards", () => {
+  for (const v of AMOUNT_VECTORS) {
+    it(`${v.name}: parseAmount throws InvalidRequirementsError`, () => {
+      expect(() => parseAmount(v.amount)).toThrow(InvalidRequirementsError);
+    });
+
+    it(`${v.name}: selectRequirements refuses it before anything is signed`, () => {
+      const opts = { maxAmount: 10n ** 30n };
+      expect(() =>
+        selectRequirements(decoded([requirements({ amount: v.amount })]), opts, CAIP2_TESTNET),
+      ).toThrow(InvalidRequirementsError);
+    });
+  }
+
+  it("a negative option cannot win 'cheapest' against an honest one", () => {
+    const offered = decoded([requirements({ amount: "5000" }), requirements({ amount: "-1" })]);
+    expect(() => selectRequirements(offered, { maxAmount: 10n ** 9n }, CAIP2_TESTNET)).toThrow(
+      InvalidRequirementsError,
+    );
+  });
+
+  it("happy path: a plain positive amount still selects", () => {
+    const out = selectRequirements(
+      decoded([requirements({ amount: "5000" })]),
+      { maxAmount: 10n ** 9n },
+      CAIP2_TESTNET,
+    );
+    expect(out.amount).toBe("5000");
   });
 });
