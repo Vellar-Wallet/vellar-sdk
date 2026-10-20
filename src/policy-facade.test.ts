@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createPolicyFacade, PolicyNotDeployableError } from "./policy-facade";
+import { createPolicyFacade, DuplicateOwnerError, PolicyNotDeployableError } from "./policy-facade";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -99,5 +99,67 @@ describe("policy facade — deploy orchestration", () => {
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe("https://api.test/policies/p1/simulate");
     expect(JSON.parse(init!.body as string)).toEqual({ wallet: WALLET });
+  });
+});
+
+const OWNER_A = "GAHJJJKMOKYE4RVPZEWZTKH5FVI4PA3VL7GK2LFNUBSGBV3AKSKPD3FN";
+const OWNER_B = "GDBXHJ53TGKDOP2O3Q5TKXPMGTHA2OPT5BCBYFCRF4PE3EODQLWYPUIQ";
+
+const baseDefinition = {
+  version: "1",
+  type: "multisig",
+  owners: [OWNER_A, OWNER_B],
+};
+
+describe("policy facade — duplicate owner validation (#761)", () => {
+  it("rejects a PolicyDefinition whose owners array contains the same address twice", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => jsonResponse({}));
+    const p = facade({ fetch: fetchMock });
+    await expect(
+      p.generate({ ...baseDefinition, owners: [OWNER_A, OWNER_B, OWNER_A] }),
+    ).rejects.toBeInstanceOf(DuplicateOwnerError);
+    // Must fail before any network call.
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects when the owners array contains only duplicates", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => jsonResponse({}));
+    const p = facade({ fetch: fetchMock });
+    await expect(
+      p.generate({ ...baseDefinition, owners: [OWNER_A, OWNER_A] }),
+    ).rejects.toBeInstanceOf(DuplicateOwnerError);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("DuplicateOwnerError message names the offending address", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => jsonResponse({}));
+    const p = facade({ fetch: fetchMock });
+    const err = await p
+      .generate({ ...baseDefinition, owners: [OWNER_A, OWNER_B, OWNER_A] })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(DuplicateOwnerError);
+    expect((err as DuplicateOwnerError).message).toContain(OWNER_A);
+  });
+
+  it("allows a valid owners array with no duplicates and calls generate", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      jsonResponse({ policy: { id: "p1", status: "generated" } }),
+    );
+    const p = facade({ fetch: fetchMock });
+    await p.generate({ ...baseDefinition, owners: [OWNER_A, OWNER_B] });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("treats addresses differing only by case as distinct (Stellar base32 is case-sensitive)", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      jsonResponse({ policy: { id: "p1", status: "generated" } }),
+    );
+    const p = facade({ fetch: fetchMock });
+    // Lower-cased variant is a different string — no duplicate error expected.
+    await p.generate({
+      ...baseDefinition,
+      owners: [OWNER_A, OWNER_A.toLowerCase()],
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 });

@@ -57,6 +57,13 @@ export class PolicyNotDeployableError extends Error {
   }
 }
 
+export class DuplicateOwnerError extends Error {
+  constructor(address: string) {
+    super(`PolicyDefinition.owners contains a duplicate address: ${address}`);
+    this.name = "DuplicateOwnerError";
+  }
+}
+
 export function createPolicyFacade(deps: PolicyFacadeDeps): PolicyFacade {
   const client = createPolicyClient({
     apiUrl: deps.apiUrl,
@@ -70,6 +77,11 @@ export function createPolicyFacade(deps: PolicyFacadeDeps): PolicyFacade {
       return client.listTemplates();
     },
     generate(definition) {
+      const seen = new Set<string>();
+      for (const owner of definition.owners) {
+        if (seen.has(owner)) throw new DuplicateOwnerError(owner);
+        seen.add(owner);
+      }
       return client.generate(definition);
     },
     simulate(policyId) {

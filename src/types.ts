@@ -34,6 +34,14 @@ export interface SignTransactionInput {
 
 // --- Smart Account Policy Builder ---
 
+/**
+ * Defines the rules for a smart account policy contract.
+ * `owners` must contain unique addresses — duplicates are rejected by
+ * `PolicyFacade.generate()` before any RPC or passkey interaction.
+ * Stellar addresses are case-sensitive in their base32 encoding, so
+ * "GABC…" and "gabc…" are treated as distinct addresses by the network
+ * but are rejected as a likely mistake if the same canonical form repeats.
+ */
 export interface PolicyDefinition {
   version: string;
   type: string;
