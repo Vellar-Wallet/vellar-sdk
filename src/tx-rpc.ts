@@ -15,8 +15,14 @@ export function isValidStellarAddress(address: string): boolean {
   return StrKey.isValidEd25519PublicKey(address) || StrKey.isValidContract(address);
 }
 
-export function createRpcTxStatusReader(options: { rpcUrl: string }): TxStatusReader {
-  const server = new rpc.Server(options.rpcUrl);
+export interface RpcTxStatusReaderOptions {
+  rpcUrl: string;
+  /** Injected RPC server (for tests). Defaults to a new rpc.Server(rpcUrl). */
+  server?: Pick<rpc.Server, "getTransaction">;
+}
+
+export function createRpcTxStatusReader(options: RpcTxStatusReaderOptions): TxStatusReader {
+  const server = options.server ?? new rpc.Server(options.rpcUrl);
   return {
     async getStatus(hash): Promise<TxStatus> {
       const res = await server.getTransaction(hash);
@@ -25,8 +31,18 @@ export function createRpcTxStatusReader(options: { rpcUrl: string }): TxStatusRe
           return "success";
         case rpc.Api.GetTransactionStatus.FAILED:
           return "failed";
+        case rpc.Api.GetTransactionStatus.NOT_FOUND:
+          // Not yet included in a ledger.
+          return "pending";
         default:
-          // NOT_FOUND: not yet included in a ledger.
+          // A status this SDK does not know (e.g. added by a newer Soroban
+          // RPC). Decision: warn and report "pending" rather than throw. Only
+          // SUCCESS and FAILED are final, so an unknown value can never be
+          // misread as success; waitForTransaction keeps polling and ends in
+          // TransactionTimeoutError if the status never becomes recognizable.
+          console.warn(
+            `Unrecognized Soroban RPC transaction status "${String(res.status)}" for ${hash}; treating as pending`,
+          );
           return "pending";
       }
     },
