@@ -3,7 +3,14 @@ import type { TxStatus, TxStatusReader } from "./tx-status";
 
 // RPC-backed pieces of the payment flow (subpath export — see rpc.ts).
 
-/** Accepts classic (G...) and contract (C...) addresses. */
+/**
+ * Accepts classic (G...) and contract (C...) addresses.
+ *
+ * Validation is full StrKey validation, not just prefix and length: the
+ * base32 payload, version byte and CRC16 checksum must all be intact. A
+ * correctly shaped address with a corrupted checksum returns `false` (it never
+ * throws), so callers can use this directly on untrusted input.
+ */
 export function isValidStellarAddress(address: string): boolean {
   return StrKey.isValidEd25519PublicKey(address) || StrKey.isValidContract(address);
 }
