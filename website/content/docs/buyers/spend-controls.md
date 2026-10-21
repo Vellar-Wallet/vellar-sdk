@@ -6,7 +6,9 @@
 
 By the end of this page you will understand the difference between `maxAmount`
 and the spending-limit policy, know how to scope a budget to a specific token,
-and understand the two-signer options for agent versus human payments.
+how to further scope a signer's capabilities and a payment's merchant/category
+attributes, and understand the two-signer options for agent versus human
+payments.
 
 ## The two controls
 
@@ -109,6 +111,63 @@ const { response } = await vellar.x402.fetch(
 If omitted, the SDK accepts any asset the seller offers that matches the scheme
 and network.
 
+## Capability and attribute scoping
+
+Two more client-side layers exist beyond `maxAmount` and `allowedAssets` —
+narrower, but no more trustworthy: both run in this process and both can be
+skipped by a compromised or buggy agent, same as `maxAmount`. See
+[Client-side guard layers](../architecture/threat-model.md) for the full
+composition, including which error each one throws and what it does and does
+not survive.
+
+**Signer capability scoping** restricts which resource (token contract) +
+action (function name) a signer instance will sign at all, independent of
+which payment is being cleared — useful when one session key is reused across
+call sites that should not all have the same reach:
+
+```ts
+import { createSessionKeySigner } from "vellar-sdk";
+
+const signer = createSessionKeySigner({
+  address: walletCAddress,
+  secretKey: sessionKeySecret,
+  capabilities: [{ resourceType: usdcContractId, action: "transfer" }],
+});
+```
+
+An empty or omitted `capabilities` list permits everything — passing a
+non-empty list is what turns the check on, so this is backward compatible
+with every signer that does not opt in. A denied request throws
+`CapabilityDeniedError` before anything is signed.
+
+**Attribute-scoped budgets** restrict which merchant, category, and time
+window a payment can go to, checked before it is built or signed — finer
+grained than `maxAmount`, which only ever sees one request at a time with no
+notion of who it is paying:
+
+```ts
+const vellar = createVellarWallet({
+  // ...
+  x402: {
+    signer,
+    simulationSourceAccount: aFundedGAccount,
+    budgetAttributes: [
+      { merchant: "*", category: "search", maxAmount: 1_000_000n, periodMaxAmount: 10_000_000n },
+    ],
+  },
+});
+```
+
+A `periodMaxAmount` needs a `budgetAttributeTracker` to actually track
+cumulative spend across calls — omit one and only each rule's per-payment
+`maxAmount` is enforced. The default (`createInMemoryBudgetAttributeTracker`)
+is in-memory and process-lifetime only; it does not survive a restart. A
+denied request throws `BudgetAttributeDeniedError` before anything is signed.
+
+> ⚠️ **Neither of these is the budget.** Like `maxAmount`, both are client-side
+> and both can be skipped by a compromised or buggy agent process. The
+> on-chain spending-limit policy remains the only guard that holds even then.
+
 ## When it fails
 
 | Error | Cause | Fix |
@@ -118,6 +177,8 @@ and network.
 | `PaymentRejectedError` with policy reason | On-chain spending-limit policy blocked the payment | Check the policy window — you may have hit the cap for this period |
 | Up to 2x cap in short window | Window reset during payment burst | Expected behavior — see policies page for the full explanation |
 | Session key signs but policy blocks | Token mismatch between policy scope and asset being paid | Use a token-scoped policy for the specific asset |
+| `CapabilityDeniedError` | Signer's `capabilities` list does not permit this resource + action | Add a matching rule, or omit `capabilities` to permit everything |
+| `BudgetAttributeDeniedError` | No `budgetAttributes` rule matches this merchant/category/time, or the matching rule's ceiling was exceeded | Add or widen a matching rule, or raise its `maxAmount`/`periodMaxAmount` |
 
 ## Next steps
 
@@ -126,3 +187,5 @@ and network.
 - [Policies & provenance](../agent-tooling/policies.md) — deploy and manage spending-limit and
   verified-only policies
 - [Sign and pay](./sign-and-pay.md) — what happens inside the payment loop
+- [Threat model](../architecture/threat-model.md) — how every client-side guard composes, and
+  why only the on-chain policy survives a compromised agent process

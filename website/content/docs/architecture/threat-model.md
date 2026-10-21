@@ -2,7 +2,7 @@
 
 > What Vellar is designed to prevent, what it is not designed to prevent, and the blast radius of each component if compromised.
 
-By the end of this page you will understand the trust boundaries between the chain, the policy contracts, the facilitator and the client, what an attacker can do with each type of key, and exactly which parts of the system the pre-mainnet security review covered.
+By the end of this page you will understand the trust boundaries between the chain, the policy contracts, the facilitator and the client, what an attacker can do with each type of key, which client-side guard composes with which, why only the on-chain policy survives a compromised agent process, and exactly which parts of the system the pre-mainnet security review covered.
 
 ## Trust boundaries
 
@@ -34,6 +34,31 @@ Vellar wallets are Soroban smart contract accounts (`C` addresses), so "the key"
 Two properties bound the agent-key rows above. `expiresAt` accepts a `Date` or unix seconds, and an expired key stops signing with no revoke needed. `revoke` removes the key on-chain immediately once the transaction confirms. Both are chain-enforced, so neither depends on a compromised process cooperating.
 
 > **Note:** The spending-limit policy validates the token and the amount and has no opinion on the recipient. A payment redirected to a different address within the cap satisfies the policy completely. This is documented in the security audit as V-1 and is an explicit design boundary, not a bug. See [Spending policies](./spending-policies.md).
+
+## Client-side guard layers in the x402 payment path
+
+Four modules in `vellar-sdk` implement client-side guards on the x402 payment path. Each module's own header is honest in isolation about what it does and does not cover, the same discipline this page uses. There is no single place that composes them, so this section is that place.
+
+| Layer | Module | Runs | What it prevents | What it does not prevent |
+| --- | --- | --- | --- | --- |
+| Invocation check | `src/x402-auth-entry.ts` — `assertAuthEntryInvocation` | Inside `x402-client.ts`, automatically, before every signature | A hostile or MITM'd Soroban RPC returning an auth entry whose contract, function, arguments, or sub-invocations differ from the payment that was cleared — the fix for security audit V-1 (Critical) | The recipient being wrong when that is what the payment legitimately cleared to pay (see "The recipient gap" below); anything, if the host process is compromised and bypasses `x402-client.ts` entirely |
+| Signer capability scoping | `src/x402-signer-capabilities.ts` — `CapabilityRule` / `assertCapability` | Inside the signer (`createSessionKeySigner` / `createPasskeyX402Signer`), opt-in per instance, before it signs | A shared or reused signer instance authorizing a resource type + action outside its configured allowlist — e.g. one session key reused across unrelated call sites in a multi-tenant agent process | Anything, if the caller never passes `capabilities` (an empty or omitted rule set permits everything, for backward compatibility) or signs an entry outside the signer altogether |
+| Attribute-scoped budgets | `src/x402-budget-attributes.ts` — `BudgetAttributeRule` / `assertBudgetAttributes` | Inside `x402-client.ts`, before a payment is built or signed | A payment to a merchant/category/time-window outside the configured rules, or over a per-payment or tracked period ceiling — finer-grained than the flat `maxAmount` and the on-chain policy, neither of which understands "merchant" or "category" | Anything, if bypassed; period tracking is only as durable as the `BudgetAttributeTracker` supplied — the default (`createInMemoryBudgetAttributeTracker`) is in-memory and process-lifetime only |
+| Untrusted-data fence | `src/x402-untrusted.ts` (subpath export `vellar-sdk/x402-untrusted`) — `renderUntrusted` / `sanitizeUntrusted` | Wherever a payer surfaces seller-controlled text to a model — see "Prompt injection in the MCP payer" below | A seller forging the fence boundary (the terminator's nonce is drawn after the text is in hand and never derived from it) and a defined set of dangerous characters (control chars, bidi overrides, zero-width) reaching the model unsanitized | A model choosing to act on fenced text anyway. The fence is a convention, not enforcement, and whether a given model honours it is unverified and unverifiable from inside the module. This layer does not bound spend at all — it narrows an injection surface, nothing more |
+
+> ⚠️ **Only the on-chain spending-limit policy bounds a compromised agent.** Every layer in the table runs inside the same process that is making the payment. If that process is compromised — a malicious dependency, a modified SDK build, an attacker with code execution in the host — each layer can be skipped outright: don't call the signer, don't call `x402-client.ts`, call `@stellar/stellar-sdk` directly instead. None of them survive that, and none of their own module headers claim otherwise. This is the same lesson the security audit records for V-1, and it is the one thing that must survive into anything said publicly about this SDK: these are fail-fast narrowing for a well-behaved process, not a replacement for consensus. The policy co-signs inside `__check_auth`, which Stellar consensus enforces regardless of what process or code submitted the transaction — see [Spending policies](./spending-policies.md).
+
+### The recipient gap
+
+The on-chain spending-limit policy validates the token and the amount. It has no opinion on the recipient. **"The agent cannot exceed its budget" is true. "The agent's funds are protected" is not.** A payment redirected to a different address, within the cap, satisfies the policy completely.
+
+`assertAuthEntryInvocation` closes one specific instance of this gap: a hostile RPC substituting a different recipient than the one the client actually cleared and intended to pay, by comparing the signed invocation's `to` argument against the payment requirements byte for byte before signing. It does **not** close the gap itself — if the payment being cleared already names an attacker-controlled `payTo` (for instance, a malicious seller naming its own address, which is the normal and expected shape of every x402 payment), the invocation check has nothing to compare against, and the payment proceeds. Guarding which merchant gets paid at all is the application's responsibility; for recipient *contracts* specifically, the verified-only policy narrows by code provenance rather than by address, which is a different and narrower guarantee. See [Spending policies](./spending-policies.md) and [Spend controls](../buyers/spend-controls.md).
+
+### Reconciling with the security audit
+
+The invocation check above is exactly `docs/security-audit.md`'s V-1 finding, unchanged. The untrusted-data fence maps to V-3, V-5, V-6 and V-11 (seller text reaching the model outside the fence, the lookalike-filter bypasses, the U+2028/U+2029 line-separator defeat, and the 32-bit nonce) — all marked fixed there.
+
+Signer capability scoping (`x402-signer-capabilities.ts`, #224) and attribute-scoped budgets (`x402-budget-attributes.ts`, #225) postdate the audit (dated 2026-08-14) entirely and are not mentioned in it — not because they disagree with anything recorded there, but because neither existed yet. This page is their first composed treatment against the same V-1 lesson the audit established. There is no disagreement between the two documents to reconcile here; the audit is simply silent on two modules that shipped later.
 
 ## What the facilitator cannot do
 
@@ -76,7 +101,7 @@ The MCP payer receives resource descriptions, service names, mime types and the 
 
 There are two defences.
 
-**A nonce-bearing fence.** Untrusted text is wrapped in a fence whose terminator carries an 8-hex-character nonce drawn from a CSPRNG *after* the untrusted text is in hand, and never derived from it. A seller therefore cannot close the fence, because they cannot predict or compute the terminator. Any fence-shaped line inside the payload is replaced with a removal marker.
+**A nonce-bearing fence.** Untrusted text is wrapped in a fence whose terminator carries a 32-hex-character (128-bit) nonce drawn from a CSPRNG *after* the untrusted text is in hand, and never derived from it. A seller therefore cannot close the fence, because they cannot predict or compute the terminator. Any fence-shaped line inside the payload is replaced with a removal marker.
 
 **Sanitisation.** C0 and C1 controls, DEL and the Unicode format class are stripped, which covers zero-width characters and the U+202A-202E and U+2066-2069 bidi overrides. Metadata is collapsed to a single line and clamped to 256 characters.
 
@@ -93,10 +118,14 @@ The same posture applies at catalog ingest, where `serviceName` must be printabl
 | Catalog URL squatting | Trust-on-first-use binds a resource URL to the payTo of its first settled payment; a different payTo is refused from the catalog | The attacker's payment still settles on-chain. On the hosted instance the first-settler race reopens after each restart, because there is no persistent disk |
 | Seller metadata injection | The nonce-bearing fence plus sanitisation in the MCP payer, and per-field ASCII sanitisation at catalog ingest | Neither can compel a model to treat fenced text as data. The real bound is the on-chain budget |
 | A compromised agent key | Policies co-sign inside `__check_auth`; `expiresAt` stops the key signing with no revoke needed; `revoke` removes it on-chain once confirmed | A key granted with no policies has nothing preventing it, which is why an unrestricted grant is not mintable. Until expiry or revocation confirms, the cap is the bound, not zero |
+| A Soroban RPC returns an auth entry that does not match the cleared payment | `assertAuthEntryInvocation` (`x402-auth-entry.ts`) catches the mismatch — contract, function, argument, or sub-invocation | `AuthEntryMismatchError` naming the field; nothing is signed. Only catches a mismatch against what was cleared — not a `payTo` that was already attacker-controlled (see "The recipient gap" above) |
+| A shared signer is asked to sign outside its configured resource + action | `assertCapability` (`x402-signer-capabilities.ts`) refuses before signing | `CapabilityDeniedError`; nothing is signed. Opt-in per signer instance — an empty `capabilities` list permits everything |
+| A payment matches no configured merchant/category/time budget, or exceeds one | `assertBudgetAttributes` (`x402-budget-attributes.ts`) refuses before building or signing | `BudgetAttributeDeniedError`; nothing is signed. Client-side only — bypassed entirely if the host process is compromised |
 
 ## Next steps
 
 - [Security](../security.md)
 - [Honesty](../reference/honesty.md)
 - [Spending policies](./spending-policies.md)
+- [Spend controls](../buyers/spend-controls.md)
 - [Agent keys](../agent-tooling/agent-keys.md)
