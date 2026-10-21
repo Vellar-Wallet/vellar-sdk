@@ -8,6 +8,7 @@ import {
 
 const AGENT_PK = "G".padEnd(56, "A");
 const TOKEN = "C".padEnd(56, "B");
+const OTHER_TOKEN = "C".padEnd(56, "E");
 const SPENDING = "C".padEnd(56, "C");
 const VERIFIED = "C".padEnd(56, "D");
 
@@ -38,6 +39,23 @@ describe("wallet.agents.mint", () => {
     expect(addAgentKey).toHaveBeenCalledWith({
       publicKey: AGENT_PK,
       grants: [{ token: TOKEN, policies: [SPENDING, VERIFIED] }],
+      store: "persistent",
+    });
+  });
+
+  it("allows the same policy contract in grants for different tokens", async () => {
+    const { runtime, addAgentKey } = stubRuntime();
+    const agents = build(runtime);
+    const grants = [
+      { token: TOKEN, policies: [SPENDING] },
+      { token: OTHER_TOKEN, policies: [SPENDING] },
+    ];
+
+    await agents.mint({ publicKey: AGENT_PK, grants });
+
+    expect(addAgentKey).toHaveBeenCalledWith({
+      publicKey: AGENT_PK,
+      grants,
       store: "persistent",
     });
   });
@@ -98,6 +116,21 @@ describe("wallet.agents.mint", () => {
     );
   });
 
+  it("rejects a duplicate policy contract within one grant", async () => {
+    const { runtime, addAgentKey } = stubRuntime();
+    const agents = build(runtime);
+    await expect(
+      agents.mint({
+        publicKey: AGENT_PK,
+        grants: [{ token: TOKEN, policies: [SPENDING, SPENDING] }],
+      }),
+    ).rejects.toMatchObject({
+      name: "InvalidAgentInputError",
+      message: `grant for ${TOKEN} has duplicate policy: ${SPENDING}`,
+    });
+    expect(addAgentKey).not.toHaveBeenCalled();
+  });
+
   it("rejects a grant with no policies (no unrestricted grants via wallet.agents)", async () => {
     const { runtime } = stubRuntime();
     const agents = build(runtime);
@@ -117,16 +150,23 @@ describe("wallet.agents.mint", () => {
     ).rejects.toBeInstanceOf(InvalidAgentInputError);
   });
 
-  it("rejects an expiry in the past", async () => {
-    const { runtime } = stubRuntime();
-    const agents = build(runtime);
+  it.each(["Date", "unix seconds"] as const)("rejects a past %s expiry", async (kind) => {
+    const { runtime, resume, addAgentKey } = stubRuntime();
+    const agents = build(runtime, "mykeyid");
+    const expiresAt =
+      kind === "Date" ? new Date(Date.now() - 1000) : Math.floor(Date.now() / 1000) - 1;
     await expect(
       agents.mint({
         publicKey: AGENT_PK,
         grants: [{ token: TOKEN, policies: [SPENDING] }],
-        expiresAt: new Date(Date.now() - 1000),
+        expiresAt,
       }),
-    ).rejects.toBeInstanceOf(InvalidAgentInputError);
+    ).rejects.toMatchObject({
+      name: "InvalidAgentInputError",
+      message: "expiresAt must be in the future",
+    });
+    expect(resume).not.toHaveBeenCalled();
+    expect(addAgentKey).not.toHaveBeenCalled();
   });
 });
 

@@ -160,13 +160,23 @@ export function selectRequirements(
 export function decodePaymentRequired(res: Response): PaymentRequired {
   const header = res.headers.get("PAYMENT-REQUIRED") ?? res.headers.get("payment-required");
   if (header) {
+    let decoded: unknown;
     try {
-      return JSON.parse(base64ToUtf8(header)) as PaymentRequired;
+      decoded = JSON.parse(base64ToUtf8(header));
     } catch (err) {
       throw new NoUsablePaymentOptionError(
         `Malformed PAYMENT-REQUIRED header: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
+    // Validate the container before any consumer reads fields such as `accepts`
+    // or exposes `resource` metadata to model-facing output. Field validation
+    // remains the responsibility of the existing payment requirement guards.
+    if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) {
+      throw new NoUsablePaymentOptionError(
+        "PAYMENT-REQUIRED header must decode to a JSON object.",
+      );
+    }
+    return decoded as PaymentRequired;
   }
   throw new NoUsablePaymentOptionError("402 response carried no PAYMENT-REQUIRED header.");
 }

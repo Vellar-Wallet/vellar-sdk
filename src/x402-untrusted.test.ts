@@ -2,6 +2,8 @@
 // point this file at its own renderer and pass.
 
 import { describe, expect, it } from "vitest";
+import { decodePaymentRequired, utf8ToBase64 } from "./x402-guards";
+import { NoUsablePaymentOptionError } from "./x402-types";
 import {
   FENCE_LABEL,
   METADATA_MAX_CHARS,
@@ -11,7 +13,7 @@ import {
   sanitizeUntrusted,
   terminatorOf,
 } from "./x402-untrusted";
-import { FENCE_VECTORS } from "./x402-untrusted-vectors";
+import { FENCE_VECTORS, PAYMENT_REQUIRED_SHAPE_VECTORS } from "./x402-untrusted-vectors";
 
 /** The renderer under test. Swap this to conform a different implementation. */
 const render = (label: string, text: string, asMetadata = false) =>
@@ -64,6 +66,22 @@ describe("fence conformance vectors", () => {
           terminator,
         );
       });
+    });
+  }
+});
+
+describe("PAYMENT-REQUIRED top-level shape vectors", () => {
+  for (const vector of PAYMENT_REQUIRED_SHAPE_VECTORS) {
+    it(`rejects ${vector.name} with a named error before reading payload fields`, () => {
+      const response = new Response("{}", {
+        status: 402,
+        headers: { "PAYMENT-REQUIRED": utf8ToBase64(vector.payload) },
+      });
+
+      expect(() => decodePaymentRequired(response)).toThrow(NoUsablePaymentOptionError);
+      expect(() => decodePaymentRequired(response)).toThrow(
+        "PAYMENT-REQUIRED header must decode to a JSON object.",
+      );
     });
   }
 });

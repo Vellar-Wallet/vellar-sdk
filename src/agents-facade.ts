@@ -26,7 +26,8 @@ export interface AgentPolicyGrant {
    * token (e.g. a spending-limit instance + a verified-only instance). An
    * empty array would grant unrestricted use of the token — deliberately
    * rejected; mint an unrestricted signer through your own kit wiring if you
-   * truly mean that. */
+    * truly mean that. Duplicate policy ids within one grant are also rejected;
+    * the same policy may still appear in grants for different tokens. */
   policies: string[];
 }
 
@@ -37,7 +38,8 @@ export interface MintAgentInput {
   /** Token grants; at least one. */
   grants: AgentPolicyGrant[];
   /** Optional on-chain expiration. A Date, or unix SECONDS (the contract's
-   * unit). Expired keys stop signing without a revoke. */
+    * unit). Expired keys stop signing without a revoke; values at or before the
+    * current time are rejected before the passkey is resumed or mint is called. */
   expiresAt?: Date | number;
   /** Signer durability (default "persistent"). "temporary" entries are
    * cheaper but the wallet may shed them at the storage TTL. */
@@ -132,10 +134,15 @@ export function createAgentsFacade(deps: AgentsFacadeDeps): AgentsFacade {
           `grant for ${grant.token} has no policies — an unrestricted grant is not mintable through wallet.agents`,
         );
       }
+      const policies = new Set<string>();
       for (const policy of grant.policies) {
         if (!CONTRACT_ID.test(policy)) {
           throw new InvalidAgentInputError(`policy must be a contract id (C…): ${policy}`);
         }
+        if (policies.has(policy)) {
+          throw new InvalidAgentInputError(`grant for ${grant.token} has duplicate policy: ${policy}`);
+        }
+        policies.add(policy);
       }
     }
   }
