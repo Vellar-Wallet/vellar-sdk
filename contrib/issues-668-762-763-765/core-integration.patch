@@ -1,0 +1,283 @@
+diff --git a/src/agents-facade.test.ts b/src/agents-facade.test.ts
+index 0d63882..65392ef 100644
+--- a/src/agents-facade.test.ts
++++ b/src/agents-facade.test.ts
+@@ -8,6 +8,7 @@ import {
+ 
+ const AGENT_PK = "G".padEnd(56, "A");
+ const TOKEN = "C".padEnd(56, "B");
++const OTHER_TOKEN = "C".padEnd(56, "E");
+ const SPENDING = "C".padEnd(56, "C");
+ const VERIFIED = "C".padEnd(56, "D");
+ 
+@@ -42,6 +43,23 @@ describe("wallet.agents.mint", () => {
+     });
+   });
+ 
++  it("allows the same policy contract in grants for different tokens", async () => {
++    const { runtime, addAgentKey } = stubRuntime();
++    const agents = build(runtime);
++    const grants = [
++      { token: TOKEN, policies: [SPENDING] },
++      { token: OTHER_TOKEN, policies: [SPENDING] },
++    ];
++
++    await agents.mint({ publicKey: AGENT_PK, grants });
++
++    expect(addAgentKey).toHaveBeenCalledWith({
++      publicKey: AGENT_PK,
++      grants,
++      store: "persistent",
++    });
++  });
++
+   it("converts a Date expiry to unix seconds and echoes it back as ISO", async () => {
+     const { runtime, addAgentKey } = stubRuntime();
+     const agents = build(runtime);
+@@ -98,6 +116,21 @@ describe("wallet.agents.mint", () => {
+     );
+   });
+ 
++  it("rejects a duplicate policy contract within one grant", async () => {
++    const { runtime, addAgentKey } = stubRuntime();
++    const agents = build(runtime);
++    await expect(
++      agents.mint({
++        publicKey: AGENT_PK,
++        grants: [{ token: TOKEN, policies: [SPENDING, SPENDING] }],
++      }),
++    ).rejects.toMatchObject({
++      name: "InvalidAgentInputError",
++      message: `grant for ${TOKEN} has duplicate policy: ${SPENDING}`,
++    });
++    expect(addAgentKey).not.toHaveBeenCalled();
++  });
++
+   it("rejects a grant with no policies (no unrestricted grants via wallet.agents)", async () => {
+     const { runtime } = stubRuntime();
+     const agents = build(runtime);
+@@ -117,16 +150,23 @@ describe("wallet.agents.mint", () => {
+     ).rejects.toBeInstanceOf(InvalidAgentInputError);
+   });
+ 
+-  it("rejects an expiry in the past", async () => {
+-    const { runtime } = stubRuntime();
+-    const agents = build(runtime);
++  it.each(["Date", "unix seconds"] as const)("rejects a past %s expiry", async (kind) => {
++    const { runtime, resume, addAgentKey } = stubRuntime();
++    const agents = build(runtime, "mykeyid");
++    const expiresAt =
++      kind === "Date" ? new Date(Date.now() - 1000) : Math.floor(Date.now() / 1000) - 1;
+     await expect(
+       agents.mint({
+         publicKey: AGENT_PK,
+         grants: [{ token: TOKEN, policies: [SPENDING] }],
+-        expiresAt: new Date(Date.now() - 1000),
++        expiresAt,
+       }),
+-    ).rejects.toBeInstanceOf(InvalidAgentInputError);
++    ).rejects.toMatchObject({
++      name: "InvalidAgentInputError",
++      message: "expiresAt must be in the future",
++    });
++    expect(resume).not.toHaveBeenCalled();
++    expect(addAgentKey).not.toHaveBeenCalled();
+   });
+ });
+ 
+@@ -139,6 +179,15 @@ describe("wallet.agents.revoke", () => {
+     expect(removeAgentKey).toHaveBeenCalledWith(AGENT_PK);
+   });
+ 
++  it("is idempotent when called twice in succession on the same publicKey", async () => {
++    const { runtime, removeAgentKey } = stubRuntime();
++    const agents = build(runtime);
++    const first = await agents.revoke(AGENT_PK);
++    const second = await agents.revoke(AGENT_PK);
++    expect(first).toEqual({ hash: "rmhash" });
++    expect(second).toEqual({ hash: "rmhash" });
++  });
++
+   it("rejects a bad public key without calling the runtime", async () => {
+     const { runtime, removeAgentKey } = stubRuntime();
+     const agents = build(runtime);
+diff --git a/src/agents-facade.ts b/src/agents-facade.ts
+index c23dae0..96328a1 100644
+--- a/src/agents-facade.ts
++++ b/src/agents-facade.ts
+@@ -26,7 +26,8 @@ export interface AgentPolicyGrant {
+    * token (e.g. a spending-limit instance + a verified-only instance). An
+    * empty array would grant unrestricted use of the token — deliberately
+    * rejected; mint an unrestricted signer through your own kit wiring if you
+-   * truly mean that. */
++   * truly mean that. Duplicate policy ids within one grant are also rejected;
++   * the same policy may still appear in grants for different tokens. */
+   policies: string[];
+ }
+ 
+@@ -37,7 +38,8 @@ export interface MintAgentInput {
+   /** Token grants; at least one. */
+   grants: AgentPolicyGrant[];
+   /** Optional on-chain expiration. A Date, or unix SECONDS (the contract's
+-   * unit). Expired keys stop signing without a revoke. */
++   * unit). Expired keys stop signing without a revoke; values at or before the
++   * current time are rejected before the passkey is resumed or mint is called. */
+   expiresAt?: Date | number;
+   /** Signer durability (default "persistent"). "temporary" entries are
+    * cheaper but the wallet may shed them at the storage TTL. */
+@@ -71,7 +73,11 @@ export interface AgentsFacade {
+   /** Add the agent key as a policy-limited signer (passkey-signed). */
+   mint(input: MintAgentInput): Promise<MintAgentResult>;
+   /** Remove the agent key from the wallet (passkey-signed). On-chain removal
+-   * is the remote kill: the key stops signing immediately. */
++   * is the remote kill: the key stops signing immediately.
++   *
++   * Idempotency guarantee: Calling revoke on an already-revoked key succeeds
++   * as a no-op or reports not-found; retries after a network timeout will not
++   * fail misleadingly. */
+   revoke(publicKey: string): Promise<{ hash: string }>;
+ }
+ 
+@@ -132,10 +138,15 @@ export function createAgentsFacade(deps: AgentsFacadeDeps): AgentsFacade {
+           `grant for ${grant.token} has no policies — an unrestricted grant is not mintable through wallet.agents`,
+         );
+       }
++      const policies = new Set<string>();
+       for (const policy of grant.policies) {
+         if (!CONTRACT_ID.test(policy)) {
+           throw new InvalidAgentInputError(`policy must be a contract id (C…): ${policy}`);
+         }
++        if (policies.has(policy)) {
++          throw new InvalidAgentInputError(`grant for ${grant.token} has duplicate policy: ${policy}`);
++        }
++        policies.add(policy);
+       }
+     }
+   }
+diff --git a/src/x402-guards.ts b/src/x402-guards.ts
+index 7401396..0cf57b7 100644
+--- a/src/x402-guards.ts
++++ b/src/x402-guards.ts
+@@ -160,13 +160,23 @@ export function selectRequirements(
+ export function decodePaymentRequired(res: Response): PaymentRequired {
+   const header = res.headers.get("PAYMENT-REQUIRED") ?? res.headers.get("payment-required");
+   if (header) {
++    let decoded: unknown;
+     try {
+-      return JSON.parse(base64ToUtf8(header)) as PaymentRequired;
++      decoded = JSON.parse(base64ToUtf8(header));
+     } catch (err) {
+       throw new NoUsablePaymentOptionError(
+         `Malformed PAYMENT-REQUIRED header: ${err instanceof Error ? err.message : String(err)}`,
+       );
+     }
++    // Validate the container before any consumer reads fields such as `accepts`
++    // or exposes `resource` metadata to model-facing output. Field validation
++    // remains the responsibility of the existing payment requirement guards.
++    if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) {
++      throw new NoUsablePaymentOptionError(
++        "PAYMENT-REQUIRED header must decode to a JSON object.",
++      );
++    }
++    return decoded as PaymentRequired;
+   }
+   throw new NoUsablePaymentOptionError("402 response carried no PAYMENT-REQUIRED header.");
+ }
+diff --git a/src/x402-untrusted-vectors.ts b/src/x402-untrusted-vectors.ts
+index ce83315..3e6b6de 100644
+--- a/src/x402-untrusted-vectors.ts
++++ b/src/x402-untrusted-vectors.ts
+@@ -135,3 +135,45 @@ export const FENCE_VECTORS: readonly FenceVector[] = Object.freeze([
+     rationale: "Metadata is a label, not a document; it must be clamped.",
+   },
+ ]);
++
++export interface PaymentRequiredShapeVector {
++  name: string;
++  payload: string;
++  rationale: string;
++}
++
++export const PAYMENT_REQUIRED_SHAPE_VECTORS: readonly PaymentRequiredShapeVector[] =
++  Object.freeze([
++    {
++      name: "top-level-json-array",
++      payload: JSON.stringify(["malicious", "payload"]),
++      rationale:
++        "A top-level JSON array parses cleanly as JSON but lacks object properties. " +
++        "It must be rejected before property-access or model-facing fence rendering.",
++    },
++    {
++      name: "top-level-empty-array",
++      payload: "[]",
++      rationale: "An empty array parses cleanly as JSON but is not an object container.",
++    },
++    {
++      name: "bare-json-string",
++      payload: JSON.stringify("bare-string-payload"),
++      rationale: "A bare string payload lacks required PaymentRequired fields.",
++    },
++    {
++      name: "bare-json-number",
++      payload: "42",
++      rationale: "A bare number payload lacks required PaymentRequired fields.",
++    },
++    {
++      name: "bare-json-boolean",
++      payload: "true",
++      rationale: "A bare boolean payload lacks required PaymentRequired fields.",
++    },
++    {
++      name: "bare-json-null",
++      payload: "null",
++      rationale: "A JSON null causes property-access TypeError crashes if not caught.",
++    },
++  ]);
+diff --git a/src/x402-untrusted.test.ts b/src/x402-untrusted.test.ts
+index f3cbd26..6b45d20 100644
+--- a/src/x402-untrusted.test.ts
++++ b/src/x402-untrusted.test.ts
+@@ -2,6 +2,8 @@
+ // point this file at its own renderer and pass.
+ 
+ import { describe, expect, it } from "vitest";
++import { decodePaymentRequired, utf8ToBase64 } from "./x402-guards";
++import { NoUsablePaymentOptionError } from "./x402-types";
+ import {
+   FENCE_LABEL,
+   METADATA_MAX_CHARS,
+@@ -11,7 +13,10 @@ import {
+   sanitizeUntrusted,
+   terminatorOf,
+ } from "./x402-untrusted";
+-import { FENCE_VECTORS } from "./x402-untrusted-vectors";
++import {
++  FENCE_VECTORS,
++  PAYMENT_REQUIRED_SHAPE_VECTORS,
++} from "./x402-untrusted-vectors";
+ 
+ /** The renderer under test. Swap this to conform a different implementation. */
+ const render = (label: string, text: string, asMetadata = false) =>
+@@ -68,6 +73,22 @@ describe("fence conformance vectors", () => {
+   }
+ });
+ 
++describe("PAYMENT-REQUIRED top-level shape vectors", () => {
++  for (const vector of PAYMENT_REQUIRED_SHAPE_VECTORS) {
++    it(`rejects ${vector.name} with a named error before reading payload fields`, () => {
++      const response = new Response("{}", {
++        status: 402,
++        headers: { "PAYMENT-REQUIRED": utf8ToBase64(vector.payload) },
++      });
++
++      expect(() => decodePaymentRequired(response)).toThrow(NoUsablePaymentOptionError);
++      expect(() => decodePaymentRequired(response)).toThrow(
++        "PAYMENT-REQUIRED header must decode to a JSON object.",
++      );
++    });
++  }
++});
++
+ describe("fence invariants", () => {
+   it("never reproduces the terminator inside the block", () => {
+     // This is the defect that shipped in an early revision: quoting the
