@@ -1,9 +1,11 @@
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { createAgentsFacade, type AgentKeyRuntime } from "./agents-facade";
-import { resumeKitConnection } from "./passkeykit-connector";
+import { createAgentsFacade, type AgentKeyRuntime } from "../../src/agents-facade";
+import { resumeKitConnection } from "../../src/passkeykit-connector";
 
 // Mirrors the reference wiring in
-// website/content/docs/agent-tooling/passkey-kit-wiring.md against a fake kit,
+// passkey-kit-wiring.md against a fake kit,
 // so the documented contract (which kit calls happen, in what order, and how
 // failures propagate) is exercised by the hermetic suite.
 
