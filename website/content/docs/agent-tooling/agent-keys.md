@@ -100,7 +100,7 @@ const vellar = createVellarWallet({
 });
 ```
 
-The SDK stays free of a `passkey-kit` dependency by keeping this a seam, the same reason `policyAttach` is wired on the host side. For the full method contract and a compact, typechecked reference implementation, see [Wiring AgentKeyRuntime to PasskeyKit](./passkey-kit-wiring.md).
+The SDK stays free of a `passkey-kit` dependency by keeping this a seam, the same reason `policyAttach` is wired on the host side.
 
 ## 2. Mint the key
 
@@ -175,7 +175,6 @@ The blast radius, stated honestly: a compromised agent key can at worst spend up
 
 ## Next steps
 
-- [Wiring AgentKeyRuntime to PasskeyKit](./passkey-kit-wiring.md)
 - [Policies](./policies.md)
 - [MCP payer](./mcp-payer.md)
 - [Pay for a resource](../buyers/pay-for-a-resource.md)

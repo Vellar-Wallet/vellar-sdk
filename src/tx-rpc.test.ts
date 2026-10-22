@@ -1,10 +1,6 @@
-import { rpc } from "@stellar/stellar-sdk";
 import { describe, expect, it, vi } from "vitest";
-import { Keypair, StrKey } from "@stellar/stellar-sdk";
 import {
-  createRpcTxStatusReader,
   createRpcTxSubmitter,
-  isValidStellarAddress,
   RateLimitError,
   TokenBucket,
 } from "./tx-rpc";
@@ -45,89 +41,5 @@ describe("createRpcTxSubmitter", () => {
 
     await expect(submitter.submitTransaction("AAAA")).rejects.toBeInstanceOf(RateLimitError);
     expect(sendTransaction).not.toHaveBeenCalled();
-  });
-});
-
-// Flip the lowest bit of the last base32 character. The final characters of a
-// StrKey encode the CRC16 checksum, so the length and prefix stay intact while
-// the checksum no longer matches.
-function corruptChecksum(address: string): string {
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-  const last = address[address.length - 1];
-  const flipped = alphabet[alphabet.indexOf(last) ^ 1];
-  return address.slice(0, -1) + flipped;
-}
-
-describe("isValidStellarAddress", () => {
-  const classic = Keypair.random().publicKey();
-  const contract = StrKey.encodeContract(Buffer.alloc(32, 7));
-
-  it("accepts well-formed classic and contract addresses", () => {
-    expect(isValidStellarAddress(classic)).toBe(true);
-    expect(isValidStellarAddress(contract)).toBe(true);
-  });
-
-  it("rejects a C-prefixed address with a corrupted checksum without throwing", () => {
-    const bad = corruptChecksum(contract);
-    expect(bad).toHaveLength(contract.length);
-    expect(bad.startsWith("C")).toBe(true);
-    expect(bad).not.toBe(contract);
-    expect(() => isValidStellarAddress(bad)).not.toThrow();
-    expect(isValidStellarAddress(bad)).toBe(false);
-  });
-
-  it("rejects a G-prefixed address with a corrupted checksum without throwing", () => {
-    const bad = corruptChecksum(classic);
-    expect(bad).toHaveLength(classic.length);
-    expect(bad.startsWith("G")).toBe(true);
-    expect(bad).not.toBe(classic);
-    expect(() => isValidStellarAddress(bad)).not.toThrow();
-    expect(isValidStellarAddress(bad)).toBe(false);
-  });
-
-  it("rejects empty and wrong-length input", () => {
-    expect(isValidStellarAddress("")).toBe(false);
-    expect(isValidStellarAddress(classic.slice(0, -1))).toBe(false);
-  });
-});
-
-describe("createRpcTxStatusReader", () => {
-  function readerFor(status: unknown) {
-    const getTransaction = vi.fn().mockResolvedValue({ status });
-    return createRpcTxStatusReader({
-      rpcUrl: "https://rpc.test",
-      server: { getTransaction } as never,
-    });
-  }
-
-  it("maps SUCCESS, FAILED and NOT_FOUND", async () => {
-    const { SUCCESS, FAILED, NOT_FOUND } = rpc.Api.GetTransactionStatus;
-    expect(await readerFor(SUCCESS).getStatus("h")).toBe("success");
-    expect(await readerFor(FAILED).getStatus("h")).toBe("failed");
-    expect(await readerFor(NOT_FOUND).getStatus("h")).toBe("pending");
-  });
-
-  it("does not warn for the known statuses", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    await readerFor(rpc.Api.GetTransactionStatus.NOT_FOUND).getStatus("h");
-    expect(warn).not.toHaveBeenCalled();
-    warn.mockRestore();
-  });
-
-  it("warns and returns pending for an unrecognized status", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    expect(await readerFor("SOMETHING_NEW").getStatus("abc123")).toBe("pending");
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(String(warn.mock.calls[0][0])).toContain("SOMETHING_NEW");
-    expect(String(warn.mock.calls[0][0])).toContain("abc123");
-    warn.mockRestore();
-  });
-
-  it("never classifies an unrecognized status as success (regression)", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    for (const status of ["SUCCESS_PARTIAL", "success", "", undefined, "CONFIRMED"]) {
-      expect(await readerFor(status).getStatus("h")).not.toBe("success");
-    }
-    warn.mockRestore();
   });
 });

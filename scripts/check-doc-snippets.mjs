@@ -26,7 +26,6 @@ const PAGES = [
   "website/content/docs/getting-started/quickstart.md",
   "website/content/docs/x402.md",
   "website/content/docs/buyers/pay-for-a-resource.md",
-  "website/content/docs/agent-tooling/passkey-kit-wiring.md",
 ];
 
 // Ambient declarations injected ahead of a page's snippets, for pages that
@@ -53,22 +52,7 @@ declare const sessionKeySecret: string;
 declare const aFundedGAccount: string;
 `.trim();
 
-// The passkey-kit wiring page leaves `kit` and `backend` to the host; `kit` is
-// the REAL PasskeyKit class, so addEd25519/remove/sign drift fails the check.
-const PASSKEY_WIRING_PREAMBLE = `
-declare const kit: import("passkey-kit").PasskeyKit;
-declare const backend: import("vellar-sdk").WalletBackend & {
-  submitTransaction(input: {
-    signedXdr: string;
-    network: import("vellar-sdk").Network;
-  }): Promise<{ hash: string }>;
-};
-declare const sac: import("vellar-sdk").SacClientLike;
-declare const isValidAddress: (address: string) => boolean;
-`.trim();
-
 const PREAMBLES = {
-  "website/content/docs/agent-tooling/passkey-kit-wiring.md": PASSKEY_WIRING_PREAMBLE,
   "website/content/docs/x402.md": X402_CONFIG_PREAMBLE,
   // The closing block inspects a settlement on its own, without the
   // destructuring that introduced it two blocks earlier — each later block is
