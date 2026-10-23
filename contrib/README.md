@@ -7,6 +7,34 @@ This folder contains reference implementations, standalone wrappers, and validat
 
 ---
 
+## MCP Payer Health-Check Script, Bundle-Size Budget, x402 Latency Benchmark, and API Surface Diff (#679, #684, #685, #686)
+
+Four independent reference implementations, each documented in its own
+subfolder.
+
+- **[contrib/mcp-payer-healthcheck/](mcp-payer-healthcheck/README.md)** (#679):
+  a standalone health-check script that spawns the MCP payer process,
+  sends one JSON-RPC `tools/list` request over its stdio transport, and
+  exits with a distinct code for healthy / unresponsive / not-running.
+- **[contrib/bundle-size-budget/](bundle-size-budget/README.md)** (#684):
+  a size-check step measuring `dist/` output for the root package,
+  `packages/cli`, and `packages/mcp-x402-payer` against a configurable
+  budget per package, with an `--update-budgets` helper for a deliberate,
+  reviewed size increase.
+- **[contrib/x402-latency-benchmark/](x402-latency-benchmark/README.md)** (#685):
+  a repeatable benchmark measuring quote, sign, and submit phase latency
+  of the x402 payment flow against a local fixture, recording results to
+  a committed, append-only NDJSON file.
+- **[contrib/api-surface-diff/](api-surface-diff/README.md)** (#686): a
+  script diffing the public export surface of the previously published npm
+  version against the current working tree's build output, flagging any
+  removed or changed export before publish.
+
+Each subfolder's README has the full "What It Does" / verification /
+"Integration into Core" writeup.
+
+---
+
 ## Recipe: CI Job to Build and Typecheck Every Contrib Example (#631)
 
 A complete implementation recipe and reference for building a CI job that validates every example in `contrib/` and `contrib/examples/`.
