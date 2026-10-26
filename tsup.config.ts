@@ -21,6 +21,10 @@ export default defineConfig({
     // Dependency-free, like the guards/untrusted modules, so a payer that
     // doesn't share the wallet plumbing can sign facilitator requests alone.
     "x402-request-auth": "src/x402-request-auth.ts",
+    // Shared VELLAR_LOG_LEVEL convention (#678), dependency-free so every
+    // workspace package's own logger can consult it without a build-order
+    // dependency on anything else here.
+    "log-level": "src/log-level.ts",
   },
   format: ["esm", "cjs"],
   dts: true,

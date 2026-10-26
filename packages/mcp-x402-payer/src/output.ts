@@ -32,6 +32,7 @@ import {
   sanitizeMetadata as sanitizeMetadataText,
   type SanitizeOptions,
 } from "vellar-sdk/x402-untrusted";
+import { shouldLog } from "vellar-sdk/log-level";
 
 export { sanitizeUntrusted, terminatorOf, type SanitizeOptions } from "vellar-sdk/x402-untrusted";
 
@@ -171,8 +172,17 @@ export function divertStdoutToStderr(): () => void {
   };
 }
 
-/** Structured log line → stderr. NEVER stdout: stdout is the MCP transport. */
+/**
+ * Structured log line → stderr. NEVER stdout: stdout is the MCP transport.
+ *
+ * Gated by the shared VELLAR_LOG_LEVEL convention (#678, vellar-sdk/log-level):
+ * a message below the configured threshold is dropped before it's even
+ * serialised. This never routes a stdout-corrupting write anywhere — it only
+ * decides whether the existing stderr-only write happens at all.
+ */
 export function log(level: LogLevel, message: string, fields: Record<string, unknown> = {}): void {
+  if (!shouldLog(level)) return;
+
   const line = {
     level,
     msg: message,

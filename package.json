@@ -99,6 +99,17 @@
         "types": "./dist/x402-request-auth.d.cts",
         "default": "./dist/x402-request-auth.cjs"
       }
+    },
+    "./log-level": {
+      "source": "./src/log-level.ts",
+      "import": {
+        "types": "./dist/log-level.d.ts",
+        "default": "./dist/log-level.js"
+      },
+      "require": {
+        "types": "./dist/log-level.d.cts",
+        "default": "./dist/log-level.cjs"
+      }
     }
   },
   "main": "./dist/index.cjs",

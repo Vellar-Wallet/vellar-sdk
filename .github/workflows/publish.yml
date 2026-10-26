@@ -35,6 +35,22 @@ jobs:
       - run: npm test
       - run: npm run build
 
+      # Subresource Integrity hashes for every dist/ file (#669), generated
+      # fresh from THIS build so they can never drift from what's actually
+      # published. dist/sri-hashes.json ships inside the npm tarball (dist/
+      # is already in package.json's `files`), and the same output is
+      # recorded in the workflow summary so it's auditable without
+      # downloading the package.
+      - name: Generate SRI hashes
+        run: |
+          node scripts/generate-sri-hashes.mjs | tee /tmp/sri-hashes.json
+          {
+            echo "### Subresource Integrity (SRI) hashes"
+            echo '```json'
+            cat /tmp/sri-hashes.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       # Fail loudly if the tag and the package version disagree, rather than
       # publishing something whose provenance points at the wrong commit.
       - name: Verify tag matches package version

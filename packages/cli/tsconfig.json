@@ -17,7 +17,8 @@
     // which does not exist on a clean checkout, so typecheck would depend on
     // build order.
     "paths": {
-      "vellar-sdk": ["../../src/index.ts"]
+      "vellar-sdk": ["../../src/index.ts"],
+      "vellar-sdk/log-level": ["../../src/log-level.ts"]
     }
   },
   "include": ["src"]
