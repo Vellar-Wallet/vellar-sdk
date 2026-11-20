@@ -40,10 +40,13 @@ import {
 } from "./x402-guards";
 import {
   assertValidX402RpcUrl,
+  CatalogEntryUnverifiableError,
   DisallowedAssetError,
   MaxAmountExceededError,
   NoUsablePaymentOptionError,
   PaymentRejectedError,
+  classifyCatalogEntryUrl,
+  type CatalogEntryUnverifiableReason,
   type PaymentRequirements,
   type SignedPayment,
   type SmartAccountX402Signer,
@@ -138,6 +141,21 @@ export function expirationOffsetFor(
   // rather than honouring whatever the seller asked for.
   offset = Math.min(offset, ceiling ?? DEFAULT_MAX_EXPIRATION_LEDGERS);
   return Math.max(offset, MIN_EXPIRATION_LEDGERS);
+}
+
+/**
+ * Assert that a discovered resource URL is structurally verifiable. Throws the
+ * typed `CatalogEntryUnverifiableError` when the URL matches one of the three
+ * documented triggers (http scheme, loopback host, route template) — see
+ * website/content/docs/operators/limits.md (`unverifiableEntries`) and
+ * website/content/docs/concepts/bazaar-and-discovery.md.
+ *
+ * Exported so discovery callers can classify a resource before handing it to
+ * the client, and so tests can exercise the triggers directly.
+ */
+export function assertCatalogEntryVerifiable(url: string): void {
+  const reason: CatalogEntryUnverifiableReason | undefined = classifyCatalogEntryUrl(url);
+  if (reason) throw new CatalogEntryUnverifiableError(url, reason);
 }
 
 export function createX402Client(deps: X402ClientDeps): X402Client {
@@ -274,6 +292,12 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
   }
 
   async function x402Fetch(url: string, init: X402FetchInit): Promise<X402Response> {
+    // A discovered resource whose URL can structurally never be verified (http
+    // scheme, loopback host, or a route template) is a permanent condition, not
+    // a transient payment failure — surface the typed classification up front
+    // rather than paying for a resource the facilitator can never verify.
+    assertCatalogEntryVerifiable(url);
+
     // A single-use body (a ReadableStream) is consumed by the first request and
     // cannot be replayed for the paid retry — the retry would silently send an
     // empty body. Reject it with a clear error; callers should pass a

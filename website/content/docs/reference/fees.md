@@ -171,6 +171,32 @@ The first is a channel account, the second the facilitator's sponsor. If the
 buyer's address appears in either field, fee sponsorship is not working. Check
 that your facilitator's sponsor account is funded.
 
+## Fee sponsorship and the retry policy
+
+The SDK's client retry policy consults the fee-account verification helper
+before it attempts any automatic retry of a payment. If the prior attempt
+settled but its `fee_account` does not match the expected sponsor, the retry
+policy **refuses to retry automatically** and surfaces a configuration-level
+error instead.
+
+This is deliberate. A settled-but-unsponsored transaction means the facilitator
+configuration is wrong: the sponsor account is not the one the client expects,
+so retrying the same payment through the same facilitator is unlikely to help
+and could silently keep charging the wrong account. The mismatch is a
+misconfiguration the caller should fix, not something to retry around.
+
+When you see this error:
+
+1. Check that the facilitator's sponsor account matches the one you expect
+   (compare `fee_account` on the settled transaction against your configured
+   sponsor).
+2. Confirm the facilitator advertises `areFeesSponsored: true` in `/supported`
+   and that its sponsor account is funded.
+3. Fix the sponsor configuration, then retry the payment manually.
+
+Do not loop on automatic retries: the retry policy will keep declining until
+the sponsor configuration is corrected.
+
 ## If you run your own facilitator
 
 | Variable | Default | What it controls |
@@ -198,6 +224,7 @@ the ledger operation, and for a policy-governed payment that includes running
 | `fee_exceeds_maximum` | The payment's bid exceeded `MAX_TX_FEE_STROOPS` | Raise `MAX_TX_FEE_STROOPS`, or use the Vellar facilitator with its 500,000 default |
 | `settlement_refused: sponsor_balance_low` | Sponsor balance is below the hard floor | Fund the sponsor account with more XLM |
 | Settlement succeeds but the buyer was charged XLM | Fee sponsorship is not working | Check that the facilitator has a funded sponsor and advertises `areFeesSponsored: true` in `/supported` |
+| Retry policy declines to retry with a configuration-level fee-account mismatch error | A prior attempt settled but its `fee_account` does not match the expected sponsor | Fix the sponsor configuration (see [Fee sponsorship and the retry policy](#fee-sponsorship-and-the-retry-policy)); do not retry automatically |
 
 ## Next steps
 

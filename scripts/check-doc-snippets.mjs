@@ -21,7 +21,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+export const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PAGES = [
   "website/content/docs/getting-started/quickstart.md",
   "website/content/docs/x402.md",
@@ -72,16 +72,11 @@ if (orphaned.length > 0) {
   process.exit(1);
 }
 
-const outDir = path.join(root, ".doc-snippets");
-rmSync(outDir, { recursive: true, force: true });
-mkdirSync(outDir, { recursive: true });
-
-let extracted = 0;
-for (const page of PAGES) {
-  const md = readFileSync(path.join(root, page), "utf8");
+// Extracted so the doc-sync checker (scripts/check-doc-defaults.mjs) can reuse
+// the exact same fence/import-hoisting rules without importing this module's
+// top-level side effects (it writes files and shells out to tsc on import).
+export function extractSnippets(md) {
   const blocks = [...md.matchAll(/```ts\n([\s\S]*?)```/g)].map((m) => m[1]);
-  if (blocks.length === 0) continue;
-
   const imports = new Set();
   const bodies = [];
   for (const block of blocks) {
@@ -98,59 +93,79 @@ for (const page of PAGES) {
     }
     bodies.push(body.join("\n").trim());
   }
-
-  const [first, ...rest] = bodies;
-  const wrapped = rest
-    .filter((b) => b.length > 0)
-    .map((b, i) => `async function __snippet_${i + 2}() {\n${b}\n}\nvoid __snippet_${i + 2};`);
-  const file = [
-    `// GENERATED from ${page} by scripts/check-doc-snippets.mjs — do not edit.`,
-    [...imports].join("\n"),
-    PREAMBLES[page] ?? "",
-    first,
-    ...wrapped,
-    "export {};",
-  ]
-    .filter((part) => part.length > 0)
-    .join("\n\n");
-
-  const name = path.basename(page, ".md") + ".snippets.ts";
-  writeFileSync(path.join(outDir, name), file);
-  extracted += blocks.length;
-  console.log(`extracted ${blocks.length} ts block(s) from ${page} -> .doc-snippets/${name}`);
+  return { blocks, imports, bodies };
 }
 
-if (extracted === 0) {
-  console.error("no ts snippets extracted — PAGES out of date?");
-  process.exit(1);
-}
+function main() {
+  const outDir = path.join(root, ".doc-snippets");
+  rmSync(outDir, { recursive: true, force: true });
+  mkdirSync(outDir, { recursive: true });
 
-writeFileSync(
-  path.join(outDir, "tsconfig.json"),
-  JSON.stringify(
-    {
-      compilerOptions: {
-        noEmit: true,
-        strict: true,
-        target: "ES2022",
-        module: "ESNext",
-        moduleResolution: "bundler",
-        lib: ["ES2022", "DOM"],
-        skipLibCheck: true,
-        baseUrl: ".",
-        paths: { "vellar-sdk": ["../src/index.ts"], "vellar-sdk/*": ["../src/*"] },
+  let extracted = 0;
+  for (const page of PAGES) {
+    const md = readFileSync(path.join(root, page), "utf8");
+    const { blocks, imports, bodies } = extractSnippets(md);
+    if (blocks.length === 0) continue;
+
+    const [first, ...rest] = bodies;
+    const wrapped = rest
+      .filter((b) => b.length > 0)
+      .map((b, i) => `async function __snippet_${i + 2}() {\n${b}\n}\nvoid __snippet_${i + 2};`);
+    const file = [
+      `// GENERATED from ${page} by scripts/check-doc-snippets.mjs — do not edit.`,
+      [...imports].join("\n"),
+      PREAMBLES[page] ?? "",
+      first,
+      ...wrapped,
+      "export {};",
+    ]
+      .filter((part) => part.length > 0)
+      .join("\n\n");
+
+    const name = path.basename(page, ".md") + ".snippets.ts";
+    writeFileSync(path.join(outDir, name), file);
+    extracted += blocks.length;
+    console.log(`extracted ${blocks.length} ts block(s) from ${page} -> .doc-snippets/${name}`);
+  }
+
+  if (extracted === 0) {
+    console.error("no ts snippets extracted — PAGES out of date?");
+    process.exit(1);
+  }
+
+  writeFileSync(
+    path.join(outDir, "tsconfig.json"),
+    JSON.stringify(
+      {
+        compilerOptions: {
+          noEmit: true,
+          strict: true,
+          target: "ES2022",
+          module: "ESNext",
+          moduleResolution: "bundler",
+          lib: ["ES2022", "DOM"],
+          skipLibCheck: true,
+          baseUrl: ".",
+          paths: { "vellar-sdk": ["../src/index.ts"], "vellar-sdk/*": ["../src/*"] },
+        },
+        include: ["*.ts"],
       },
-      include: ["*.ts"],
-    },
-    null,
-    2,
-  ),
-);
+      null,
+      2,
+    ),
+  );
 
-try {
-  execFileSync("npx", ["tsc", "--noEmit", "-p", outDir], { cwd: root, stdio: "inherit" });
-} catch {
-  console.error("\ndoc snippets failed to typecheck against the current SDK — fix the docs (or the API drift) before merging.");
-  process.exit(1);
+  try {
+    execFileSync("npx", ["tsc", "--noEmit", "-p", outDir], { cwd: root, stdio: "inherit" });
+  } catch {
+    console.error("\ndoc snippets failed to typecheck against the current SDK — fix the docs (or the API drift) before merging.");
+    process.exit(1);
+  }
+  console.log("doc snippets typecheck clean");
 }
-console.log("doc snippets typecheck clean");
+
+// Only run when invoked directly, so tests can import extractSnippets/root
+// without triggering the tsc run.
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main();
+}

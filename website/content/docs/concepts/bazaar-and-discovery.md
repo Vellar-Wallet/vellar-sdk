@@ -125,7 +125,30 @@ own.
 > `400 {"error":"verified_only_unavailable","reason":"no_verdict_source_configured"}`.
 > The refusal names `ownerVerified` as the signal that does work.
 
+## Structurally unverifiable entries
+
+Some resource URLs can never pass ownership verification, no matter how many
+times they are retried or how long the facilitator waits. The SDK discovery
+client classifies these with a typed `catalog_entry_unverifiable` error, and
+the facilitator counts them in the `unverifiableEntries` field of `/health`
+(see [Limits](../operators/limits.md)). Three triggers make a URL
+structurally unverifiable:
+
+| Trigger | Example | Why it can never verify |
+| --- | --- | --- |
+| **http scheme** | `http://example.com/quote` | Requirement 1 is https only; http is rejected before a socket opens |
+| **loopback host** | `http://localhost:3000/quote`, `http://127.0.0.1/quote` | Loopback, private ranges and cloud-metadata addresses are refused by requirement 1 |
+| **route template URL** | `/users/{id}/quote` | A template is not a concrete URL; the verifier has nothing to fetch |
+
+These are permanent conditions, not transient failures. A retry, a cooldown
+expiry or a facilitator restart will not change the outcome, and the entry
+stays listed as unreachable for every agent reading the catalog. If you see
+`catalog_entry_unverifiable` for a resource you are considering, treat it as a
+hard no rather than a signal to wait. The fix is always on the seller side:
+advertise a concrete public https URL.
+
 ## Why metadata is untrusted
+=======
 
 Clients echo the resource block into the payment payload. That means every
 field in a listing arrives at the facilitator by way of a client, and the

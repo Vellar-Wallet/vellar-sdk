@@ -221,3 +221,83 @@ export class InvalidRequirementsError extends Error {
     this.name = "InvalidRequirementsError";
   }
 }
+
+// ── catalog entry verification ───────────────────────────────────────────────
+
+/**
+ * The three documented triggers that make a catalog entry's URL structurally
+ * unverifiable — i.e. it can never be verified, no matter how many times or how
+ * long the discovery client retries. Mirrors the `unverifiableEntries` count in
+ * website/content/docs/operators/limits.md.
+ *
+ * - `http-scheme`: a plaintext `http:` URL (no TLS to verify against).
+ * - `loopback-host`: a loopback host (`localhost`, `127.0.0.0/8`, `::1`).
+ * - `route-template`: a URL containing a route template placeholder (e.g.
+ *   `{id}`, `:id`, `<id>`), which is not a concrete resource address.
+ */
+export type CatalogEntryUnverifiableReason = "http-scheme" | "loopback-host" | "route-template";
+
+/**
+ * A discovered catalog entry whose URL can structurally never be verified. This
+ * is a permanent condition for the individual resource (as opposed to a
+ * transient network failure), so callers should not retry it.
+ */
+export class CatalogEntryUnverifiableError extends Error {
+  constructor(
+    readonly url: string,
+    readonly reason: CatalogEntryUnverifiableReason,
+  ) {
+    super(
+      `catalog entry URL ${JSON.stringify(url)} can never be verified (${reason}); ` +
+        "it is counted under unverifiableEntries and should not be retried.",
+    );
+    this.name = "CatalogEntryUnverifiableError";
+  }
+}
+
+/** Result of {@link classifyCatalogEntryUrl}: either verifiable, or the reason it never can be. */
+export type CatalogEntryUrlClassification =
+  | { verifiable: true }
+  | { verifiable: false; reason: CatalogEntryUnverifiableReason };
+
+const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+
+/** True for `localhost`, `127.0.0.0/8`, and `::1` (with or without brackets). */
+function isLoopbackHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  if (LOOPBACK_HOSTNAMES.has(host)) return true;
+  // 127.0.0.0/8 — any 127.x.y.z address is loopback.
+  if (/^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) return true;
+  return false;
+}
+
+/** True when the URL carries a route-template placeholder rather than a concrete path. */
+function hasRouteTemplate(url: string): boolean {
+  // `{id}` / `{id:uuid}` style, `:id` path segment style, and `<id>` style.
+  return /\{[^}]+\}/.test(url) || /(^|\/):[A-Za-z_][A-Za-z0-9_]*/.test(url) || /<[^>]+>/.test(url);
+}
+
+/**
+ * Classify a discovered catalog entry URL against the three documented triggers
+ * for a structurally-unverifiable entry (http scheme, loopback host, route
+ * template). Pure and side-effect free; the discovery client uses this to raise
+ * {@link CatalogEntryUnverifiableError} for a specific resource.
+ *
+ * A URL that fails to parse is treated as `route-template` (it is not a concrete
+ * verifiable address).
+ */
+export function classifyCatalogEntryUrl(url: string): CatalogEntryUrlClassification {
+  if (hasRouteTemplate(url)) return { verifiable: false, reason: "route-template" };
+
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return { verifiable: false, reason: "route-template" };
+  }
+
+  if (parsed.protocol === "http:") return { verifiable: false, reason: "http-scheme" };
+  if (isLoopbackHost(parsed.hostname)) return { verifiable: false, reason: "loopback-host" };
+
+  return { verifiable: true };
+}
