@@ -178,6 +178,63 @@ describe("createSessionStore teardown", () => {
     // No active timers remain after dispose (a leak would fail here by keeping
     // the interval scheduled).
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("dispose() prevents any further touch() operations from executing", async () => {
+    vi.useFakeTimers();
+    const storage = createMemoryStorageAdapter();
+    const save = vi.spyOn(storage, "save");
+    const store = createSessionStore(storage);
+
+    await store.getState().start(session);
+    const saveCountAfterStart = save.mock.calls.length;
+
+    store.getState().dispose();
+
+    // Attempt manual touch after dispose - should be no-op
+    await store.getState().touch(new Date("2026-07-16T12:00:00.000Z"));
+
+    // No additional saves should occur
+    expect(save.mock.calls.length).toBe(saveCountAfterStart);
+  });
+
+  it("dispose() can be called multiple times without side effects", async () => {
+    const storage = createMemoryStorageAdapter();
+    const store = createSessionStore(storage);
+    await store.getState().start(session);
+
+    // Multiple dispose calls should be idempotent
+    store.getState().dispose();
+    store.getState().dispose();
+    store.getState().dispose();
+
+    expect(store.getState().status).toBe("connected");
+    expect(store.getState().session).toEqual(session);
+  });
+
+  it("dispose() followed by start() allows normal operation", async () => {
+    vi.useFakeTimers();
+    const storage = createMemoryStorageAdapter();
+    const store = createSessionStore(storage, { refreshIntervalMs: 100 });
+
+    await store.getState().start(session);
+    store.getState().dispose();
+
+    // Start a new session after dispose
+    const newSession = { ...session, accountId: "CNEWACCOUNT456" };
+    await store.getState().start(newSession);
+
+    expect(store.getState().status).toBe("connected");
+    expect(store.getState().session?.accountId).toBe("CNEWACCOUNT456");
+
+    // Verify refresh polling works for new session
+    const save = vi.spyOn(storage, "save");
+    const initialCount = save.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(250);
+    expect(save.mock.calls.length).toBeGreaterThan(initialCount);
+  });
+});
+
 describe("createSessionStore — refresh & expiry edge cases", () => {
   it("refreshes lastActiveAt just before session expiry (boundary condition)", async () => {
     const storage = createMemoryStorageAdapter();
