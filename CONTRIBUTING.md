@@ -39,9 +39,29 @@ start — pull requests that don't follow them will be closed.
 5. **Questions go to the Telegram group.** Don't open issues for questions —
    ask in [our Telegram](https://t.me/+RWPCKXXJTj45Njk0).
 
+## Keeping docs and SDK constants in sync
+
+Some facilitator defaults are documented on the website and mirrored as
+constants in the SDK:
+
+- `website/content/docs/operators/configuration.md`
+- `website/content/docs/reference/fees.md`
+
+These pages are checked against the shared constants module by
+`scripts/check-doc-defaults.mjs`, which runs in CI as a dedicated
+`doc-sync` check (separate from the snippet checker). If you change a
+documented default on either side, **update the mirrored SDK constant in the
+same pull request** — the check fails when the docs and the constants
+disagree. Run it locally with:
+
+```sh
+node scripts/check-doc-defaults.mjs
+```
+
 ## Before you open a PR
 
 Make sure the package still typechecks, tests, and builds:
+=======
 
 ```sh
 npm install
@@ -71,6 +91,16 @@ local only). To run just that harness:
 ```sh
 npx vitest run src/client-backend-harness.test.ts
 ```
+
+### Facilitator error fixtures (canonical source)
+
+`src/x402-test-fixtures.ts` is the **canonical fixture source** for
+facilitator-error-mapping tests. It provides a reusable mocked facilitator
+response generator (including the four documented spend-control refusal
+reasons: `rate_limited_payto`, `rate_limited_url`, `spend_ceiling`, and
+`unbound_pool_exhausted`). New tests covering facilitator error conditions
+should build on this harness rather than hand-rolling their own mock
+responses, so the mapping stays consistent across suites.
 
 ### tx-rpc chaos test (network drops mid-poll)
 

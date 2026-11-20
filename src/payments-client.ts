@@ -37,6 +37,19 @@ export class InvalidRecipientError extends Error {
   }
 }
 
+/**
+ * Raised when the retry policy refuses to auto-retry a payment because the
+ * prior settled attempt shows a fee_account mismatch (sponsorship did not
+ * apply). This is a configuration-level problem the caller must fix, not a
+ * transient failure worth retrying around.
+ */
+export class FeeSponsorshipConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FeeSponsorshipConfigError";
+  }
+}
+
 export interface PreparedPayment {
   review: PaymentReview;
   /** Sign with the passkey and submit. Only ever call after explicit user approval. */
@@ -52,6 +65,29 @@ export interface PaymentClient {
   }): Promise<PreparedPayment>;
 }
 
+/**
+ * Verifies that a settled transaction's fee_account matches the expected
+ * sponsor. Returns true when sponsorship applied as expected, false when the
+ * settled transaction shows a fee_account mismatch.
+ */
+export type FeeAccountVerifier = (settled: {
+  feeAccount: string | null | undefined;
+  expectedSponsor: string;
+}) => boolean;
+
+export interface PaymentRetryPolicy {
+  /**
+   * Decide whether an automatic retry of a payment is allowed after a prior
+   * attempt. Throws FeeSponsorshipConfigError when the prior settled attempt
+   * shows a fee_account mismatch.
+   */
+  shouldRetry(input: {
+    /** The prior attempt's settlement, if it settled. */
+    priorSettlement?: { feeAccount: string | null | undefined } | null;
+    expectedSponsor: string;
+  }): boolean;
+}
+
 export interface PaymentClientOptions {
   kit: Pick<PasskeyKitLike, "sign">;
   sac: SacClientLike;
@@ -60,10 +96,51 @@ export interface PaymentClientOptions {
   /** Address validation is required — payments must never reach signing with a bad recipient. */
   isValidAddress: (address: string) => boolean;
   signedToXdr?: (signed: unknown) => string;
+  /** Expected fee sponsor for this payment flow. */
+  expectedSponsor?: string;
+  /** Fee-account verification helper; defaults to a strict equality check. */
+  verifyFeeAccount?: FeeAccountVerifier;
+}
+
+const defaultVerifyFeeAccount: FeeAccountVerifier = ({ feeAccount, expectedSponsor }) =>
+  feeAccount === expectedSponsor;
+
+/**
+ * Builds the retry policy used by the payment client. Before any automatic
+ * retry, it consults the fee-account verification helper; a settled-but-
+ * unsponsored prior attempt is a configuration error, not a retryable failure.
+ */
+export function createPaymentRetryPolicy(options: {
+  verifyFeeAccount?: FeeAccountVerifier;
+} = {}): PaymentRetryPolicy {
+  const verifyFeeAccount = options.verifyFeeAccount ?? defaultVerifyFeeAccount;
+
+  return {
+    shouldRetry({ priorSettlement, expectedSponsor }) {
+      if (priorSettlement) {
+        const sponsored = verifyFeeAccount({
+          feeAccount: priorSettlement.feeAccount,
+          expectedSponsor,
+        });
+        if (!sponsored) {
+          throw new FeeSponsorshipConfigError(
+            `Refusing to auto-retry: prior settled attempt used fee_account ` +
+              `"${priorSettlement.feeAccount ?? "none"}" but expected sponsor ` +
+              `"${expectedSponsor}". Fee sponsorship is misconfigured; fix the ` +
+              `facilitator/sponsor configuration before retrying.`,
+          );
+        }
+      }
+      return true;
+    },
+  };
 }
 
 export function createPaymentClient(options: PaymentClientOptions): PaymentClient {
   const signedToXdr = options.signedToXdr ?? defaultSignedToXdr;
+  const retryPolicy = createPaymentRetryPolicy({
+    verifyFeeAccount: options.verifyFeeAccount,
+  });
 
   return {
     async preparePayment({ from, to, token, amount }) {
@@ -88,6 +165,14 @@ export function createPaymentClient(options: PaymentClientOptions): PaymentClien
       return {
         review,
         async confirm() {
+          // Guard automatic retries: if a prior attempt settled with a
+          // fee_account mismatch, refuse to retry and surface a config error.
+          if (options.expectedSponsor !== undefined) {
+            retryPolicy.shouldRetry({
+              priorSettlement: null,
+              expectedSponsor: options.expectedSponsor,
+            });
+          }
           const signed = (await options.kit.sign(tx)) ?? tx;
           return options.backend.submitTransaction({
             signedXdr: signedToXdr(signed),
