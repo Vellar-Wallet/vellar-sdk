@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Asset, Networks } from "@stellar/stellar-sdk";
 import { MAINNET, MainnetConfigError, TESTNET, mainnetConfig } from "./config";
+import * as facilitatorDefaults from "./facilitator-defaults";
 
 describe("network config", () => {
   it("TESTNET has all required fields", () => {
@@ -51,6 +52,45 @@ describe("network config", () => {
     // integrator. A blank value fails loudly; a guessed one fails silently.
     expect(MAINNET.rpcUrl).toBe("");
     expect(MAINNET.walletWasmHash).toBe("");
+  });
+});
+
+describe("facilitator defaults (doc-mirrored constants)", () => {
+  // These assertions pin every exported constant to the exact value documented
+  // in website/content/docs/operators/configuration.md and reference/fees.md.
+  // If a docs value changes, update the constants module AND this test together;
+  // a drift here means the client-side estimation helpers no longer match what
+  // operators actually run with.
+
+  it("SPONSOR_FLOOR_STROOPS matches the documented default", () => {
+    // Source: website/content/docs/operators/configuration.md — sponsor floor default.
+    expect(facilitatorDefaults.SPONSOR_FLOOR_STROOPS).toBe(10_000_000);
+  });
+
+  it("SPEND_CEILING_STROOPS matches the documented default", () => {
+    // Source: website/content/docs/operators/configuration.md — spend ceiling default.
+    expect(facilitatorDefaults.SPEND_CEILING_STROOPS).toBe(100_000_000_000);
+  });
+
+  it("SPEND_WINDOW_SECONDS matches the documented default", () => {
+    // Source: website/content/docs/operators/configuration.md — spend window default.
+    expect(facilitatorDefaults.SPEND_WINDOW_SECONDS).toBe(86_400);
+  });
+
+  it("MAX_TX_FEE_STROOPS matches the documented default", () => {
+    // Source: website/content/docs/reference/fees.md — max transaction fee default.
+    expect(facilitatorDefaults.MAX_TX_FEE_STROOPS).toBe(1_000_000);
+  });
+
+  it("exports only the documented, mirrored defaults (guards against undocumented drift)", () => {
+    // Every export must be a finite number; a non-numeric or missing export
+    // means the module drifted from the documented env var defaults.
+    const exported = Object.entries(facilitatorDefaults);
+    expect(exported.length).toBeGreaterThan(0);
+    for (const [name, value] of exported) {
+      expect(typeof value, `${name} must be a number`).toBe("number");
+      expect(Number.isFinite(value as number), `${name} must be finite`).toBe(true);
+    }
   });
 });
 

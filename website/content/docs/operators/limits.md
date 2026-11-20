@@ -95,7 +95,35 @@ curl -s https://vellar-facilitator.onrender.com/health | python3 -m json.tool
 | `channelPool.available` | Channel accounts available for settlement. `50` means the pool is fully healthy |
 | `commit` | The git commit hash currently serving |
 
-> **Note:** `unverifiableEntries` is absent when zero, not `0`. A healthy catalog does not carry the key at all, so check for the key's presence rather than its value. Absence means nothing is wrong.
+### Guaranteed versus optional fields
+
+The parser in the SDK helper distinguishes two classes of field:
+
+- **Guaranteed present:** `status`, `catalogSize`, `reverifyPending`, `channelPool.available`, and `commit`. These are always emitted by the facilitator, so a missing one is a genuine parse failure.
+- **Documented-optional:** `unverifiableEntries` is absent when zero, not `0`. A healthy catalog does not carry the key at all, so check for the key's presence rather than its value. Absence means nothing is wrong, and the parser defaults it to `0` rather than treating it as an error.
+
+> **Note:** The SDK health-check helper parses this response into a typed result and never throws merely because a documented-optional field is omitted. If you are hand-rolling a check, mirror that behavior: only `unverifiableEntries` is safe to treat as absent-means-zero.
+
+## Verifying a deployment from CI
+
+The `commit` field is the git commit hash currently serving. That makes it directly useful for a post-deploy smoke test: after you deploy your own facilitator, assert the live commit matches the one you just shipped before running integration tests against it.
+
+The SDK exposes a `compareCommit` helper for exactly this. It compares the live `commit` field against an expected hash and reports a clear mismatch instead of silently passing:
+
+```js
+import { fetchHealth, compareCommit } from '@vellar/facilitator-sdk';
+
+const health = await fetchHealth('https://your-facilitator.example.com');
+const result = compareCommit(health, process.env.EXPECTED_COMMIT);
+
+if (!result.matches) {
+  throw new Error(
+    `deploy not live: expected ${result.expected}, got ${result.actual}`,
+  );
+}
+```
+
+A mismatch is reported explicitly (with both the expected and actual hashes) rather than being ignored, so a stale deployment fails the CI step loudly. This is a deploy-verification aid for anyone running CI against their own self-hosted facilitator; the hosted testnet instance is not a stable target for commit assertions.
 
 ## Running your own instance
 

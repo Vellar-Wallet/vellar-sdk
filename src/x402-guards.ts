@@ -231,10 +231,175 @@ export function decodeSettleResponseHeader(res: Response): SettleResult | undefi
  *
  * A response with no settle header at all is a verify-stage rejection: it is
  * deterministic (an over-budget payment stays over budget) and must not retry.
+ *
+ * Prefer {@link classifySettlementFailure} for general failure handling; this
+ * boolean is kept for callers that only need the retry decision.
  */
 export function isRetryableSettleFailure(settle: SettleResult | undefined): boolean {
   if (!settle) return false;
   return settle.success === false && !settle.transaction;
+}
+
+// ── settlement failure classification ────────────────────────────────────────
+
+/**
+ * The documented settlement failure reason codes, and whether each is safe to
+ * retry with a freshly signed payload.
+ *
+ * The rule is the same one {@link isRetryableSettleFailure} applies: a failure
+ * that never reached the chain (empty `transaction`) is retry-safe; anything
+ * that was submitted is terminal. The per-code flags below must never disagree
+ * with the transaction-field rule — see the consistency test.
+ */
+export const SETTLEMENT_FAILURE_REASONS = {
+  /** Failed before submission (verify/sign/send). Nothing spent. */
+  settle_exact_stellar_transaction_submission_failed: true,
+  /** Facilitator could not verify the payload. Deterministic. */
+  settle_exact_stellar_transaction_verification_failed: false,
+  /** Transaction was submitted and then failed on-chain. Fees charged. */
+  settle_exact_stellar_transaction_failed: false,
+  /** The payer's signature was rejected. Deterministic. */
+  settle_exact_stellar_invalid_signature: false,
+  /** The payment amount did not match the requirement. Deterministic. */
+  settle_exact_stellar_amount_mismatch: false,
+  /** The payment was already settled (replay). Deterministic. */
+  settle_exact_stellar_already_settled: false,
+} as const satisfies Record<string, boolean>;
+
+/** A documented settlement failure reason code. */
+export type SettlementFailureReason = keyof typeof SETTLEMENT_FAILURE_REASONS;
+
+/** The result of {@link classifySettlementFailure}. */
+export interface SettlementFailureClassification {
+  /** True only when nothing was spent and a freshly signed retry is safe. */
+  retryable: boolean;
+  /** Human-readable explanation of the classification. */
+  reason: string;
+  /** The facilitator's reason code, when it echoed one. */
+  errorReason?: string;
+}
+
+/**
+ * The RECOMMENDED single entry point for handling an arbitrary settlement
+ * failure.
+ *
+ * Applies the core documented rule — an EMPTY `transaction` field is retry-safe,
+ * a NON-EMPTY one never is — BEFORE considering the specific reason code, so a
+ * caller does not need to pattern-match every reason itself. The more specific
+ * typed errors in this batch (each carrying its own `retryable` flag) are
+ * specialisations of this same rule and must agree with it; see
+ * {@link SettlementFailureError} and its subclasses.
+ *
+ * Cases:
+ *  - no settle header at all → not retryable (deterministic verify rejection).
+ *  - `success: false` with an empty/absent `transaction` → retryable.
+ *  - a non-empty `transaction` → never retryable (fees were charged).
+ *  - `success: true` or a non-failure → not retryable (nothing to retry).
+ */
+export function classifySettlementFailure(
+  settle: SettleResult | undefined,
+): SettlementFailureClassification {
+  if (!settle) {
+    return {
+      retryable: false,
+      reason: "the response carried no settlement information",
+    };
+  }
+
+  const errorReason = settle.errorReason;
+
+  // The transaction field is inspected FIRST, before the reason code.
+  if (settle.transaction) {
+    return {
+      retryable: false,
+      reason: `the settlement carried transaction ${settle.transaction} — fees were charged`,
+      ...(errorReason !== undefined ? { errorReason } : {}),
+    };
+  }
+
+  if (settle.success === false) {
+    return {
+      retryable: true,
+      reason: errorReason ?? "the facilitator reported failure before submission",
+      ...(errorReason !== undefined ? { errorReason } : {}),
+    };
+  }
+
+  return {
+    retryable: false,
+    reason: "the settlement did not report a failure",
+    ...(errorReason !== undefined ? { errorReason } : {}),
+  };
+}
+
+/**
+ * Base class for typed settlement failures. Each subclass carries a `retryable`
+ * flag that MUST agree with {@link classifySettlementFailure} for its reason
+ * code — the consistency test enforces this across every documented code.
+ *
+ * Prefer {@link classifySettlementFailure} when handling an arbitrary failure;
+ * these subclasses exist for callers that want to branch on a specific code.
+ */
+export class SettlementFailureError extends Error {
+  readonly errorReason: string;
+  readonly retryable: boolean;
+  readonly transaction?: string;
+
+  constructor(errorReason: string, retryable: boolean, transaction?: string) {
+    super(`Settlement failed (${errorReason})${retryable ? " — retry-safe" : " — terminal"}.`);
+    this.name = "SettlementFailureError";
+    this.errorReason = errorReason;
+    this.retryable = retryable;
+    if (transaction !== undefined) this.transaction = transaction;
+  }
+}
+
+/** Failed before submission; nothing was spent, so a retry is safe. */
+export class SettlementSubmissionFailedError extends SettlementFailureError {
+  constructor(transaction?: string) {
+    super("settle_exact_stellar_transaction_submission_failed", true, transaction);
+    this.name = "SettlementSubmissionFailedError";
+  }
+}
+
+/** Verification failed; deterministic, never retry. */
+export class SettlementVerificationFailedError extends SettlementFailureError {
+  constructor(transaction?: string) {
+    super("settle_exact_stellar_transaction_verification_failed", false, transaction);
+    this.name = "SettlementVerificationFailedError";
+  }
+}
+
+/** Submitted and failed on-chain; fees were charged, never retry. */
+export class SettlementTransactionFailedError extends SettlementFailureError {
+  constructor(transaction?: string) {
+    super("settle_exact_stellar_transaction_failed", false, transaction);
+    this.name = "SettlementTransactionFailedError";
+  }
+}
+
+/** Invalid signature; deterministic, never retry. */
+export class SettlementInvalidSignatureError extends SettlementFailureError {
+  constructor(transaction?: string) {
+    super("settle_exact_stellar_invalid_signature", false, transaction);
+    this.name = "SettlementInvalidSignatureError";
+  }
+}
+
+/** Amount mismatch; deterministic, never retry. */
+export class SettlementAmountMismatchError extends SettlementFailureError {
+  constructor(transaction?: string) {
+    super("settle_exact_stellar_amount_mismatch", false, transaction);
+    this.name = "SettlementAmountMismatchError";
+  }
+}
+
+/** Already settled (replay); deterministic, never retry. */
+export class SettlementAlreadySettledError extends SettlementFailureError {
+  constructor(transaction?: string) {
+    super("settle_exact_stellar_already_settled", false, transaction);
+    this.name = "SettlementAlreadySettledError";
+  }
 }
 
 /** A Stellar transaction hash: 32 bytes, hex. */
