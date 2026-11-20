@@ -85,6 +85,67 @@ export const MAINNET: NetworkConfig = {
   usdcContractId: "CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75",
 };
 
+// ---------------------------------------------------------------------------
+// Mirrored facilitator operator defaults.
+//
+// SINGLE SOURCE OF TRUTH for the numeric defaults documented for the
+// facilitator operator env vars. Estimation helpers (sponsor floors, spend
+// ceiling/window, fee ceiling, settlement limits, channel-account minimums)
+// import from here instead of hardcoding their own copies, so a docs change is
+// a one-line edit in this module.
+//
+// These values mirror the documented defaults in:
+//   - website/content/docs/operators/configuration.md
+//   - website/content/docs/reference/fees.md
+//
+// UPDATE THIS MODULE whenever those docs values change. config.test.ts asserts
+// every constant below matches the documented default exactly.
+// ---------------------------------------------------------------------------
+
+/** Max transaction fee (stroops) the facilitator will pay. */
+// Source: website/content/docs/reference/fees.md (MAX_TX_FEE_STROOPS default).
+export const MAX_TX_FEE_STROOPS = 500_000;
+
+/** Soft sponsor-balance floor (stroops): below this, estimation warns. */
+// Source: website/content/docs/operators/configuration.md (SPONSOR_SOFT_FLOOR_STROOPS default).
+export const SPONSOR_SOFT_FLOOR_STROOPS = 250_000_000;
+
+/** Hard sponsor-balance floor (stroops): below this, estimation refuses. */
+// Source: website/content/docs/operators/configuration.md (SPONSOR_HARD_FLOOR_STROOPS default).
+export const SPONSOR_HARD_FLOOR_STROOPS = 100_000_000;
+
+/** Per-window spend ceiling (stroops) for a sponsor account. */
+// Source: website/content/docs/operators/configuration.md (SPEND_CEILING_STROOPS default).
+export const SPEND_CEILING_STROOPS = 50_000_000;
+
+/** Length of the rolling spend window, in milliseconds. */
+// Source: website/content/docs/operators/configuration.md (SPEND_WINDOW_MS default).
+export const SPEND_WINDOW_MS = 60_000;
+
+/** Length of the settlement rate-limit window, in milliseconds. */
+// Source: website/content/docs/operators/configuration.md (SETTLE_RATE_WINDOW_MS default).
+export const SETTLE_RATE_WINDOW_MS = 60_000;
+
+/** Max settlements per URL within the rate window. */
+// Source: website/content/docs/operators/configuration.md (SETTLE_PER_URL_MAX default).
+export const SETTLE_PER_URL_MAX = 10;
+
+/** Max settlements per pay-to address within the rate window. */
+// Source: website/content/docs/operators/configuration.md (SETTLE_PER_PAYTO_MAX default).
+export const SETTLE_PER_PAYTO_MAX = 50;
+
+/** Max settlements from the unbound pool within the rate window. */
+// Source: website/content/docs/operators/configuration.md (SETTLE_UNBOUND_POOL_MAX default).
+export const SETTLE_UNBOUND_POOL_MAX = 10;
+
+/** Minimum balance (stroops) a channel account must hold. */
+// Source: website/content/docs/operators/configuration.md (CHANNEL_ACCOUNT_MIN_STROOPS default).
+export const CHANNEL_ACCOUNT_MIN_STROOPS = 5_000_000;
+
+/** How often (ms) the sponsor-balance monitor polls. */
+// Source: website/content/docs/operators/configuration.md (SPONSOR_BALANCE_INTERVAL_MS default).
+export const SPONSOR_BALANCE_INTERVAL_MS = 60_000;
+
 export class MainnetConfigError extends Error {
   constructor(message: string) {
     super(message);
