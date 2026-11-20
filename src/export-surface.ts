@@ -31,4 +31,6 @@ export const EXPERIMENTAL_EXPORTS = [
   "createX402Facade",
   "X402NotConfiguredError",
   "MaxAmountExceededError",
+  "suggestMaxTxFeeStroops",
+  "checkFacilitatorLiveness",
 ] as const;

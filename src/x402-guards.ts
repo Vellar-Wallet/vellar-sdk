@@ -23,6 +23,10 @@ import {
   type PaymentRequirements,
   type X402PayOptions,
 } from "./x402-types";
+import {
+  MEASURED_FEE_BIDS,
+  type MeasuredPaymentType,
+} from "./x402-budget-attributes";
 
 // The errors these guards throw, re-exported so a consumer importing
 // "vellar-sdk/x402-guards" can catch them without also importing the wallet.
@@ -328,4 +332,87 @@ export function decodeSettlementHeader(
   const decoded = decodeSettleResponseHeader(res);
   if (!decoded?.transaction) return undefined;
   return { transaction: decoded.transaction, payer: decoded.payer };
+}
+
+// ── fee-bid ceiling estimation ───────────────────────────────────────────────
+
+/**
+ * The measured fee-bid range for one payment type, in stroops.
+ *
+ * Sourced from {@link MEASURED_FEE_BIDS} so the numbers live in exactly one
+ * place and are easy to refresh when a new measurement is taken.
+ */
+export interface MeasuredFeeBidRange {
+  /** Lowest measured inclusion fee bid, in stroops. */
+  min: number;
+  /** Highest measured inclusion fee bid, in stroops. */
+  max: number;
+}
+
+/**
+ * The result of reconciling a `MAX_TX_FEE_STROOPS` ceiling against a measured
+ * fee-bid range.
+ *
+ * `likelyToRefuse` is the headline: when true, a payment of this type whose
+ * bid lands inside the measured range would exceed the ceiling and the
+ * facilitator would refuse it with `fee_exceeds_maximum`.
+ */
+export interface FeeBidCeilingEstimate {
+  /** The ceiling that was checked, in stroops. */
+  maxTxFeeStroops: number;
+  /** The payment type the ceiling was checked against. */
+  paymentType: MeasuredPaymentType;
+  /** The measured bid range for that payment type, in stroops. */
+  measured: MeasuredFeeBidRange;
+  /** True when the ceiling is below the measured range's upper bound. */
+  likelyToRefuse: boolean;
+  /**
+   * How many stroops the ceiling falls short of the measured upper bound.
+   * Zero (or negative, clamped to zero) when the ceiling covers the range.
+   */
+  shortfallStroops: number;
+  /** A human-readable explanation, suitable for a log line or doc example. */
+  reason: string;
+}
+
+/**
+ * Estimate whether a `MAX_TX_FEE_STROOPS` ceiling is high enough to cover a
+ * given payment type, by comparing it against the measured fee-bid range.
+ *
+ * This is the arithmetic behind the worked example in
+ * `website/content/docs/reference/fees.md`: a policy-governed smart-account
+ * payment was measured bidding up to 85,999 stroops, so a ceiling below that
+ * upper bound is flagged as likely to cause `fee_exceeds_maximum` refusals.
+ *
+ * Pure (no network, no SDK), so it can be called from a config check, a test,
+ * or a doc snippet.
+ *
+ * @example
+ * ```ts
+ * const est = estimateFeeBidRefusal(50_000, "policy-governed");
+ * // est.likelyToRefuse === true
+ * // est.shortfallStroops === 35_999
+ * ```
+ */
+export function estimateFeeBidRefusal(
+  maxTxFeeStroops: number,
+  paymentType: MeasuredPaymentType,
+): FeeBidCeilingEstimate {
+  const measured = MEASURED_FEE_BIDS[paymentType];
+  const shortfallStroops = Math.max(0, measured.max - maxTxFeeStroops);
+  const likelyToRefuse = maxTxFeeStroops < measured.max;
+  const reason = likelyToRefuse
+    ? `MAX_TX_FEE_STROOPS=${maxTxFeeStroops} is below the measured ${paymentType} fee-bid range ` +
+      `(${measured.min}–${measured.max} stroops); payments bidding above the ceiling are likely ` +
+      `to be refused with fee_exceeds_maximum (short by ${shortfallStroops} stroops).`
+    : `MAX_TX_FEE_STROOPS=${maxTxFeeStroops} covers the measured ${paymentType} fee-bid range ` +
+      `(${measured.min}–${measured.max} stroops).`;
+  return {
+    maxTxFeeStroops,
+    paymentType,
+    measured: { min: measured.min, max: measured.max },
+    likelyToRefuse,
+    shortfallStroops,
+    reason,
+  };
 }
