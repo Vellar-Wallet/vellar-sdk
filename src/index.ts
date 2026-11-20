@@ -30,6 +30,7 @@ export * from "./x402-request-auth";
 export * from "./session";
 export * from "./tx-status";
 export * from "./circuit-breaker";
+export * from "./operator-config";
 
 /** Stable v1 API — breaking changes only in major semver releases. */
 export * from "./v1-exports";
