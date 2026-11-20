@@ -9,9 +9,11 @@ import { describe, expect, it, vi } from "vitest";
 import { createX402Client, expirationOffsetFor, type FetchLike } from "./x402-client";
 import {
   DisallowedAssetError,
+  FeeExceedsMaximumError,
   InvalidRequirementsError,
   MaxAmountExceededError,
   NoUsablePaymentOptionError,
+  SettlementFailedError,
   X402NotConfiguredError,
   type SmartAccountX402Signer,
 } from "./x402-types";
@@ -343,6 +345,39 @@ describe("budgetAttributes (#225) — attribute-scoped budget checked before sig
     await expect(
       c.createPayment(requirements(), { maxAmount: 10_000_000n }),
     ).rejects.toBeInstanceOf(BudgetAttributeDeniedError);
+  });
+});
+
+describe("fee_exceeds_maximum (#793) — typed ceiling error from the facilitator", () => {
+  it("throws FeeExceedsMaximumError carrying the facilitator-reported ceiling", async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          error: "fee_exceeds_maximum",
+          message: "payment bid exceeds MAX_TX_FEE_STROOPS",
+          maxTxFeeStroops: 500_000,
+        }),
+        { status: 402, headers: { "content-type": "application/json" } },
+      ),
+    );
+    const c = client(fetchImpl);
+    const err = await c.fetch("https://res.test/paid", { maxAmount: 10_000_000n }).catch((e) => e);
+    expect(err).toBeInstanceOf(FeeExceedsMaximumError);
+    expect(err).not.toBeInstanceOf(SettlementFailedError);
+    expect((err as FeeExceedsMaximumError).maxTxFeeStroops).toBe(500_000);
+  });
+
+  it("still throws FeeExceedsMaximumError when the ceiling is absent from the response", async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ error: "fee_exceeds_maximum" }), {
+        status: 402,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const c = client(fetchImpl);
+    const err = await c.fetch("https://res.test/paid", { maxAmount: 10_000_000n }).catch((e) => e);
+    expect(err).toBeInstanceOf(FeeExceedsMaximumError);
+    expect((err as FeeExceedsMaximumError).maxTxFeeStroops).toBeUndefined();
   });
 });
 

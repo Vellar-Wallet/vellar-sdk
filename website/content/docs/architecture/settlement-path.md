@@ -80,6 +80,17 @@ faith, because Horizon shows both fields on every settled transaction. See
    reads as `source_account` = the channel account (for example
    `GBG5UKF4EXHYOFQFHOO263NTZRFUSXKBRUOAPDZEKISA7CPLABH7ONV4`) and `fee_account`
    = the sponsor.
+
+   > **Note:** The SDK's own payment submission path does not build this
+   > fee-bump wrapper. It emits a plain transaction with the sponsor as
+   > `source_account` and no CAP-15 fee-bump envelope. The regression test in
+   > `src/x402-client.test.ts` asserts exactly that shape, and confirms the
+   > structural-conditions helper classifies a fee-bump-wrapped envelope as a
+   > different shape from the plain transaction Vellar submits. This is not a
+   > bug in SDK transaction building: the v1 explorer classifier required a
+   > CAP-15 fee-bump wrapper and therefore missed Vellar settlements entirely.
+   > That historical classification gap is fixed in v2, which covers the
+   > plain-transaction shape documented here.
 4. **On success, run the Bazaar catalog hook.** Cataloging happens on settle, not
    on verify. A cataloging failure never affects the settlement result: the
    payment stands regardless, and the reason is reported separately in the
