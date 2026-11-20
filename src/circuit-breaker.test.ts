@@ -200,4 +200,35 @@ describe("createCircuitBreakingBackend", () => {
       hash: "abc",
     });
   });
+
+  it("handles concurrent failures correctly without race conditions", async () => {
+    const clock = fakeClock();
+    const breaker = createCircuitBreaker({
+      failureThreshold: 3,
+      openDurationMs: 5_000,
+      now: clock.now,
+    });
+    const real = {
+      submitTransaction: async (_input: { signedXdr: string }) =>
+        Promise.reject(new Error("service unavailable")),
+    };
+    const wrapped = createCircuitBreakingBackend(real, breaker);
+
+    // Launch multiple concurrent failing calls
+    const results = await Promise.allSettled([
+      wrapped.submitTransaction({ signedXdr: "x1" }),
+      wrapped.submitTransaction({ signedXdr: "x2" }),
+      wrapped.submitTransaction({ signedXdr: "x3" }),
+      wrapped.submitTransaction({ signedXdr: "x4" }),
+    ]);
+
+    // All should fail, but circuit should open after threshold
+    expect(results.every((r) => r.status === "rejected")).toBe(true);
+    expect(breaker.state).toBe("open");
+    
+    // Subsequent calls should fast-fail with CircuitOpenError
+    await expect(wrapped.submitTransaction({ signedXdr: "x5" })).rejects.toBeInstanceOf(
+      CircuitOpenError,
+    );
+  });
 });
