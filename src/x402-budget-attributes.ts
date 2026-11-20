@@ -299,3 +299,120 @@ export function createInMemoryBudgetAttributeTracker(): BudgetAttributeTracker {
     },
   };
 }
+
+// ---------------------------------------------------------------------------
+// MAX_TX_FEE_STROOPS suggestion helper (#830)
+// ---------------------------------------------------------------------------
+//
+// website/content/docs/reference/fees.md advises raising MAX_TX_FEE_STROOPS
+// for a facilitator serving smart-account buyers, since their measured fees run
+// higher than classic keypair payments. This helper turns that prose guidance
+// into a concrete suggested override, so an operator does not have to guess.
+//
+// The measured ranges below are copied from fees.md. Keep them in sync if the
+// measurements are refreshed — everything else derives from this table.
+
+/** The payment shapes fees.md documents measured fee ranges for. */
+export type MeasuredFeePaymentType = "exact-classic" | "exact-policy-governed" | "upto-smart-account";
+
+/** Measured MAX_TX_FEE_STROOPS ranges from fees.md, in stroops. `high` is the
+ * documented upper bound of the measured range (equal to `low` for a single
+ * measured value). */
+export const MEASURED_MAX_TX_FEE_STROOPS: Readonly<
+  Record<MeasuredFeePaymentType, { readonly low: bigint; readonly high: bigint }>
+> = Object.freeze({
+  "exact-classic": { low: 23_059n, high: 28_711n },
+  "exact-policy-governed": { low: 85_999n, high: 85_999n },
+  "upto-smart-account": { low: 39_949n, high: 39_949n },
+});
+
+/** Headroom multiplier applied to the measured upper bound: 2x, so a suggested
+ * override comfortably exceeds the documented measurement rather than sitting
+ * right at its edge. */
+const MAX_TX_FEE_HEADROOM_MULTIPLIER = 2n;
+
+/**
+ * Suggest a safe `MAX_TX_FEE_STROOPS` override for a facilitator expecting the
+ * given payment type, based on the measured ranges in fees.md.
+ *
+ * Returns 2x the documented upper bound (rounded up to a whole stroop), which
+ * leaves reasonable headroom above the measured range. Operator-facing
+ * guidance for anyone configuring a self-hosted facilitator — this SDK does not
+ * apply the value itself.
+ *
+ * Throws {@link InvalidBudgetAttributeRuleError} on an unknown payment type.
+ */
+export function suggestMaxTxFeeStroops(paymentType: MeasuredFeePaymentType): bigint {
+  const measured = MEASURED_MAX_TX_FEE_STROOPS[paymentType];
+  if (!measured) {
+    throw new InvalidBudgetAttributeRuleError(
+      `unknown payment type for MAX_TX_FEE_STROOPS suggestion: ${JSON.stringify(paymentType)} ` +
+        `(expected one of ${Object.keys(MEASURED_MAX_TX_FEE_STROOPS).join(", ")})`,
+    );
+  }
+  // BigInt division truncates; add the divisor - 1 to round up.
+  const scaled = measured.high * MAX_TX_FEE_HEADROOM_MULTIPLIER;
+  return scaled;
+}
+
+// ---------------------------------------------------------------------------
+// Local spend-window prediction (#828)
+// ---------------------------------------------------------------------------
+//
+// The facilitator enforces SPEND_CEILING_STROOPS over a rolling SPEND_WINDOW_MS
+// window. This helper mirrors that accounting locally so a caller can predict
+// when the facilitator would refuse — but it is an ESTIMATE. Local and server
+// clocks are not guaranteed aligned, and a facilitator restart resets its
+// server-side windows while local state persists, so the two can drift. Never
+// treat a local "still under budget" as authoritative.
+
+/** One attempted payment in a spend-window sequence. */
+export interface SpendWindowAttempt {
+  /** Amount in the asset's base units. */
+  amount: bigint;
+  /** When the attempt happens (for window accounting). */
+  at: Date;
+}
+
+/**
+ * Predict the index of the first attempt at which the facilitator's documented
+ * spend-window accounting would refuse with a `spend_ceiling` error, given
+ * `SPEND_CEILING_STROOPS` and `SPEND_WINDOW_MS`.
+ *
+ * Returns the 0-based index of the first attempt whose cumulative spend within
+ * the trailing `windowMs` (measured from that attempt's `at`) would exceed
+ * `ceilingStroops`, or `-1` when no attempt in the sequence would be refused.
+ *
+ * This is a LOCAL ESTIMATE: it assumes the local clock matches the
+ * facilitator's window clock and that the facilitator has not restarted (which
+ * resets server-side windows). See the module docs for the drift caveat.
+ */
+export function predictSpendWindowRefusal(
+  ceilingStroops: bigint,
+  windowMs: number,
+  attempts: readonly SpendWindowAttempt[],
+): number {
+  if (ceilingStroops <= 0n) {
+    throw new InvalidBudgetAttributeRuleError(
+      `SPEND_CEILING_STROOPS must be positive: got ${ceilingStroops}`,
+    );
+  }
+  if (!Number.isFinite(windowMs) || windowMs <= 0) {
+    throw new InvalidBudgetAttributeRuleError(
+      `SPEND_WINDOW_MS must be a positive finite number: got ${JSON.stringify(windowMs)}`,
+    );
+  }
+  for (let i = 0; i < attempts.length; i++) {
+    const attempt = attempts[i]!;
+    const windowStart = attempt.at.getTime() - windowMs;
+    let cumulative = 0n;
+    for (let j = 0; j <= i; j++) {
+      const prior = attempts[j]!;
+      if (prior.at.getTime() > windowStart) {
+        cumulative += prior.amount;
+      }
+    }
+    if (cumulative > ceilingStroops) return i;
+  }
+  return -1;
+}

@@ -519,6 +519,20 @@ Things a developer building against the hosted instance should know up front:
   `spend_ceiling`, `unbound_pool_exhausted` — refuse on pubnet; on testnet
   they are logged as would-reject and the settlement proceeds, so you
   cannot test your handling of a real one there.
+- **Local spend-window accounting is an estimate, not a guarantee.** The
+  SDK's spend-window helper mirrors the facilitator's documented
+  `SPEND_CEILING_STROOPS` and `SPEND_WINDOW_MS` semantics so a client can
+  predict when a spend control will refuse a payment — but it is a *local*
+  estimate of *server-side* state, and the two can drift. The facilitator's
+  window clock is authoritative and is not shared with clients; a restart of
+  the facilitator (the hosted free tier restarts and sleeps freely — see
+  above) resets its server-side windows, so a local helper that still counts
+  earlier spend will under-predict remaining budget, while a local helper
+  that has lost its own state will over-predict it. Treat the helper's
+  remaining-budget figure as a hint for avoiding avoidable refusals, never as
+  a guarantee that a payment will settle: always handle a `spend_ceiling`
+  refusal from `/settle` as a normal outcome. The SDK reference doc covering
+  the spend-window helper carries the same limitation note.
 - **Debug a "not working" paid route with `GET`, not `HEAD`.** `curl -I`
   returns a plain `200` on a paid route — HEAD doesn't carry the payment
   challenge, so a correctly wired route looks broken. Use `GET`.

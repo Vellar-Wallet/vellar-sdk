@@ -97,6 +97,26 @@ curl -s https://vellar-facilitator.onrender.com/health | python3 -m json.tool
 
 > **Note:** `unverifiableEntries` is absent when zero, not `0`. A healthy catalog does not carry the key at all, so check for the key's presence rather than its value. Absence means nothing is wrong.
 
+### Classifying liveness with `checkFacilitatorLiveness`
+
+Reading the fields by hand works, but the SDK ships a wrapper that combines them into a single verdict. `checkFacilitatorLiveness` fetches `/health` with a timeout and returns one of three classifications:
+
+| Classification | Meaning | What to do |
+| --- | --- | --- |
+| `unreachable` | The `/health` fetch failed or timed out. The facilitator may be cold-starting, down, or the network is broken | Retry with a longer timeout (cold start is about 45 seconds), then treat it as down |
+| `reachable-unhealthy` | The service answered, but the documented fields report a concerning internal state | The service is up but degraded. Inspect the reported fields before sending verify or settle traffic |
+| `reachable-healthy` | The service answered and every documented field is within its healthy range | Proceed |
+
+A reachable facilitator counts as `reachable-unhealthy` when any of the following hold:
+
+- `status` is present and is not `"ok"`.
+- `channelPool.available` is `0` (no channel accounts left for settlement; `50` is fully healthy).
+- `unverifiableEntries` is present and greater than `0` (a permanent catalog issue, not a transient one).
+
+`commit` is carried through on the result so you can record which build answered, but it does not affect the classification. The `unverifiableEntries` check follows the same presence rule as the raw endpoint: the key is absent when zero, so absence is healthy.
+
+> **Note:** `unreachable` and `reachable-unhealthy` are different failures. An `unreachable` result tells you nothing about the facilitator's internal state, so do not interpret it as a catalog or pool problem. A `reachable-unhealthy` result means the service is answering and the problem is inside it.
+
 ## Running your own instance
 
 The hosted instance is not a dependency. The code is in the facilitator repo and runs in one command.

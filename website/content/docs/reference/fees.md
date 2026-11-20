@@ -37,7 +37,78 @@ estimates.
 | exact, policy-governed smart account | 85,999 stroops | about 0.0086 XLM |
 | upto, smart account | 39,949 stroops | about 0.0040 XLM |
 
+### Reconciling a custom ceiling against the measured fee
+
+The default `MAX_TX_FEE_STROOPS` of 500,000 comfortably covers the measured
+85,999 stroop policy-governed fee. If you have lowered your own facilitator's
+ceiling, or you are estimating against a custom self-hosted instance, work
+through the arithmetic before you deploy.
+
+The fee-bid estimation helper takes your configured ceiling and the payment
+type you expect, and reports whether the ceiling clears the measured range:
+
+```ts
+import { estimateFeeBid } from "@vellar/x402";
+
+const estimate = estimateFeeBid({
+  paymentType: "exact-policy-governed",
+  maxTxFeeStroops: 100_000,
+});
+
+// estimate.measuredFeeStroops  -> 85_999 (from the table above)
+// estimate.headroomStroops     -> 14_001
+// estimate.exceedsMaximum      -> false
+// estimate.likelyFeeExceedsMaximum -> false
+```
+
+The arithmetic is simply `maxTxFeeStroops - measuredFeeStroops`. With a
+100,000 stroop ceiling the headroom is 14,001 stroops, so the measured fee
+fits. Drop the ceiling to 80,000 and the helper reports
+`likelyFeeExceedsMaximum: true`: the measured 85,999 stroop fee is above the
+ceiling, so a policy-governed payment is likely to be refused with
+`fee_exceeds_maximum` before submission. Nothing is spent on that refusal, but
+the payment does not settle.
+
+> ⚠️ **A ceiling below the measured range is flagged, not guaranteed to fail.**
+> The helper compares against the measured `fee_charged`, while the facilitator
+> compares against the bid, which can run higher. Treat a flagged ceiling as
+> "raise this before serving smart-account buyers", not as a precise cutoff.
+
+### Suggesting a safe ceiling for smart-account traffic
+
+Rather than guess from the prose above, use `suggestMaxTxFeeStroops` to get a
+concrete override with reasonable headroom above the measured range for the
+payment types you expect:
+
+```ts
+import { suggestMaxTxFeeStroops } from "@vellar/x402";
+
+suggestMaxTxFeeStroops("exact-classic");           // 100_000
+suggestMaxTxFeeStroops("exact-policy-governed");   // 200_000
+suggestMaxTxFeeStroops("upto-smart-account");      // 100_000
+```
+
+| Payment type | Measured fee | Suggested `MAX_TX_FEE_STROOPS` |
+| --- | --- | --- |
+| exact, classic keypair | 23,059 to 28,711 stroops | 100,000 |
+| exact, policy-governed smart account | 85,999 stroops | 200,000 |
+| upto, smart account | 39,949 stroops | 100,000 |
+
+The suggested values are derived directly from the measured ranges in the table
+above, with headroom for the bid running above the charge. If those
+measurements are refreshed, update the constants the helper reads from in the
+same change so the suggestion and this table stay in sync.
+
+For a facilitator expecting smart-account traffic, set the ceiling to the
+highest suggestion among the payment types you serve:
+
+```bash
+# In your .env or environment:
+MAX_TX_FEE_STROOPS=200000
+```
+
 Verify any of these yourself:
+=======
 
 ```bash
 # exact, keypair settlement
