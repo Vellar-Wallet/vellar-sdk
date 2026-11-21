@@ -326,6 +326,13 @@ signs the SEP-41 transfer as a smart-account auth entry, retries with the
 `PAYMENT-SIGNATURE` header, and returns the unlocked response plus the on-chain
 settlement.
 
+The hosted testnet facilitator runs continuously on Railway with no idle sleep
+or cold-start delay. The SDK's `checkFacilitatorLiveness` check uses its normal
+5-second default timeout without an added cold-start allowance. This is separate
+from the hosted wallet backend mentioned in Quick start. The stale Render
+cold-start guidance is tracked by
+[#502](https://github.com/Vellar-Wallet/vellar-sdk/issues/502).
+
 Pass `x402` config with a **signer** (who pays) and a `simulationSourceAccount`
 (any funded classic account, used only to simulate — the facilitator rebuilds the
 transaction and pays the fee):

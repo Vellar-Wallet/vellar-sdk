@@ -1,10 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  checkFacilitatorLiveness,
   compareCommit,
   isReachable,
   parseHealthResponse,
   type HealthResponse,
 } from "./health";
+
+const HOSTED_TESTNET_FACILITATOR_URL =
+  "https://vellar-facilitator.onrender.com";
 
 describe("isReachable", () => {
   it("reports reachable with a rounded latency on success", async () => {
@@ -49,44 +53,143 @@ describe("isReachable", () => {
   });
 });
 
+describe("checkFacilitatorLiveness", () => {
+  it("reports the hosted testnet facilitator as healthy", async () => {
+    let requestedUrl = "";
+    const result = await checkFacilitatorLiveness(
+      HOSTED_TESTNET_FACILITATOR_URL,
+      {
+        fetch: async (url) => {
+          requestedUrl = String(url);
+          return new Response(
+            JSON.stringify({
+              status: "ok",
+              channelPool: { available: 10 },
+              unverifiableEntries: 0,
+            }),
+            { status: 200 },
+          );
+        },
+      },
+    );
+
+    expect(requestedUrl).toBe(
+      `${HOSTED_TESTNET_FACILITATOR_URL}/health`,
+    );
+    expect(result).toMatchObject({
+      state: "reachable-healthy",
+      health: { status: "ok", channelPool: { available: 10 } },
+    });
+  });
+
+  it("reports a reachable facilitator with no channels as unhealthy", async () => {
+    const result = await checkFacilitatorLiveness(
+      HOSTED_TESTNET_FACILITATOR_URL,
+      {
+        fetch: async () =>
+          new Response(
+            JSON.stringify({
+              status: "ok",
+              channelPool: { available: 0 },
+            }),
+            { status: 200 },
+          ),
+      },
+    );
+
+    expect(result).toMatchObject({
+      state: "reachable-unhealthy",
+      reason: expect.stringContaining("channelPool.available is 0"),
+    });
+  });
+
+  it("reports network failures as unreachable", async () => {
+    const result = await checkFacilitatorLiveness(
+      HOSTED_TESTNET_FACILITATOR_URL,
+      {
+        fetch: async () => {
+          throw new Error("connection refused");
+        },
+      },
+    );
+
+    expect(result).toMatchObject({
+      state: "unreachable",
+      error: "connection refused",
+    });
+  });
+
+  it("uses the 5-second default timeout without a cold-start grace period", async () => {
+    vi.useFakeTimers();
+    try {
+      let requestedUrl = "";
+      let signal: AbortSignal | null | undefined;
+      const resultPromise = checkFacilitatorLiveness(
+        HOSTED_TESTNET_FACILITATOR_URL,
+        {
+          fetch: (url, init) => {
+            requestedUrl = String(url);
+            signal = init?.signal;
+            return new Promise<Response>(() => {});
+          },
+        },
+      );
+
+      let settled = false;
+      void resultPromise.then(() => {
+        settled = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(4_999);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+
+      await expect(resultPromise).resolves.toMatchObject({
+        state: "unreachable",
+        error: expect.stringContaining("5000ms"),
+      });
+      expect(requestedUrl).toBe(
+        `${HOSTED_TESTNET_FACILITATOR_URL}/health`,
+      );
+      expect(signal?.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("parseHealthResponse", () => {
   it("parses a complete healthy response with unverifiableEntries omitted", () => {
     const raw = {
       status: "ok",
+      catalogSize: 12,
+      reverifyPending: 0,
+      channelPool: { available: 10 },
       commit: "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
-      version: "1.4.2",
-      network: "base-sepolia",
-      uptimeSeconds: 12345,
       // unverifiableEntries intentionally omitted: documented as sometimes absent
     };
     const parsed = parseHealthResponse(raw);
-    expect(parsed.status).toBe("ok");
-    expect(parsed.commit).toBe("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0");
-    expect(parsed.version).toBe("1.4.2");
-    expect(parsed.network).toBe("base-sepolia");
-    expect(parsed.uptimeSeconds).toBe(12345);
-    expect(parsed.unverifiableEntries).toBe(0);
+    expect(parsed).toEqual({ ...raw, unverifiableEntries: 0 });
   });
 
-  it("is resilient to several documented-optional fields being omitted", () => {
+  it("defaults the documented-optional unverifiableEntries field when omitted", () => {
     const raw = {
       status: "ok",
+      catalogSize: 0,
+      reverifyPending: 0,
+      channelPool: { available: 5 },
       commit: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
-      // version, network, uptimeSeconds, unverifiableEntries all omitted
     };
     const parsed = parseHealthResponse(raw);
-    expect(parsed.status).toBe("ok");
-    expect(parsed.commit).toBe("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef");
-    expect(parsed.unverifiableEntries).toBe(0);
+    expect(parsed).toEqual({ ...raw, unverifiableEntries: 0 });
   });
 
   it("throws a descriptive error when a guaranteed field is missing", () => {
     const raw = {
       status: "ok",
-      version: "1.4.2",
-      network: "base-sepolia",
-      uptimeSeconds: 10,
-      unverifiableEntries: 0,
+      catalogSize: 0,
+      reverifyPending: 0,
+      channelPool: { available: 5 },
     };
     expect(() => parseHealthResponse(raw)).toThrow(/commit/i);
   });
@@ -95,22 +198,28 @@ describe("parseHealthResponse", () => {
 describe("compareCommit", () => {
   const health: HealthResponse = {
     status: "ok",
+    catalogSize: 12,
+    reverifyPending: 0,
+    channelPool: { available: 10 },
     commit: "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
-    version: "1.4.2",
-    network: "base-sepolia",
-    uptimeSeconds: 100,
     unverifiableEntries: 0,
   };
 
   it("reports a match when the live commit equals the expected commit", () => {
-    const result = compareCommit(health, "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0");
+    const result = compareCommit(
+      health.commit,
+      "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
+    );
     expect(result.matches).toBe(true);
     expect(result.actual).toBe("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0");
     expect(result.expected).toBe("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0");
   });
 
   it("clearly reports a mismatch rather than silently ignoring it", () => {
-    const result = compareCommit(health, "0000000000000000000000000000000000000000");
+    const result = compareCommit(
+      health.commit,
+      "0000000000000000000000000000000000000000",
+    );
     expect(result.matches).toBe(false);
     expect(result.actual).toBe("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0");
     expect(result.expected).toBe("0000000000000000000000000000000000000000");
