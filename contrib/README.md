@@ -831,3 +831,21 @@ snapshot tests into each command's own test file, document the contract in
 All implementation targets outside `contrib/` across these four issues are
 documented as maintainer integration steps above and in each folder's
 README, and are intentionally unchanged by this submission.
+
+---
+
+## Catalog health, settlement reconciliation and sponsor monitoring (#839, #841, #842, #843)
+
+- **[contrib/issue-839/](issue-839/README.md)** (#839): `classifyCatalogHealth()`
+  gives `/health`'s `reverifyPending` (transient, wait) and `unverifiableEntries`
+  (permanent, fix the entries) distinct named classifications, and reports both
+  when both are non-zero.
+- **[contrib/issue-841-842/](issue-841-842/README.md)** (#841, #842):
+  `reconcileSettlement()` uses Horizon as the tiebreaker for a settlement failure
+  with a non-empty `transaction`: `successful: false` surfaces the typed
+  never-retry error with the hash attached, and `successful: true` surfaces a
+  `reconciliation-needed` state. Neither retries.
+- **[contrib/issue-843/](issue-843/README.md)** (#843): a worked monitoring
+  script that classifies the sponsor balance against the soft and hard floors,
+  alerts on state changes, and can optionally (and only behind explicit guards)
+  top the account back above the soft floor.
