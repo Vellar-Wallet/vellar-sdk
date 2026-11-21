@@ -377,6 +377,22 @@ for a client without the wallet handle.
 > so a policy-governed payment needs a facilitator configured with a higher
 > ceiling (self-hosted, or a hosted one that allows it).
 
+#### Hosted vs self-run facilitator
+
+`classifyFacilitator(url)` returns `"hosted-testnet"` for the documented hosted
+instance (`HOSTED_TESTNET_FACILITATOR_URL`) and `"self-run"` for any other URL.
+It is a configuration-awareness aid: a pure URL comparison with no network
+call. The hosted instance has no uptime commitment, so see
+[Limits and Operations](website/content/docs/operators/limits.md) before relying
+on it for anything beyond building and testing.
+
+```ts
+import { classifyFacilitator } from "vellar-sdk";
+
+classifyFacilitator("https://vellar-facilitator.onrender.com"); // "hosted-testnet"
+classifyFacilitator("https://facilitator.example.com"); // "self-run"
+```
+
 #### Security: signed requests to the facilitator
 
 The payment payload itself is already signed (the smart-wallet auth entry).

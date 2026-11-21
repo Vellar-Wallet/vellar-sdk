@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { Asset, Networks } from "@stellar/stellar-sdk";
+import { createHash } from "node:crypto";
+import { Asset, Networks, StrKey, xdr } from "@stellar/stellar-sdk";
 import { MAINNET, MainnetConfigError, TESTNET, mainnetConfig } from "./config";
 import * as facilitatorDefaults from "./facilitator-defaults";
 
@@ -23,6 +24,33 @@ describe("network config", () => {
     // typo silently pointing integrators at the wrong token contract.
     expect(TESTNET.nativeTokenContractId).toBe(Asset.native().contractId(TESTNET.networkPassphrase));
     expect(MAINNET.nativeTokenContractId).toBe(Asset.native().contractId(MAINNET.networkPassphrase));
+  });
+
+  it("derives the XLM SAC contract id from first principles for TESTNET and MAINNET", () => {
+    // Independent derivation, no Asset.contractId() helper involved. Method
+    // (Stellar CAP-46 / SEP-41 contract-id derivation), checkable by hand:
+    //   1. networkId = SHA-256(networkPassphrase, utf-8)
+    //   2. preimage  = HashIdPreimage ENVELOPE_TYPE_CONTRACT_ID {
+    //        networkId, contractIdPreimage = FROM_ASSET(native) }
+    //   3. contractId = SHA-256(XDR bytes of the preimage)
+    //   4. strkey     = base32 "C…" encoding (StrKey.encodeContract) of those 32 bytes
+    // The result must equal the shipped nativeTokenContractId exactly.
+    const deriveNativeSacId = (passphrase: string): string => {
+      const networkId = createHash("sha256").update(passphrase, "utf8").digest();
+      const preimage = xdr.HashIdPreimage.envelopeTypeContractId(
+        new xdr.HashIdPreimageContractId({
+          networkId,
+          contractIdPreimage: xdr.ContractIdPreimage.contractIdPreimageFromAsset(xdr.Asset.assetTypeNative()),
+        }),
+      );
+      const contractIdBytes = createHash("sha256").update(preimage.toXDR()).digest();
+      return StrKey.encodeContract(contractIdBytes);
+    };
+
+    expect(deriveNativeSacId(TESTNET.networkPassphrase)).toBe(TESTNET.nativeTokenContractId);
+    expect(deriveNativeSacId(MAINNET.networkPassphrase)).toBe(MAINNET.nativeTokenContractId);
+    // The two networks must never share an id (it is bound to the passphrase).
+    expect(TESTNET.nativeTokenContractId).not.toBe(MAINNET.nativeTokenContractId);
   });
 
   it("derives the USDC SAC ids from the issuer correctly (not hardcoded on faith)", () => {

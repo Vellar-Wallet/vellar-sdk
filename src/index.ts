@@ -33,6 +33,7 @@ export * from "./circuit-breaker";
 export * from "./health";
 export * from "./settlement-failure";
 export * from "./facilitator-defaults";
+export * from "./facilitator-host";
 
 /** Stable v1 API — breaking changes only in major semver releases. */
 export * from "./v1-exports";
