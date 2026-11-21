@@ -2,7 +2,7 @@
 
 > The operational limits of the hosted instance, what each one means, and how to handle them without debugging things that are not bugs.
 
-By the end of this page you will know the six things that will bite you on the hosted instance, understand the cold-start timing, know which spend-control refusals are enforced versus logged, and know how to keep the catalog healthy.
+By the end of this page you will know the six things that will bite you on the hosted instance, understand its availability characteristics, know which spend-control refusals are enforced versus logged, and know how to keep the catalog healthy.
 
 ## Prerequisites
 
@@ -16,23 +16,17 @@ By the end of this page you will know the six things that will bite you on the h
 https://vellar-facilitator.onrender.com
 ```
 
-Network: `stellar:testnet` only. Tier: free, on Render.
+Network: `stellar:testnet` only. Hosted on Railway and running continuously, with no idle sleep or cold start.
 
-> ⚠️ **This is not production infrastructure.** It is a testnet demo: one instance, no uptime commitment, no persistent disk, and a cold start possible at any hour. It is fine for building and testing against. For anything real, run your own instance (see [Run your own facilitator](./run.md)).
+> ⚠️ **This is not production infrastructure.** It is a testnet demo: one instance, no uptime commitment, and no persistent disk. It is fine for building and testing against. For anything real, run your own instance (see [Run your own facilitator](./run.md)).
 
 ## The six things that will bite you
 
-### 1. Cold start (about 45 seconds)
+### 1. Continuous uptime
 
-The instance sleeps after 15 minutes idle. The first request after idle takes roughly 45 seconds. That is a Render free-tier characteristic, not a bug and not a sign the facilitator is broken.
+The hosted instance runs continuously and does not sleep when idle, so requests do not need a cold-start grace period. No warming request is needed. If a request times out or fails to connect, check service and network availability rather than waiting for the facilitator to wake.
 
-Send a warming request before the request you actually care about:
-
-```bash
-curl -s --max-time 120 https://vellar-facilitator.onrender.com/health
-```
-
-> **Note:** `/health` is exempt from rate limiting, so warming costs you nothing against your budget. Once warm, the service stays active for 15 minutes past the last call.
+`/health` is exempt from rate limiting and can be used to check service availability.
 
 ### 2. Settlement failures, retry rather than debug
 
@@ -49,9 +43,9 @@ The facilitator already retries internally (two attempts, 6 seconds apart) befor
 
 ### 3. The catalog is ephemeral
 
-The free tier has no persistent disk. The catalog resets on every restart and on every idle-sleep recovery.
+The hosted instance has no persistent disk. The catalog resets on every restart.
 
-A resource re-catalogs after its next settled payment, and `ownerVerified` resets and self-heals the same way. Cold start does not just mean latency, it means data loss.
+A resource re-catalogs after its next settled payment, and `ownerVerified` resets and self-heals the same way.
 
 ### 4. Your first settlement writes permanently
 
@@ -131,7 +125,7 @@ Reading the fields by hand works, but the SDK ships a wrapper that combines them
 
 | Classification | Meaning | What to do |
 | --- | --- | --- |
-| `unreachable` | The `/health` fetch failed or timed out. The facilitator may be cold-starting, down, or the network is broken | Retry with a longer timeout (cold start is about 45 seconds), then treat it as down |
+| `unreachable` | The `/health` fetch failed or timed out. The facilitator may be down or the network may be broken | Check service and network availability, then treat it as unavailable |
 | `reachable-unhealthy` | The service answered, but the documented fields report a concerning internal state | The service is up but degraded. Inspect the reported fields before sending verify or settle traffic |
 | `reachable-healthy` | The service answered and every documented field is within its healthy range | Proceed |
 
@@ -165,12 +159,12 @@ For the full walkthrough (provisioning a testnet asset, running a seller, paying
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| First request hangs for about 45 seconds | The instance slept after 15 minutes idle and is cold-starting | Expected on the free tier. Send a warming `curl --max-time 120` to `/health` before the real request |
+| A request times out or cannot connect | The facilitator or network is unavailable | Check service and network availability; the hosted instance does not require a cold-start wait |
 | `/settle` returns an empty `transaction` field with `settle_exact_stellar_transaction_submission_failed` or `settle_exact_stellar_transaction_failed` | The transaction was never submitted, so nothing was spent | Sign a fresh payload and retry once. A retry cannot double-pay. Do not retry if `transaction` is non-empty |
 | `settlement_refused` with `sponsor_balance_low` | The sponsor account is below `SPONSOR_HARD_FLOOR_STROOPS` (default 100,000,000 stroops, 10 XLM) | Wait for the operator to refund the sponsor, or fund your own sponsor if you run the instance |
 | `400 verified_only_unavailable` | You filtered discovery on `verified_only=true` and there is no verdict source | Use `ownerVerified` instead |
 | `curl -I` returns a plain `200` on a paid route | HEAD carries no payment challenge, so a correctly wired route looks broken | Debug with `GET`, never `HEAD` |
-| Catalog is empty after a restart | The free tier has no persistent disk, so the catalog resets on restart and on idle-sleep recovery | Nothing to fix. A resource re-catalogs after its next settled payment. Set `CATALOG_DB_URL` on your own instance for durable storage |
+| Catalog is empty after a restart | The hosted instance has no persistent disk, so the catalog resets on restart | Nothing to fix. A resource re-catalogs after its next settled payment. Set `CATALOG_DB_URL` on your own instance for durable storage |
 
 ## Next steps
 
