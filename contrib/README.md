@@ -5,6 +5,15 @@ A PR against the `drips` branch that changes any file outside `contrib/` is clos
 
 This folder contains reference implementations, standalone wrappers, and validation scripts addressing the assigned issues.
 
+## NetworkConfig migration, history, and consistency (#853, #854, #855, #856)
+
+[contrib/network-config-853-856/](network-config-853-856/README.md) adds
+`migrateNetworkConfig`, a native-SAC consistency check, a USDC simulation
+error that is distinct from a network failure, and a field-history page
+checked against `src/config.ts`.
+
+
+
 ---
 
 ## MCP Payer Health-Check Script, Bundle-Size Budget, x402 Latency Benchmark, and API Surface Diff (#679, #684, #685, #686)
