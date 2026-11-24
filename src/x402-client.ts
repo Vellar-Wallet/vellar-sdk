@@ -59,6 +59,268 @@ import {
 // The pure guard layer is part of this module's published surface.
 export * from "./x402-guards";
 
+/**
+ * The facilitator's default `MAX_TX_FEE_STROOPS` ceiling (500,000 stroops),
+ * per website/content/docs/reference/fees.md. Used only as a fallback when the
+ * facilitator's error response does not report the actual ceiling.
+ */
+export const DEFAULT_MAX_TX_FEE_STROOPS = 500_000;
+
+/**
+ * Typed error for the facilitator's `fee_exceeds_maximum` rejection: the
+ * payment bid's transaction fee exceeded the facilitator's configured
+ * `MAX_TX_FEE_STROOPS`. Surfaced distinctly from a generic settlement failure
+ * so a caller can programmatically suggest raising `MAX_TX_FEE_STROOPS` (a
+ * policy-governed payment may legitimately need a higher ceiling).
+ *
+ * `ceilingStroops` carries the facilitator-reported ceiling when the error
+ * response includes it; otherwise it is `undefined` (the caller can fall back
+ * to {@link DEFAULT_MAX_TX_FEE_STROOPS}).
+ */
+export class FeeExceedsMaximumError extends Error {
+  readonly ceilingStroops?: number;
+  /** The raw rejection reason/code from the facilitator, when present. */
+  readonly reason?: string;
+
+  constructor(ceilingStroops?: number, reason?: string) {
+    const ceilingText =
+      ceilingStroops !== undefined
+        ? `the facilitator's MAX_TX_FEE_STROOPS ceiling of ${ceilingStroops} stroops`
+        : `the facilitator's MAX_TX_FEE_STROOPS ceiling`;
+    super(
+      `x402 payment bid exceeded ${ceilingText}. ` +
+        `This is a policy-governed limit, not a settlement failure: raise ` +
+        `MAX_TX_FEE_STROOPS on the facilitator if this payment legitimately needs a higher fee.`,
+    );
+    this.name = "FeeExceedsMaximumError";
+    this.ceilingStroops = ceilingStroops;
+    this.reason = reason;
+  }
+}
+
+/** The facilitator error code this module recognises for the fee ceiling. */
+export const FEE_EXCEEDS_MAXIMUM_CODE = "fee_exceeds_maximum";
+
+/**
+ * Detect the `fee_exceeds_maximum` condition in a facilitator error response
+ * and extract the reported ceiling (in stroops) when present.
+ *
+ * Returns `undefined` when the response is not a fee-ceiling rejection. The
+ * ceiling is read from any of the shapes the facilitator may use:
+ * `{ code, maxTxFeeStroops }`, `{ code, ceilingStroops }`, `{ code, maxFee }`,
+ * or a numeric value embedded in the reason string.
+ */
+export function parseFeeExceedsMaximum(
+  body: unknown,
+): { ceilingStroops?: number } | undefined {
+  if (body === null || body === undefined) return undefined;
+
+  let code: string | undefined;
+  let reason: string | undefined;
+  let ceiling: number | undefined;
+
+  if (typeof body === "string") {
+    reason = body;
+  } else if (typeof body === "object") {
+    const obj = body as Record<string, unknown>;
+    const rawCode = obj.code ?? obj.error;
+    if (typeof rawCode === "string") code = rawCode;
+    if (typeof obj.reason === "string") reason = obj.reason;
+    if (typeof obj.message === "string" && reason === undefined) reason = obj.message;
+    for (const key of ["maxTxFeeStroops", "ceilingStroops", "maxFee", "max_fee"]) {
+      const v = obj[key];
+      if (typeof v === "number" && Number.isFinite(v)) {
+        ceiling = v;
+        break;
+      }
+      if (typeof v === "string" && /^\d+$/.test(v)) {
+        ceiling = Number(v);
+        break;
+      }
+    }
+  }
+
+  const haystack = `${code ?? ""} ${reason ?? ""}`;
+  if (!haystack.includes(FEE_EXCEEDS_MAXIMUM_CODE)) return undefined;
+
+  if (ceiling === undefined && reason) {
+    // e.g. "... exceeds MAX_TX_FEE_STROOPS (500000)" or "max 500000 stroops".
+    const m = reason.match(/(\d{1,15})\s*stroops?/i) ?? reason.match(/\((\d{1,15})\)/);
+    if (m) ceiling = Number(m[1]);
+  }
+
+  return ceiling !== undefined ? { ceilingStroops: ceiling } : {};
+}
+
+// ---------------------------------------------------------------------------
+// Discovery fallback (#821): verified_only_unavailable → ownerVerified filter
+// ---------------------------------------------------------------------------
+
+/** The facilitator error code for an unavailable server-side verified filter. */
+export const VERIFIED_ONLY_UNAVAILABLE_CODE = "verified_only_unavailable";
+
+/** A single discovery result. `ownerVerified` is the field the fallback filters on. */
+export interface DiscoveryResult {
+  ownerVerified?: boolean;
+  [key: string]: unknown;
+}
+
+/** A discovery query. `verified_only` is the server-side filter the fallback drops. */
+export interface DiscoveryQuery {
+  verified_only?: boolean;
+  [key: string]: unknown;
+}
+
+/** The minimal discovery surface the fallback helper needs. */
+export interface DiscoveryClientLike {
+  discover(query: DiscoveryQuery): Promise<DiscoveryResult[]>;
+}
+
+export interface DiscoverWithVerifiedFallbackOptions {
+  /**
+   * Opt in to the automatic fallback: on `verified_only_unavailable`, retry the
+   * same query WITHOUT the `verified_only` filter and filter results
+   * client-side on `ownerVerified`. When false/omitted the error is surfaced
+   * directly to the caller.
+   */
+  fallbackToOwnerVerified?: boolean;
+}
+
+/** True when `err` is the facilitator's `verified_only_unavailable` error. */
+export function isVerifiedOnlyUnavailable(err: unknown): boolean {
+  if (err === null || err === undefined) return false;
+  const text =
+    typeof err === "string"
+      ? err
+      : `${(err as { code?: unknown }).code ?? ""} ${
+          (err as { message?: unknown }).message ?? ""
+        } ${(err as { reason?: unknown }).reason ?? ""}`;
+  return text.includes(VERIFIED_ONLY_UNAVAILABLE_CODE);
+}
+
+/**
+ * Run a discovery query, optionally falling back to client-side
+ * `ownerVerified` filtering when the server-side `verified_only` filter is
+ * unavailable (#821).
+ *
+ * With `fallbackToOwnerVerified` set, a `verified_only_unavailable` error
+ * triggers a retry of the SAME query minus `verified_only`, then filters the
+ * results on `ownerVerified === true` — producing the same effective result as
+ * the server-side filter would have. Without the flag, the error is rethrown.
+ */
+export async function discoverWithVerifiedFallback(
+  client: DiscoveryClientLike,
+  query: DiscoveryQuery,
+  options: DiscoverWithVerifiedFallbackOptions = {},
+): Promise<DiscoveryResult[]> {
+  try {
+    return await client.discover(query);
+  } catch (err) {
+    if (!options.fallbackToOwnerVerified || !isVerifiedOnlyUnavailable(err)) {
+      throw err;
+    }
+    const { verified_only: _drop, ...unfiltered } = query;
+    const results = await client.discover(unfiltered);
+    return results.filter((r) => r.ownerVerified === true);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// CAP-15 structural-conditions helper (#822 / #823)
+// ---------------------------------------------------------------------------
+
+/**
+ * The four structural conditions the explorer v2 classifier checks before it
+ * will classify a transaction as an x402 payment. Mirrors the heuristic
+ * documented in website/content/docs/reference/explorer.md.
+ */
+export interface X402StructuralConditions {
+  /** 1. The transaction carries exactly one Soroban operation. */
+  singleSorobanOperation: boolean;
+  /** 2. The operation is an `invokeHostFunction` (a Soroban invocation). */
+  invokeHostFunction: boolean;
+  /** 3. The operation has at least one address-credentialed auth entry. */
+  hasAddressAuthEntry: boolean;
+  /**
+   * 4. The authorizer is NOT the operation source, the transaction source, nor
+   * the fee-bump fee source (CAP-15 fee-bump structural condition).
+   */
+  authorizerDistinctFromSources: boolean;
+}
+
+export interface X402StructuralCheckResult {
+  /** Per-condition pass/fail, itemized. */
+  conditions: X402StructuralConditions;
+  /** Overall: true only when all four conditions pass. */
+  isX402Shape: boolean;
+  /** True when the envelope is wrapped in a CAP-15 fee-bump transaction. */
+  isFeeBump: boolean;
+}
+
+/** A minimal, structural view of a transaction envelope (built or submitted). */
+export interface TransactionEnvelopeShape {
+  /** The transaction source account (G-address). */
+  source?: string;
+  /** The fee-bump fee source, when the envelope is a fee-bump wrapper. */
+  feeBumpSource?: string;
+  /** True when the envelope is a CAP-15 fee-bump transaction. */
+  feeBump?: boolean;
+  operations?: Array<{
+    /** The operation source account, when set (defaults to the tx source). */
+    source?: string;
+    /** The operation type, e.g. "invokeHostFunction". */
+    type?: string;
+    /** Address-credentialed auth entries: their authorizer addresses. */
+    authAuthorizers?: string[];
+  }>;
+}
+
+/**
+ * Evaluate a built or submitted transaction envelope against the four
+ * documented CAP-15 structural conditions (#822). Returns an itemized result
+ * rather than a bare boolean so a caller can see which condition failed.
+ *
+ * This mirrors the explorer v2 classification heuristic — see
+ * website/content/docs/reference/explorer.md.
+ */
+export function checkX402StructuralConditions(
+  envelope: TransactionEnvelopeShape,
+): X402StructuralCheckResult {
+  const ops = envelope.operations ?? [];
+  const isFeeBump = envelope.feeBump === true || envelope.feeBumpSource !== undefined;
+
+  const singleSorobanOperation = ops.length === 1;
+  const op = ops[0];
+  const invokeHostFunction = op?.type === "invokeHostFunction";
+
+  const authorizers = op?.authAuthorizers ?? [];
+  const hasAddressAuthEntry = authorizers.length > 0;
+
+  const opSource = op?.source ?? envelope.source;
+  const txSource = envelope.source;
+  const feeSource = envelope.feeBumpSource;
+  const authorizerDistinctFromSources =
+    hasAddressAuthEntry &&
+    authorizers.every(
+      (a) => a !== opSource && a !== txSource && (feeSource === undefined || a !== feeSource),
+    );
+
+  const conditions: X402StructuralConditions = {
+    singleSorobanOperation,
+    invokeHostFunction,
+    hasAddressAuthEntry,
+    authorizerDistinctFromSources,
+  };
+
+  const isX402Shape =
+    conditions.singleSorobanOperation &&
+    conditions.invokeHostFunction &&
+    conditions.hasAddressAuthEntry &&
+    conditions.authorizerDistinctFromSources;
+
+  return { conditions, isX402Shape, isFeeBump };
+}
+
 /** Minimal fetch surface (injectable for tests). */
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
@@ -263,6 +525,10 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
     }
     op.auth = auth;
 
+    // The SDK submits a PLAIN transaction — never a CAP-15 fee-bump wrapper.
+    // The explorer v1 classifier required a fee-bump wrapper and so missed
+    // Vellar settlements entirely; v2 covers this plain shape. See
+    // website/content/docs/architecture/settlement-path.md.
     const payload = {
       x402Version: 2,
       accepted: requirements,
@@ -331,6 +597,12 @@ export function createX402Client(deps: X402ClientDeps): X402Client {
 
     if (paid.status === 402 || paid.status >= 400) {
       const reason = extractRejectionReason(paid);
+      // Surface the facilitator's fee ceiling distinctly from a generic
+      // settlement failure so the caller can suggest raising MAX_TX_FEE_STROOPS.
+      const feeCeiling = parseFeeExceedsMaximum(reason);
+      if (feeCeiling) {
+        throw new FeeExceedsMaximumError(feeCeiling.ceilingStroops, reason);
+      }
       throw new PaymentRejectedError(
         `x402 payment was not accepted (HTTP ${paid.status}${reason ? `: ${reason}` : ""}). ` +
           `If this was over-budget, the on-chain policy rejected it at facilitator verify.`,
