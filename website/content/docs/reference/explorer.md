@@ -42,6 +42,29 @@ That independence matters for an indexer. It does not need to know how a
 facilitator constructs its envelope, only that the payer of the ledger fee and
 the authorizer of the token transfer are different parties.
 
+## Checking the four conditions yourself
+
+The SDK ships a helper that evaluates a built or submitted transaction envelope
+against the same four structural conditions listed above, so you can reuse the
+explorer's self-check logic instead of reimplementing it. It mirrors the
+explorer **v2** classification heuristic (see [Two revisions to the
+classifier](#two-revisions-to-the-classifier)) and returns an itemized result
+rather than a single boolean, so you can see exactly which condition failed.
+
+The four conditions it itemizes are:
+
+1. The envelope contains an `invoke_host_function` operation.
+2. That operation is a `transfer(from, to, amount)` on the watched USDC SAC.
+3. A detached address-credentialed auth entry authorizes `from`.
+4. `from` is not the operation source, the transaction source, or the fee-bump
+   fee source.
+
+A transaction is classified as an x402 payment only when all four pass. This is
+the same test described in [How it classifies a
+payment](#how-it-classifies-a-payment) and used in [When it
+fails](#when-it-fails); the helper exists so that a consumer building their own
+settlement-shape validation gets the identical answer.
+
 ## Two revisions to the classifier
 
 Both revisions are worth understanding because they show what the heuristic

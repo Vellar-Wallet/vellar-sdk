@@ -125,6 +125,32 @@ own.
 > `400 {"error":"verified_only_unavailable","reason":"no_verdict_source_configured"}`.
 > The refusal names `ownerVerified` as the signal that does work.
 
+### Falling back to `ownerVerified`
+
+The SDK discovery client ships a fallback helper for exactly this case. When it
+catches `verified_only_unavailable`, it retries the same query with the
+`verified_only` filter removed, then filters the returned items client-side on
+`ownerVerified`, so you get the same effective result the server-side filter
+would have produced.
+
+The fallback is **opt-in**. By default the helper surfaces the
+`verified_only_unavailable` error directly, so a caller who wants to know the
+server-side filter is unavailable still can. Enable the fallback with the
+`fallbackToOwnerVerified` flag:
+
+```ts
+const result = await client.discoverResources(
+  { type: "http", limit: 20 },
+  { fallbackToOwnerVerified: true },
+);
+// result.items only contains entries with ownerVerified === true
+```
+
+Without the flag, the same call rejects with the
+`verified_only_unavailable` error and no request is retried. With it, the
+unfiltered query runs and the client-side filter is applied to its items.
+=======
+
 ## Why metadata is untrusted
 
 Clients echo the resource block into the payment payload. That means every
