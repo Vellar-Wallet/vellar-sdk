@@ -5,6 +5,17 @@ A PR against the `drips` branch that changes any file outside `contrib/` is clos
 
 This folder contains reference implementations, standalone wrappers, and validation scripts addressing the assigned issues.
 
+## SDK consumer tooling for local facilitators (#867, #869, #870, #871)
+
+[contrib/vellar-sdk-867-869-870-871/](vellar-sdk-867-869-870-871/README.md)
+adds a pre-payment budget gate, an opt-in quote-and-pay integration test with a
+clean-skip preflight, a fresh 50-key `CHANNEL_ACCOUNT_SECRET_KEYS` generator,
+and an SDK-consumer focused local facilitator setup page. The budget gate reads
+the real measured fee constants because the upstream fee-bid helper currently
+has broken imports.
+
+---
+
 ## NetworkConfig migration, history, and consistency (#853, #854, #855, #856)
 
 [contrib/network-config-853-856/](network-config-853-856/README.md) adds
