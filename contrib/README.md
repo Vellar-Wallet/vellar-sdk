@@ -5,6 +5,16 @@ A PR against the `drips` branch that changes any file outside `contrib/` is clos
 
 This folder contains reference implementations, standalone wrappers, and validation scripts addressing the assigned issues.
 
+## Catalog trust and x402 shape tooling (#873, #874, #875, #877)
+
+[contrib/vellar-sdk-873-874-875-877/](vellar-sdk-873-874-875-877/README.md)
+adds a client-side catalog durability probe with an inconclusive verdict, a
+restart-aware discovery wrapper that never assumes durability, a minimal x402
+seller paired with the SDK buyer flow, and an optional pre-submission x402 shape
+self-check based on the explorer's four structural conditions.
+
+---
+
 ## NetworkConfig migration, history, and consistency (#853, #854, #855, #856)
 
 [contrib/network-config-853-856/](network-config-853-856/README.md) adds
