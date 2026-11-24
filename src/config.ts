@@ -146,10 +146,34 @@ export const CHANNEL_ACCOUNT_MIN_STROOPS = 5_000_000;
 // Source: website/content/docs/operators/configuration.md (SPONSOR_BALANCE_INTERVAL_MS default).
 export const SPONSOR_BALANCE_INTERVAL_MS = 60_000;
 
+/**
+ * Machine-readable reason a mainnet config could not be built (#863).
+ * These values are stable API surface — callers branch on `error.code`, never
+ * on the human-readable message.
+ */
+export type MainnetConfigErrorCode =
+  | "missing-rpcUrl"
+  | "malformed-rpcUrl"
+  | "missing-walletWasmHash"
+  | "malformed-walletWasmHash";
+
 export class MainnetConfigError extends Error {
-  constructor(message: string) {
+  /** The specific validation failure, when thrown by `mainnetConfig()`. */
+  readonly code: MainnetConfigErrorCode | undefined;
+
+  constructor(message: string, code?: MainnetConfigErrorCode) {
     super(message);
     this.name = "MainnetConfigError";
+    this.code = code;
+  }
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
   }
 }
 
@@ -173,11 +197,25 @@ export function mainnetConfig(opts: { rpcUrl: string; walletWasmHash: string }):
   if (!rpcUrl) {
     throw new MainnetConfigError(
       "mainnetConfig: rpcUrl is required — there is no public SDF mainnet Soroban RPC, supply a provider endpoint.",
+      "missing-rpcUrl",
     );
   }
-  if (!walletWasmHash || !/^[0-9a-fA-F]{64}$/.test(walletWasmHash)) {
+  if (!isHttpUrl(rpcUrl)) {
+    throw new MainnetConfigError(
+      `mainnetConfig: rpcUrl must be a valid http(s) URL (got ${JSON.stringify(rpcUrl)}).`,
+      "malformed-rpcUrl",
+    );
+  }
+  if (!walletWasmHash) {
+    throw new MainnetConfigError(
+      "mainnetConfig: walletWasmHash is required — verify it against the passkey-kit mainnet deployment manifest for your version.",
+      "missing-walletWasmHash",
+    );
+  }
+  if (!/^[0-9a-fA-F]{64}$/.test(walletWasmHash)) {
     throw new MainnetConfigError(
       "mainnetConfig: walletWasmHash must be a 64-char hex hash verified against the passkey-kit mainnet deployment manifest for your version.",
+      "malformed-walletWasmHash",
     );
   }
   return { ...MAINNET, rpcUrl, walletWasmHash: walletWasmHash.toLowerCase() };
