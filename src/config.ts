@@ -69,7 +69,10 @@ export const TESTNET: NetworkConfig = {
 
 /** Mainnet config with the SDF-published / derivable fields filled. rpcUrl and
  * walletWasmHash are blank on purpose — supply them (a blank value fails loudly,
- * a guessed one fails silently). Prefer mainnetConfig() over using this directly. */
+ * a guessed one fails silently). Prefer mainnetConfig() over using this directly.
+ *
+ * To obtain walletWasmHash, follow the exact passkey-kit manifest verification
+ * steps in website/content/docs/getting-started/mainnet-wasm-hash.md. */
 export const MAINNET: NetworkConfig = {
   network: "mainnet",
   rpcUrl: "",

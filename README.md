@@ -234,6 +234,10 @@ session gone entirely).
 > Mainnet use of this SDK is **pending a security review**. Shipping a mainnet
 > config does not make mainnet blessed for production.
 
+For the exact steps to obtain `walletWasmHash` from the passkey-kit mainnet
+deployment manifest named by **your installed passkey-kit version**, see the
+[mainnet WASM hash verification guide](./website/content/docs/getting-started/mainnet-wasm-hash.md).
+
 Two of the four network values cannot be shipped as constants and you must
 supply them, so use `mainnetConfig()` rather than `MAINNET` directly:
 
