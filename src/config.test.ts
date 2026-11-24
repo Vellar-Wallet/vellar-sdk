@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
-import { Asset, Networks, StrKey, xdr } from "@stellar/stellar-sdk";
-import { MAINNET, MainnetConfigError, TESTNET, mainnetConfig } from "./config";
+import { Asset, Keypair, Networks, StrKey, xdr } from "@stellar/stellar-sdk";
+import {
+  MAINNET,
+  MainnetConfigError,
+  RollingSpendWindow,
+  TESTNET,
+  classifySponsorBalance,
+  mainnetConfig,
+  validateChannelAccountSecretKeys,
+} from "./config";
 import * as facilitatorDefaults from "./facilitator-defaults";
 
 describe("network config", () => {
@@ -159,5 +167,109 @@ describe("mainnetConfig()", () => {
     expect(() =>
       mainnetConfig({ rpcUrl: "https://rpc.example.com", walletWasmHash: "abc" }),
     ).toThrow(MainnetConfigError);
+  });
+});
+
+/** Builds `count` distinct, well-formed Stellar classic secret keys. */
+function makeSecretKeys(count: number): string[] {
+  return Array.from({ length: count }, () => Keypair.random().secret());
+}
+
+describe("validateChannelAccountSecretKeys()", () => {
+  it("accepts exactly 50 well-formed classic secret keys", () => {
+    const keys = makeSecretKeys(50);
+    expect(() => validateChannelAccountSecretKeys(keys.join(","))).not.toThrow();
+  });
+
+  it("accepts a 50-key list when a sponsor key is supplied but not duplicated", () => {
+    const keys = makeSecretKeys(50);
+    const sponsor = Keypair.random().secret();
+    expect(() => validateChannelAccountSecretKeys(keys.join(","), sponsor)).not.toThrow();
+  });
+
+  it("throws when there are too few keys", () => {
+    const keys = makeSecretKeys(49);
+    expect(() => validateChannelAccountSecretKeys(keys.join(","))).toThrow(/50/);
+  });
+
+  it("throws when there are too many keys", () => {
+    const keys = makeSecretKeys(51);
+    expect(() => validateChannelAccountSecretKeys(keys.join(","))).toThrow(/50/);
+  });
+
+  it("throws when a key among a valid 50 is malformed", () => {
+    const keys = makeSecretKeys(50);
+    keys[17] = "not-a-secret-key";
+    expect(() => validateChannelAccountSecretKeys(keys.join(","))).toThrow(/not-a-secret-key/);
+  });
+
+  it("throws when the sponsor key is duplicated into the channel account set", () => {
+    const keys = makeSecretKeys(50);
+    const sponsor = Keypair.random().secret();
+    keys[42] = sponsor;
+    expect(() => validateChannelAccountSecretKeys(keys.join(","), sponsor)).toThrow(/sponsor/i);
+  });
+});
+
+describe("classifySponsorBalance()", () => {
+  it("classifies a balance above the soft floor as healthy", () => {
+    expect(classifySponsorBalance(300_000_000)).toBe("healthy");
+  });
+
+  it("classifies a balance between the two floors as a soft-floor warning", () => {
+    expect(classifySponsorBalance(150_000_000)).toBe("soft-floor-warning");
+  });
+
+  it("classifies a balance below the hard floor as refused", () => {
+    expect(classifySponsorBalance(50_000_000)).toBe("hard-floor-refused");
+  });
+
+  it("honours caller-supplied floor overrides", () => {
+    expect(classifySponsorBalance(300_000_000, { softFloorStroops: 400_000_000 })).toBe(
+      "soft-floor-warning",
+    );
+    expect(classifySponsorBalance(150_000_000, { hardFloorStroops: 200_000_000 })).toBe(
+      "hard-floor-refused",
+    );
+  });
+});
+
+describe("RollingSpendWindow", () => {
+  it("accumulates spend and rejects amounts over the ceiling", () => {
+    let now = 0;
+    const window = new RollingSpendWindow({ now: () => now });
+    expect(window.record(20_000_000)).toBe(true);
+    expect(window.record(20_000_000)).toBe(true);
+    expect(window.remaining()).toBe(10_000_000);
+    expect(window.record(20_000_000)).toBe(false);
+    expect(window.spent()).toBe(40_000_000);
+  });
+
+  it("rolls the window forward and resets accumulated spend after the window elapses", () => {
+    let now = 0;
+    const window = new RollingSpendWindow({ now: () => now });
+    expect(window.record(50_000_000)).toBe(true);
+    expect(window.remaining()).toBe(0);
+
+    now = 59_999;
+    expect(window.spent()).toBe(50_000_000);
+
+    now = 60_000;
+    expect(window.spent()).toBe(0);
+    expect(window.remaining()).toBe(50_000_000);
+    expect(window.record(50_000_000)).toBe(true);
+  });
+
+  it("honours caller-supplied ceiling and window overrides", () => {
+    let now = 0;
+    const window = new RollingSpendWindow({
+      ceilingStroops: 1_000,
+      windowMs: 100,
+      now: () => now,
+    });
+    expect(window.record(1_000)).toBe(true);
+    expect(window.record(1)).toBe(false);
+    now = 100;
+    expect(window.record(1_000)).toBe(true);
   });
 });

@@ -30,6 +30,7 @@ export * from "./x402-request-auth";
 export * from "./session";
 export * from "./tx-status";
 export * from "./circuit-breaker";
+export * from "./operator-config";
 export * from "./health";
 export * from "./settlement-failure";
 export * from "./facilitator-defaults";
