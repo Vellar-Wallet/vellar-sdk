@@ -260,6 +260,12 @@ broken mainnet config can never be built silently. The bare `MAINNET` constant
 has those two fields blank on purpose: a blank value fails loudly, a guessed one
 fails silently.
 
+As a safety net, `createVellarWallet()` warns when a config reaches it with
+`network: "mainnet"` and a blank `rpcUrl` or `walletWasmHash` — the exact shape
+produced by spreading `MAINNET` directly. The warning names `mainnetConfig()` as
+the fix. If your integration has its own entry point, call the exported
+`warnIfMainnetSpread(config, entryPoint)` helper there too.
+
 ### Policies
 
 Attach programmable policies (e.g. an on-chain spending limit) to a wallet.

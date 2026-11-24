@@ -17,6 +17,7 @@ import type { WalletConnector } from "./connector";
 import { createPolicyFacade, type PolicyAttachRuntime, type PolicyFacade } from "./policy-facade";
 import { createAgentsFacade, type AgentKeyRuntime, type AgentsFacade } from "./agents-facade";
 import { createX402Facade } from "./x402-facade";
+import { warnIfMainnetSpread } from "./config";
 import type { FetchLike } from "./x402-client";
 import {
   assertValidX402RpcUrl,
@@ -187,6 +188,14 @@ export interface VellarWallet {
  * Create a Vellar wallet client. This is the single public entry point.
  */
 export function createVellarWallet(config: VellarWalletConfig): VellarWallet {
+  // Detect the "spread MAINNET and leave its blank fields in place" mistake at
+  // the public boundary. x402 callers may supply the RPC URL under x402 only.
+  warnIfMainnetSpread({
+    network: config.network,
+    rpcUrl: config.rpcUrl?.trim() ? config.rpcUrl : config.x402?.rpcUrl,
+    walletWasmHash: (config as { walletWasmHash?: unknown }).walletWasmHash,
+  });
+
   const signedToXdr = config.signedToXdr ?? defaultSignedToXdr;
 
   // The backend carries every call the SDK makes to the vellar-facilitator

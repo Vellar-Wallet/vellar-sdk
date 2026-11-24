@@ -171,6 +171,49 @@ export class MainnetConfigError extends Error {
   }
 }
 
+/**
+ * Input accepted by {@link warnIfMainnetSpread}. Supplied loosely so callers can
+ * pass a whole wallet config, a `NetworkConfig`, or a partial object without
+ * casting.
+ */
+export interface MainnetSpreadCheckInput {
+  network?: unknown;
+  rpcUrl?: unknown;
+  walletWasmHash?: unknown;
+}
+
+/**
+ * Safety net for the common mistake of spreading the bare `MAINNET` constant
+ * into an entry point and leaving its two intentionally blank fields in place
+ * (#861). Blank-but-valid-looking config values otherwise fail much later, so
+ * this warns at the boundary and points at `mainnetConfig()`.
+ *
+ * Returns true when a warning was emitted, so callers and tests can assert the
+ * detection without scraping console output.
+ */
+export function warnIfMainnetSpread(
+  config: MainnetSpreadCheckInput,
+  entryPoint = "createVellarWallet",
+): boolean {
+  if (config?.network !== "mainnet") return false;
+
+  const blank = (value: unknown, shipped: string): boolean =>
+    value == null || (typeof value === "string" && value.trim() === shipped);
+  const blankRpcUrl = blank(config.rpcUrl, MAINNET.rpcUrl);
+  const blankHash = blank(config.walletWasmHash, MAINNET.walletWasmHash);
+  if (!blankRpcUrl && !blankHash) return false;
+
+  const fields = [blankRpcUrl && "rpcUrl", blankHash && "walletWasmHash"]
+    .filter((field): field is string => Boolean(field))
+    .join(" and ");
+  console.warn(
+    `${entryPoint}: received a mainnet config with blank ${fields} — this looks like ` +
+      "MAINNET was spread directly. Use mainnetConfig({ rpcUrl, walletWasmHash }) instead; " +
+      "blank mainnet fields fail at runtime.",
+  );
+  return true;
+}
+
 function isHttpUrl(value: string): boolean {
   try {
     const url = new URL(value);
