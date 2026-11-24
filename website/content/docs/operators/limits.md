@@ -155,6 +155,35 @@ SPONSOR_SECRET_KEY=S... CHANNEL_ACCOUNT_SECRET_KEYS=S...,S...,... PORT=4100 CATA
 
 For the full walkthrough (provisioning a testnet asset, running a seller, paying it), see [Run your own facilitator](./run.md).
 
+### Validating your configuration before you boot
+
+Assembling 50 channel account secrets and a sponsor key by hand is easy to get subtly wrong, and the failure shows up as a confusing settlement error rather than a clear configuration error. The SDK ships a setup aid you can call from a local integration test setup script or a pre-boot check:
+
+```js
+import { validateChannelAccountSecretKeys } from "@vellar/x402";
+
+// Throws with a clear message if the configuration is invalid.
+validateChannelAccountSecretKeys(
+  process.env.CHANNEL_ACCOUNT_SECRET_KEYS,
+  process.env.SPONSOR_SECRET_KEY,
+);
+```
+
+`validateChannelAccountSecretKeys(channelAccountSecretKeys, sponsorSecretKey)` checks that:
+
+- the value contains **exactly 50** comma-separated entries;
+- every entry is a well-formed Stellar classic secret key (validated with the SDK's existing address-validation helpers);
+- the sponsor secret key does **not** appear anywhere in the channel account set.
+
+> ⚠️ **The sponsor key must never be in the channel account set.** It is an easy mistake to make when copy-pasting environment variables for a local or test facilitator: the sponsor key ends up duplicated into `CHANNEL_ACCOUNT_SECRET_KEYS`, and the instance silently misconfigures itself. The helper fails clearly when it detects this, so run it before you boot rather than debugging a settlement failure later.
+
+### Monitoring your own instance
+
+Two more helpers help you keep a self-hosted facilitator healthy. Both are documented in full, with their defaults and semantics, in [Fees and sponsorship](../reference/fees.md):
+
+- **Sponsor balance classifier** — given the current sponsor balance and the soft/hard floor values, classifies the balance as healthy, soft-floor-warning, or hard-floor-refused, so you get a warning before an outright `settlement_refused` with `sponsor_balance_low`. Defaults to `SPONSOR_SOFT_FLOOR_STROOPS` (250,000,000) and `SPONSOR_HARD_FLOOR_STROOPS` (100,000,000), and accepts overrides for a custom configuration.
+- **Rolling spend window** — a client-side accounting helper mirroring `SPEND_CEILING_STROOPS` (default 50,000,000) and `SPEND_WINDOW_MS` (default 60,000) for local estimation. It is an estimation aid only and is **not** a substitute for the facilitator's own server-side enforcement.
+
 ## When it fails
 
 | Symptom | Cause | Fix |

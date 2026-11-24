@@ -281,6 +281,36 @@ the sponsor configuration is corrected.
 The spend ceiling and window are enforced on pubnet only. On testnet they are
 logged as would-reject and the settlement proceeds.
 
+## Monitoring and local estimation helpers
+
+The SDK ships two helpers that mirror the configuration above, so operators
+running their own facilitator can reason about the same thresholds in code.
+
+### `classifySponsorBalance`
+
+`classifySponsorBalance` takes the current sponsor balance and classifies it as
+healthy, soft-floor-warning, or hard-floor-refused. It defaults to the
+documented floors, `SPONSOR_SOFT_FLOOR_STROOPS` at 250,000,000 stroops and
+`SPONSOR_HARD_FLOOR_STROOPS` at 100,000,000 stroops, and both can be overridden
+to match a self-hosted facilitator's custom configuration.
+
+This is a monitoring aid: it lets an operator warn before the hard floor is hit
+and `/settle` starts failing with
+`settlement_refused: sponsor_balance_low`. It does not replace the
+facilitator's own balance guard.
+
+### `RollingSpendWindow`
+
+`RollingSpendWindow` is a local rolling-window spend accounting helper with the
+same ceiling-and-window-length shape as `SPEND_CEILING_STROOPS` (default
+50,000,000 stroops) and `SPEND_WINDOW_MS` (default 60,000 milliseconds). Both
+values can be configured to match a specific self-hosted facilitator.
+
+> ⚠️ **This is a local estimation aid only.** It is explicitly not a substitute
+> for the facilitator's own server-side enforcement of the spend ceiling and
+> window. The facilitator remains the authority on whether a settlement is
+> allowed.
+
 ## What the fee actually pays for
 
 The Stellar network fee is charged to the facilitator's sponsor account, not the
