@@ -49,7 +49,19 @@ them means nothing was signed or submitted, so no money moved.
 | `NoUsablePaymentOptionError` | No offered option matched the scheme and network, or none advertised `areFeesSponsored: true` | No | Yes, against a facilitator that sponsors fees |
 | `InvalidRequirementsError` | A payment requirement was malformed, for example a non-integer amount | No | No, the seller's challenge has to be fixed first |
 | `PaymentRejectedError` | The facilitator rejected at the verify stage. Carries the reason. | No | Only after reading the reason and fixing the cause |
+| `FeeExceedsMaximumError` | The facilitator refused the payment with `fee_exceeds_maximum`: the simulated transaction fee is above its configured `MAX_TX_FEE_STROOPS` ceiling. Carries the facilitator-reported ceiling in stroops when the error response includes it (otherwise `undefined`). | No | Yes, against a facilitator with a higher `MAX_TX_FEE_STROOPS`, or after reducing the fee |
 | `X402NotConfiguredError` | `wallet.x402` used with no `x402` config. From 0.6.1 it is also thrown at construction when `rpcUrl` is missing, empty, or unparseable. | No | Yes, after adding the config |
+
+> **Note:** `FeeExceedsMaximumError` is distinct from a generic settlement
+> failure. A generic settle failure tells you the payment did not go through; a
+> `FeeExceedsMaximumError` tells you *why*: the fee ceiling, not the payment
+> itself, was the blocker. Branch on it to read the ceiling and suggest raising
+> `MAX_TX_FEE_STROOPS` rather than retrying blindly. Policy-governed payments
+> run the spending-policy contract inside `__check_auth` and cost more in fees,
+> so they are the usual reason a valid payment trips a low ceiling. See
+> [Fees and Sponsorship](./fees.md) for measured figures and
+> [The settlement path](../concepts/settlement-path.md) for where the ceiling is
+> enforced.
 
 > **Note:** Amounts are bigints in the asset's base units. Stellar Asset
 > Contracts use 7 decimals, so `1_000_000n` is 0.1 units and `10_000_000n` is

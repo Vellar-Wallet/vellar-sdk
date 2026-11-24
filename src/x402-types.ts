@@ -222,6 +222,64 @@ export class InvalidRequirementsError extends Error {
   }
 }
 
+/**
+ * The facilitator rejected the payment because the bid exceeds its configured
+ * `MAX_TX_FEE_STROOPS` ceiling (default 500,000 stroops). Surfaced distinctly
+ * from a generic settlement failure so a caller can programmatically suggest
+ * raising `MAX_TX_FEE_STROOPS` (or lowering the bid). `ceilingStroops` carries
+ * the facilitator-reported ceiling when present in the error response.
+ */
+export class FeeExceedsMaximumError extends Error {
+  constructor(
+    message: string,
+    readonly ceilingStroops?: number,
+  ) {
+    super(message);
+    this.name = "FeeExceedsMaximumError";
+  }
+}
+
+// ── discovery fallback ───────────────────────────────────────────────────────
+
+/**
+ * Options for the discovery helper that transparently falls back to
+ * client-side `ownerVerified` filtering when the server-side `verified_only`
+ * filter is unavailable (`verified_only_unavailable`).
+ */
+export interface DiscoveryVerifiedFallbackOptions {
+  /**
+   * Opt in to the automatic fallback: on `verified_only_unavailable`, retry the
+   * same query without the filter and filter results client-side on
+   * `ownerVerified`. When false/omitted the error is surfaced directly.
+   */
+  fallbackToOwnerVerified?: boolean;
+}
+
+// ── CAP-15 structural conditions ─────────────────────────────────────────────
+
+/** The four CAP-15 fee-bump structural conditions the explorer classifier checks. */
+export interface Cap15StructuralConditions {
+  /** The authorizer is not the operation source. */
+  authorizerNotOperationSource: boolean;
+  /** The authorizer is not the transaction source. */
+  authorizerNotTransactionSource: boolean;
+  /** The authorizer is not the fee-bump fee source. */
+  authorizerNotFeeBumpFeeSource: boolean;
+  /** The transaction is a fee-bump transaction wrapping the payment. */
+  isFeeBumpTransaction: boolean;
+}
+
+/** Itemized result of evaluating a transaction envelope against the four
+ * CAP-15 structural conditions (mirrors the explorer v2 classification heuristic). */
+export interface Cap15StructuralCheckResult {
+  /** True only when all four conditions pass. */
+  allPass: boolean;
+  /** Per-condition pass/fail detail. */
+  conditions: Cap15StructuralConditions;
+  /** Names of the conditions that failed (empty when `allPass`). */
+  failed: (keyof Cap15StructuralConditions)[];
+}
+
 // ── catalog entry verification ───────────────────────────────────────────────
 
 /**

@@ -53,6 +53,54 @@ export function response402(accepts: PaymentRequirements[]): Response {
 }
 
 /**
+ * A plain (non-fee-bump) Vellar-shaped settlement envelope: a single
+ * `invokeHostFunction` operation whose authorizer is the operation source and
+ * the transaction source, with no fee-bump wrapper. This mirrors the shape the
+ * SDK's payment submission path actually builds and submits.
+ */
+export function plainSettlementEnvelope(over: Partial<SettlementEnvelope> = {}): SettlementEnvelope {
+  return {
+    kind: "transaction",
+    sourceAccount: SIM_SOURCE,
+    fee: "100",
+    operations: [
+      {
+        type: "invokeHostFunction",
+        sourceAccount: SIM_SOURCE,
+        authorizers: [SIM_SOURCE],
+      },
+    ],
+    ...over,
+  };
+}
+
+/**
+ * A CAP-15 fee-bump-wrapped settlement envelope: the inner transaction carries
+ * the `invokeHostFunction` operation, and the outer fee-bump transaction has its
+ * own fee source. This is a *different* shape from the plain envelope above and
+ * is used to exercise the structural-conditions helper against both shapes.
+ */
+export function feeBumpSettlementEnvelope(over: Partial<SettlementEnvelope> = {}): SettlementEnvelope {
+  return {
+    kind: "feeBump",
+    feeSource: PAYTO,
+    fee: "200",
+    innerTransaction: {
+      sourceAccount: SIM_SOURCE,
+      fee: "100",
+      operations: [
+        {
+          type: "invokeHostFunction",
+          sourceAccount: SIM_SOURCE,
+          authorizers: [SIM_SOURCE],
+        },
+      ],
+    },
+    ...over,
+  };
+}
+
+/**
  * Documented facilitator spend-control refusal reason codes.
  * Extend this union (and `FACILITATOR_REFUSALS` below) when new reasons land.
  */
