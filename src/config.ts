@@ -160,6 +160,12 @@ export class MainnetConfigError extends Error {
  * your passkey-kit version). The verified fields (passphrase, Horizon, native
  * XLM SAC id, USDC issuer and SAC id) are filled in. Throws if either required value is missing or
  * malformed, so a broken mainnet config can never be constructed silently.
+ *
+ * Explicit non-fallback guarantee (#859): this function NEVER substitutes
+ * `TESTNET.walletWasmHash` (or any other default) for a missing or malformed
+ * value. A blank hash always throws. A mainnet wallet silently using the
+ * testnet contract would be exactly the failure mode this API exists to
+ * prevent.
  */
 export function mainnetConfig(opts: { rpcUrl: string; walletWasmHash: string }): NetworkConfig {
   const rpcUrl = opts.rpcUrl?.trim();
