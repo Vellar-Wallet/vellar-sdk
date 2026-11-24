@@ -69,7 +69,10 @@ export const TESTNET: NetworkConfig = {
 
 /** Mainnet config with the SDF-published / derivable fields filled. rpcUrl and
  * walletWasmHash are blank on purpose — supply them (a blank value fails loudly,
- * a guessed one fails silently). Prefer mainnetConfig() over using this directly. */
+ * a guessed one fails silently). Prefer mainnetConfig() over using this directly.
+ *
+ * To obtain walletWasmHash, follow the exact passkey-kit manifest verification
+ * steps in website/content/docs/getting-started/mainnet-wasm-hash.md. */
 export const MAINNET: NetworkConfig = {
   network: "mainnet",
   rpcUrl: "",
@@ -146,10 +149,77 @@ export const CHANNEL_ACCOUNT_MIN_STROOPS = 5_000_000;
 // Source: website/content/docs/operators/configuration.md (SPONSOR_BALANCE_INTERVAL_MS default).
 export const SPONSOR_BALANCE_INTERVAL_MS = 60_000;
 
+/**
+ * Machine-readable reason a mainnet config could not be built (#863).
+ * These values are stable API surface — callers branch on `error.code`, never
+ * on the human-readable message.
+ */
+export type MainnetConfigErrorCode =
+  | "missing-rpcUrl"
+  | "malformed-rpcUrl"
+  | "missing-walletWasmHash"
+  | "malformed-walletWasmHash";
+
 export class MainnetConfigError extends Error {
-  constructor(message: string) {
+  /** The specific validation failure, when thrown by `mainnetConfig()`. */
+  readonly code: MainnetConfigErrorCode | undefined;
+
+  constructor(message: string, code?: MainnetConfigErrorCode) {
     super(message);
     this.name = "MainnetConfigError";
+    this.code = code;
+  }
+}
+
+/**
+ * Input accepted by {@link warnIfMainnetSpread}. Supplied loosely so callers can
+ * pass a whole wallet config, a `NetworkConfig`, or a partial object without
+ * casting.
+ */
+export interface MainnetSpreadCheckInput {
+  network?: unknown;
+  rpcUrl?: unknown;
+  walletWasmHash?: unknown;
+}
+
+/**
+ * Safety net for the common mistake of spreading the bare `MAINNET` constant
+ * into an entry point and leaving its two intentionally blank fields in place
+ * (#861). Blank-but-valid-looking config values otherwise fail much later, so
+ * this warns at the boundary and points at `mainnetConfig()`.
+ *
+ * Returns true when a warning was emitted, so callers and tests can assert the
+ * detection without scraping console output.
+ */
+export function warnIfMainnetSpread(
+  config: MainnetSpreadCheckInput,
+  entryPoint = "createVellarWallet",
+): boolean {
+  if (config?.network !== "mainnet") return false;
+
+  const blank = (value: unknown, shipped: string): boolean =>
+    value == null || (typeof value === "string" && value.trim() === shipped);
+  const blankRpcUrl = blank(config.rpcUrl, MAINNET.rpcUrl);
+  const blankHash = blank(config.walletWasmHash, MAINNET.walletWasmHash);
+  if (!blankRpcUrl && !blankHash) return false;
+
+  const fields = [blankRpcUrl && "rpcUrl", blankHash && "walletWasmHash"]
+    .filter((field): field is string => Boolean(field))
+    .join(" and ");
+  console.warn(
+    `${entryPoint}: received a mainnet config with blank ${fields} — this looks like ` +
+      "MAINNET was spread directly. Use mainnetConfig({ rpcUrl, walletWasmHash }) instead; " +
+      "blank mainnet fields fail at runtime.",
+  );
+  return true;
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
   }
 }
 
@@ -160,6 +230,12 @@ export class MainnetConfigError extends Error {
  * your passkey-kit version). The verified fields (passphrase, Horizon, native
  * XLM SAC id, USDC issuer and SAC id) are filled in. Throws if either required value is missing or
  * malformed, so a broken mainnet config can never be constructed silently.
+ *
+ * Explicit non-fallback guarantee (#859): this function NEVER substitutes
+ * `TESTNET.walletWasmHash` (or any other default) for a missing or malformed
+ * value. A blank hash always throws. A mainnet wallet silently using the
+ * testnet contract would be exactly the failure mode this API exists to
+ * prevent.
  */
 export function mainnetConfig(opts: { rpcUrl: string; walletWasmHash: string }): NetworkConfig {
   const rpcUrl = opts.rpcUrl?.trim();
@@ -167,11 +243,25 @@ export function mainnetConfig(opts: { rpcUrl: string; walletWasmHash: string }):
   if (!rpcUrl) {
     throw new MainnetConfigError(
       "mainnetConfig: rpcUrl is required — there is no public SDF mainnet Soroban RPC, supply a provider endpoint.",
+      "missing-rpcUrl",
     );
   }
-  if (!walletWasmHash || !/^[0-9a-fA-F]{64}$/.test(walletWasmHash)) {
+  if (!isHttpUrl(rpcUrl)) {
+    throw new MainnetConfigError(
+      `mainnetConfig: rpcUrl must be a valid http(s) URL (got ${JSON.stringify(rpcUrl)}).`,
+      "malformed-rpcUrl",
+    );
+  }
+  if (!walletWasmHash) {
+    throw new MainnetConfigError(
+      "mainnetConfig: walletWasmHash is required — verify it against the passkey-kit mainnet deployment manifest for your version.",
+      "missing-walletWasmHash",
+    );
+  }
+  if (!/^[0-9a-fA-F]{64}$/.test(walletWasmHash)) {
     throw new MainnetConfigError(
       "mainnetConfig: walletWasmHash must be a 64-char hex hash verified against the passkey-kit mainnet deployment manifest for your version.",
+      "malformed-walletWasmHash",
     );
   }
   return { ...MAINNET, rpcUrl, walletWasmHash: walletWasmHash.toLowerCase() };

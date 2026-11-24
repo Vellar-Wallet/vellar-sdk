@@ -234,6 +234,10 @@ session gone entirely).
 > Mainnet use of this SDK is **pending a security review**. Shipping a mainnet
 > config does not make mainnet blessed for production.
 
+For the exact steps to obtain `walletWasmHash` from the passkey-kit mainnet
+deployment manifest named by **your installed passkey-kit version**, see the
+[mainnet WASM hash verification guide](./website/content/docs/getting-started/mainnet-wasm-hash.md).
+
 Two of the four network values cannot be shipped as constants and you must
 supply them, so use `mainnetConfig()` rather than `MAINNET` directly:
 
@@ -255,6 +259,12 @@ tests) and throws if `rpcUrl` or `walletWasmHash` is missing or malformed, so a
 broken mainnet config can never be built silently. The bare `MAINNET` constant
 has those two fields blank on purpose: a blank value fails loudly, a guessed one
 fails silently.
+
+As a safety net, `createVellarWallet()` warns when a config reaches it with
+`network: "mainnet"` and a blank `rpcUrl` or `walletWasmHash` — the exact shape
+produced by spreading `MAINNET` directly. The warning names `mainnetConfig()` as
+the fix. If your integration has its own entry point, call the exported
+`warnIfMainnetSpread(config, entryPoint)` helper there too.
 
 ### Policies
 

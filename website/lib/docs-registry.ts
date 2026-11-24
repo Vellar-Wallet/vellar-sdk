@@ -36,6 +36,9 @@ export const DOC_PAGES: DocPage[] = [
   { slug: "getting-started/quickstart", title: "Quickstart", nav: "Quickstart",
     section: "Getting Started", tab: "guides",
     description: "Create a wallet and make a payment in five minutes." },
+  { slug: "getting-started/mainnet-wasm-hash", title: "Verify the Mainnet Wallet WASM Hash", nav: "Mainnet WASM hash",
+    section: "Getting Started", tab: "guides",
+    description: "Find the passkey-kit manifest for your installed version and copy the mainnet smart-wallet hash." },
 
   // Buyers — the paying side of the x402 loop.
   { slug: "buyers/pay-for-a-resource", title: "Pay for a Resource",

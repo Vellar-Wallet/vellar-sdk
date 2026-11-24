@@ -56,6 +56,36 @@ them means nothing was signed or submitted, so no money moved.
 > 1.0. A `MaxAmountExceededError` you did not expect is very often a decimals
 > mistake rather than a genuinely expensive resource.
 
+### `MainnetConfigError` (mainnet configuration)
+
+`mainnetConfig()` throws `MainnetConfigError` when a required mainnet value is
+missing or malformed. It carries a stable, typed `code` property — branch on
+`error.code`, never on the message text. The code is `undefined` for a
+`MainnetConfigError` constructed directly rather than by `mainnetConfig()`.
+
+| `error.code` | Cause | What to do |
+| --- | --- | --- |
+| `missing-rpcUrl` | `rpcUrl` is empty or whitespace-only | Supply your mainnet Soroban RPC provider URL |
+| `malformed-rpcUrl` | `rpcUrl` is not a parseable `http(s)` URL | Fix the provider URL before constructing the config |
+| `missing-walletWasmHash` | `walletWasmHash` is empty or whitespace-only | Obtain the hash from the passkey-kit mainnet deployment manifest for your installed version |
+| `malformed-walletWasmHash` | `walletWasmHash` is not a 64-character hex hash | Re-check the manifest entry; do not copy the testnet hash |
+
+For example:
+
+```ts
+import { MainnetConfigError, mainnetConfig } from "vellar-sdk";
+
+try {
+  const network = mainnetConfig({ rpcUrl, walletWasmHash });
+} catch (error) {
+  if (error instanceof MainnetConfigError && error.code === "missing-walletWasmHash") {
+    // Ask the caller to verify the hash against their passkey-kit version's manifest.
+  } else {
+    throw error;
+  }
+}
+```
+
 ## Facilitator errors (/verify and /settle)
 
 These come back from the hosted facilitator as codes in the response body. For
