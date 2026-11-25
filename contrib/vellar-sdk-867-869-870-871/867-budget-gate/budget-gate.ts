@@ -61,7 +61,9 @@ export function estimatedFeeStroops(paymentType: BudgetPaymentType): bigint {
  *
  * All monetary values are bigint stroops, matching the SDK's amount convention.
  * The comparison is inclusive: a total exactly equal to the budget is within
- * budget. No network access and no signing occurs here.
+ * budget. Fee estimation is payment-type-sensitive: policy-governed payments
+ * use their documented 85,999-stroop ceiling rather than the classic range.
+ * No network access and no signing occurs here.
  */
 export function checkBudgetAgainstQuote(
   quotedPriceStroops: bigint,
