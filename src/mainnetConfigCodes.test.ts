@@ -58,3 +58,28 @@ describe("#863 — MainnetConfigError carries a distinct code per failure", () =
     expect(config.walletWasmHash).toBe(VALID_HASH);
   });
 });
+
+describe("#857 / #858 — mainnetConfig validates each required field independently", () => {
+  it("names walletWasmHash when a valid rpcUrl is paired with a missing hash", () => {
+    const error = failure({ rpcUrl: RPC, walletWasmHash: "" });
+
+    expect(error.code).toBe("missing-walletWasmHash");
+    expect(error.message).toContain("walletWasmHash");
+  });
+
+  it("names rpcUrl when a valid hash is paired with a missing RPC endpoint", () => {
+    const error = failure({ rpcUrl: "", walletWasmHash: VALID_HASH });
+
+    expect(error.code).toBe("missing-rpcUrl");
+    expect(error.message).toContain("rpcUrl");
+  });
+
+  it("keeps malformed values distinct from omitted values", () => {
+    expect(failure({ rpcUrl: "not-a-url", walletWasmHash: VALID_HASH }).code).toBe(
+      "malformed-rpcUrl",
+    );
+    expect(failure({ rpcUrl: RPC, walletWasmHash: "not-a-hash" }).code).toBe(
+      "malformed-walletWasmHash",
+    );
+  });
+});
