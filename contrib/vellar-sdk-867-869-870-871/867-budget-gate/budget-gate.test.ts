@@ -35,6 +35,24 @@ describe("checkBudgetAgainstQuote (#867)", () => {
     expect(result.totalStroops).toBe(fee + 1n);
   });
 
+  it("uses the policy-governed 85,999-stroop ceiling instead of the classic range", () => {
+    const result = checkBudgetAgainstQuote(1_000n, "exact-policy-governed", 100_000n);
+
+    expect(result.estimatedFeeStroops).toBe(85_999n);
+    expect(result.totalStroops).toBe(86_999n);
+    expect(result.withinBudget).toBe(true);
+  });
+
+  it("rejects a budget that covers a classic payment but not its policy-governed equivalent", () => {
+    const quote = 1_000n;
+    const budget = 30_000n;
+
+    expect(checkBudgetAgainstQuote(quote, "exact-classic", budget).withinBudget).toBe(true);
+    expect(checkBudgetAgainstQuote(quote, "exact-policy-governed", budget).withinBudget).toBe(
+      false,
+    );
+  });
+
   it("accepts a zero quote when the budget covers the fee", () => {
     const result = checkBudgetAgainstQuote(0n, "upto-smart-account", 39_949n);
 
